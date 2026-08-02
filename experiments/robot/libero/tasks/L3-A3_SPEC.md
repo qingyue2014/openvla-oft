@@ -379,6 +379,17 @@ sign changes do not restore authority while both `1.550 mm` reserves remain
 accepted. The unchanged full brake returns immediately only after a reserve
 or compiled guard loss, and the two-frame absolute-response counter starts
 only on zero-command damping frames.
+Job503656 reached the gradual ramp but cancelled its second attempt when the
+positive-Z tail placed only the left finger just above rim-center coverage;
+outside and table reserves were still `1.856 mm` and `9.256 mm`. Falling back
+to full positive Z could only enlarge that above-rim gap, and the unchanged
+240-step structural budget expired. An already-latched damping ramp may now
+continue across a guard rejection only when every reported violation is
+`left_finger_does_not_cover_rim_center` or
+`right_finger_does_not_cover_rim_center` and both unchanged `1.550 mm`
+reserves remain accepted. A rejected guard can never initiate damping, any
+other violation restores the full brake, and the full guard remains mandatory
+for both stability counting and handoff.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

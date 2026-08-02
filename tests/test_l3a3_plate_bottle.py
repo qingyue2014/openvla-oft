@@ -21,6 +21,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _compiled_corridor_reserve_action,
     _compiled_low_side_settle_brake_action,
     _compiled_low_side_neutral_damping_action,
+    _outside_side_neutral_damping_guard_evidence,
     _compiled_adaptive_lateral_rebuffer_action,
     _compiled_adaptive_high_lateral_action,
     _compiled_adaptive_high_plane_action,
@@ -3811,6 +3812,43 @@ def test_job503651_corridor_settle_requires_neutral_absolute_stop():
     )
     assert zero_action[:6].tolist() == pytest.approx([0.0] * 6)
     assert zero_damping["damping_ramp_reached_zero"] is True
+
+    transient_gap_guard = {
+        **after_guard,
+        "accepted": False,
+        "violations": ["left_finger_does_not_cover_rim_center"],
+    }
+    active_gap = _outside_side_neutral_damping_guard_evidence(
+        transient_gap_guard, damping_active_before=True
+    )
+    assert active_gap["damping_guard_authorized"] is True
+    assert active_gap[
+        "transient_rim_coverage_gap_authorized"
+    ] is True
+    inactive_gap = _outside_side_neutral_damping_guard_evidence(
+        transient_gap_guard, damping_active_before=False
+    )
+    assert inactive_gap["damping_guard_authorized"] is False
+    assert inactive_gap["proof"][
+        "damping_cannot_start_from_rejected_guard"
+    ] is True
+
+    transient_action, transient_damping = (
+        _compiled_low_side_neutral_damping_action(
+            outside_side_guard=transient_gap_guard,
+            gripper=-1.0,
+            native_action_spec=native_spec,
+            recovery_exit_clearance_m=0.00155,
+            previous_commanded_action_xyz=np.array([0.15, 0.0, 0.15]),
+            maximum_positive_release_action=0.05,
+        )
+    )
+    assert transient_action[:3].tolist() == pytest.approx(
+        [0.10, 0.0, 0.10]
+    )
+    assert transient_damping["damping_guard"][
+        "transient_rim_coverage_gap_authorized"
+    ] is True
 
 
 def test_500121_vertical_descent_is_structurally_staged_outside_one_step_reserve():
@@ -10181,6 +10219,8 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
         bounded_seek
     )
     assert '"previous_commanded_action_xyz"' in bounded_seek
+    assert "_outside_side_neutral_damping_guard_evidence(" in bounded_seek
+    assert '"neutral_damping_guard"' in bounded_seek
     assert '"lateral_settle_trigger"' in bounded_seek
     assert bounded_seek.index("motion_sample = capture(") < (
         bounded_seek.index("if structural_violations:")

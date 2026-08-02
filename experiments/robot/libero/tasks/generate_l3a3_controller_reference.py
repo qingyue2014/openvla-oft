@@ -8569,6 +8569,52 @@ def _compiled_low_side_settle_brake_action(
     }
 
 
+def _outside_side_neutral_damping_guard_evidence(
+    outside_side_guard, *, damping_active_before
+):
+    """Authorize only an already-latched, above-rim coverage transient."""
+    if not isinstance(damping_active_before, (bool, np.bool_)):
+        raise ValueError("neutral damping active state must be boolean")
+    violations = outside_side_guard.get("violations", ())
+    if not isinstance(violations, (list, tuple)) or not all(
+        isinstance(value, str) for value in violations
+    ):
+        raise ValueError("outside-side guard violations must be strings")
+    allowed_transient_violations = {
+        "left_finger_does_not_cover_rim_center",
+        "right_finger_does_not_cover_rim_center",
+    }
+    full_guard_accepted = bool(
+        outside_side_guard.get("accepted", False)
+    )
+    transient_rim_coverage_gap_authorized = bool(
+        damping_active_before
+        and not full_guard_accepted
+        and bool(violations)
+        and set(violations).issubset(allowed_transient_violations)
+    )
+    return {
+        "full_guard_accepted": full_guard_accepted,
+        "damping_active_before": bool(damping_active_before),
+        "guard_violations": list(violations),
+        "allowed_transient_violations": sorted(
+            allowed_transient_violations
+        ),
+        "transient_rim_coverage_gap_authorized": (
+            transient_rim_coverage_gap_authorized
+        ),
+        "damping_guard_authorized": bool(
+            full_guard_accepted
+            or transient_rim_coverage_gap_authorized
+        ),
+        "proof": {
+            "damping_cannot_start_from_rejected_guard": True,
+            "only_rim_center_coverage_gaps_are_transiently_allowed": True,
+            "full_guard_required_for_stability_confirmation": True,
+        },
+    }
+
+
 def _compiled_low_side_neutral_damping_action(
     *,
     outside_side_guard,
@@ -8602,6 +8648,9 @@ def _compiled_low_side_neutral_damping_action(
         raise RuntimeError(
             "low-side neutral damping evidence is incomplete"
         ) from exc
+    damping_guard = _outside_side_neutral_damping_guard_evidence(
+        outside_side_guard, damping_active_before=True
+    )
     if (
         not np.isfinite(recovery_exit_clearance_m)
         or recovery_exit_clearance_m <= 0.0
@@ -8627,7 +8676,7 @@ def _compiled_low_side_neutral_damping_action(
         or not (native_low[6] <= gripper <= native_high[6])
         or not np.all(native_low[:6] < 0.0)
         or not np.all(native_high[:6] > 0.0)
-        or not outside_side_guard.get("accepted", False)
+        or not damping_guard["damping_guard_authorized"]
         or not np.isfinite(live_outside_clearance)
         or live_outside_clearance <= recovery_exit_clearance_m
         or not np.isfinite(live_finger_table_clearance)
@@ -8700,6 +8749,7 @@ def _compiled_low_side_neutral_damping_action(
         "commanded_outward_action": commanded_outward_action,
         "commanded_positive_z_action": commanded_positive_z_action,
         "damping_ramp_reached_zero": damping_ramp_reached_zero,
+        "damping_guard": damping_guard,
         "live_outside_clearance_m": live_outside_clearance,
         "live_finger_table_clearance_m": live_finger_table_clearance,
         "recovery_exit_clearance_m": float(
@@ -17969,8 +18019,18 @@ def _seek_stable_plate_contact(
                         }
                     )
         elif stage_before_action == "vertical_corridor_settle":
+            neutral_damping_guard = (
+                _outside_side_neutral_damping_guard_evidence(
+                    latest_outside_side_guard,
+                    damping_active_before=bool(
+                        lateral_settle_state.get(
+                            "neutral_damping_active", False
+                        )
+                    ),
+                )
+            )
             neutral_damping_reserves_accepted = bool(
-                latest_outside_side_guard.get("accepted", False)
+                neutral_damping_guard["damping_guard_authorized"]
                 and latest_outside_side_guard[
                     "minimum_outside_clearance_m"
                 ]
@@ -18023,6 +18083,9 @@ def _seek_stable_plate_contact(
                 "neutral_damping_reserves_accepted"
             ] = neutral_damping_reserves_accepted
             lateral_settle_progress[
+                "neutral_damping_guard"
+            ] = neutral_damping_guard
+            lateral_settle_progress[
                 "previous_commanded_action_xyz"
             ] = np.asarray(action[:3], dtype=float).tolist()
             lateral_settle_progress[
@@ -18045,6 +18108,9 @@ def _seek_stable_plate_contact(
             elif (
                 lateral_settle_progress["kinematic_brake_reversed"]
                 and not latest_outside_side_guard["accepted"]
+                and not neutral_damping_guard[
+                    "transient_rim_coverage_gap_authorized"
+                ]
                 and active_vertical_corridor_geometric_height_action
                 > vertical_corridor_geometric_height_action_floor
             ):
