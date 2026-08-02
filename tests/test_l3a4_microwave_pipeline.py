@@ -2512,6 +2512,7 @@ def _dynamic_selector_fixture(restore_raises=False):
     calls = []
     restores = []
     snapshots = []
+    shape_cache_ids = []
 
     def snapshot(env, oracle, names):
         snapshots.append("job500168-canonical-boundary")
@@ -2533,7 +2534,11 @@ def _dynamic_selector_fixture(restore_raises=False):
         site_rotation,
         site_size,
         support_geometry,
+        compiled_shape_cache=None,
     ):
+        assert isinstance(compiled_shape_cache["convex_mesh"], dict)
+        shape_cache_ids.append(id(compiled_shape_cache))
+        assert len(set(shape_cache_ids)) == 1
         calls.append(np.asarray(clearance_eef, dtype=float).copy())
         failed = len(calls) == 1
         return {
@@ -2817,6 +2822,225 @@ def test_l3a4_lateral_offsets_are_zero_then_signed_by_magnitude():
     assert all(abs(value) < 0.012 for value in offsets)
     with pytest.raises(ValueError, match="finite and positive"):
         namespace["_deterministic_signed_lateral_offsets"](0.012, 0.0)
+
+
+def test_l3a4_insertion_witness_lanes_are_exact_and_clear_skipped_gates():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    function = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_compiled_target_insertion_plan"
+    )
+    calls = []
+
+    class Model:
+        ngeom = 4
+        geom_type = np.full(4, 6, dtype=int)
+        geom_size = np.full((4, 3), 0.01, dtype=float)
+        geom_rbound = np.full(4, 0.02, dtype=float)
+
+    class Data:
+        geom_xpos = np.zeros((4, 3), dtype=float)
+        geom_xmat = np.tile(np.eye(3).reshape(1, 9), (4, 1))
+
+    env = type(
+        "Env", (), {"sim": type("Sim", (), {"model": Model(), "data": Data()})()}
+    )()
+
+    def door_sweep(
+        env,
+        names,
+        target_geoms,
+        candidate,
+        current_target,
+        *,
+        stop_at_or_below=None,
+        cached_rejection_witness=None,
+        compiled_door_sweep=None,
+    ):
+        candidate = np.asarray(candidate, dtype=float)
+        x_value, y_value = candidate[:2]
+        rejected = bool(
+            np.isclose(x_value, 0.0)
+            or (
+                np.isclose(x_value, 0.005)
+                and np.isclose(y_value, -0.001)
+            )
+        )
+        attempted = cached_rejection_witness is not None
+        calls.append(("door", x_value, y_value, cached_rejection_witness))
+        clearance = -0.001 if rejected else 0.020
+        return clearance, {
+            "cached_rejection_witness_attempted": attempted,
+            "cached_rejection_witness_rejected": attempted and rejected,
+            "cached_rejection_witness_fell_back_to_full_sweep": (
+                attempted and not rejected
+            ),
+            "limiting_pair": {
+                "sample_index": 0,
+                "target_geom_id": 0,
+                "door_geom_id": 2,
+            },
+            "minimum_clearance_m": clearance,
+            "full_sweep_evaluated": not rejected,
+        }
+
+    def translated_sweep(
+        env,
+        moving_geoms,
+        fixture_geoms,
+        start,
+        end,
+        reference,
+        *,
+        stop_at_or_below=None,
+        compiled_geometry_cache=None,
+        compiled_sweep_geometry=None,
+        cached_rejection_witness=None,
+    ):
+        end = np.asarray(end, dtype=float)
+        x_value, y_value = end[:2]
+        gate = "target" if tuple(moving_geoms) == (0,) else "gripper"
+        rejected = bool(
+            np.isclose(x_value, 0.005)
+            if gate == "target"
+            else np.isclose(x_value, -0.005) and y_value < 0.0
+        )
+        attempted = cached_rejection_witness is not None
+        calls.append((gate, x_value, y_value, cached_rejection_witness))
+        clearance = -0.001 if rejected else 0.020
+        return clearance, {
+            "cached_rejection_witness_attempted": attempted,
+            "cached_rejection_witness_rejected": attempted and rejected,
+            "cached_rejection_witness_fell_back_to_full_sweep": (
+                attempted and not rejected
+            ),
+            "cached_rejection_witness_status": (
+                "exact_reject"
+                if attempted and rejected
+                else "exact_above_threshold"
+                if attempted
+                else "not_provided"
+            ),
+            "sample_intervals": 7,
+            "limiting_pair": {
+                "sample_index": 0,
+                "moving_geom_id": int(moving_geoms[0]),
+                "fixture_geom_id": int(fixture_geoms[0]),
+            },
+            "minimum_clearance_m": clearance,
+            "full_sweep_evaluated": not rejected,
+        }
+
+    floor = {
+        "geom_id": 2,
+        "center": [0.0, 0.0, 0.0],
+        "rotation": np.eye(3).tolist(),
+        "half_size": [1.0, 1.0, 0.01],
+        "normal_axis": 2,
+        "normal": [0.0, 0.0, 1.0],
+        "surface_position": [0.0, 0.0, 0.0],
+    }
+    namespace = {
+        "np": np,
+        "TARGET_BODY": "target",
+        "TARGET_INSERTION_SEARCH_STEP_M": 0.005,
+        "TARGET_INSERTION_SWEEP_STEP_M": 0.005,
+        "body_pose": lambda sim, body: (np.zeros(3), np.eye(3)),
+        "body_tilt_deg": lambda sim, body: 0.0,
+        "descendant_geom_ids": (
+            lambda model, body: {0} if body == "target" else {2, 3}
+        ),
+        "_compiled_microwave_floor": (
+            lambda *args: (floor, {"selected": floor})
+        ),
+        "_compiled_held_target_support_geometry": (
+            lambda *args: {"held_support_offset_m": 0.0}
+        ),
+        "_eef_position": lambda env: np.zeros(3),
+        "_compiled_rigid_gripper_fixture_geoms": (
+            lambda env, names: (
+                [1],
+                [3],
+                {"eef_root_body": "eef", "rigid_gripper_body_names": ["eef"]},
+            )
+        ),
+        "_deterministic_signed_lateral_offsets": (
+            lambda extent, step: [0.0, 0.005, -0.005]
+        ),
+        "_compiled_safe_insertion_portal": (
+            lambda *args: (
+                np.asarray([0.0, -0.02, 0.0]),
+                np.asarray([0.0, -0.02, 0.0]),
+                np.asarray([0.0, -0.02, 0.16]),
+                {"selected": True},
+            )
+        ),
+        "_compile_target_door_sweep_geometry": (
+            lambda *args: {"door_pose_count": 8, "obb_entry_indices": ()}
+        ),
+        "_compile_translated_sweep_geometry": (
+            lambda *args: {
+                "obb_pair_indices": (),
+                "mesh_box_pair_geometry": {},
+            }
+        ),
+        "_compiled_target_door_sweep_clearance": door_sweep,
+        "_translated_swept_clearance": translated_sweep,
+        "native_site_contains_point": lambda *args: True,
+        "_compact_insertion_sweep_evidence": lambda sweep: {
+            "minimum_clearance_m": sweep["minimum_clearance_m"]
+        },
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=[function], type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    plan = namespace["_compiled_target_insertion_plan"](
+        env,
+        {"fixture_root": "fixture"},
+        np.zeros(3),
+        np.eye(3),
+        np.asarray([0.006, 0.006, 0.006]),
+        np.zeros(3),
+        {"supporting_target_geom_ids": [0]},
+    )
+    assert plan["candidate_count_evaluated"] == 9
+    assert [
+        (record["front_search_index"], record["lateral_search_index"])
+        for record in plan["candidate_trace"]
+    ] == [(front, lateral) for front in range(3) for lateral in range(3)]
+    assert plan["selected"]["search_index"] == 8
+    counters = plan["exact_acceleration"]["rejection_witness_counters"]
+    assert counters["target_door_sweep"]["attempts"] == 3
+    assert counters["target_door_sweep"]["rejections"] == 2
+    assert counters["target_door_sweep"]["full_fallbacks"] == 1
+    assert counters["target_static_sweep"]["attempts"] == 0
+    assert counters["gripper_sweep"]["attempts"] == 2
+    assert counters["gripper_sweep"]["rejections"] == 1
+    assert counters["gripper_sweep"]["full_fallbacks"] == 1
+    final_target_call = [
+        call
+        for call in calls
+        if call[0] == "target"
+        and np.isclose(call[1], 0.005)
+        and call[2] > 0.0
+    ][0]
+    assert final_target_call[3] is None
+    for gate, x_value, _, witness in calls:
+        if witness is None:
+            continue
+        assert witness["source_lateral_rank"] == (
+            0 if np.isclose(x_value, 0.0) else 1 if x_value > 0.0 else 2
+        )
 
 
 def test_l3a4_dynamic_restore_failure_is_fail_closed():
@@ -4099,8 +4323,19 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "representative_full_sweeps" in insertion_plan
     assert "record.update(full_sweeps)" in insertion_plan
     assert insertion_plan.count("stop_at_or_below=0.0") >= 3
-    assert "target_static_rejection_witness" in insertion_plan
-    assert "gripper_rejection_witness" in insertion_plan
+    assert "rejection_witness_by_lane" in insertion_plan
+    assert 'door_prior["front_index"] != front_index - 1' in (
+        insertion_plan
+    )
+    assert 'target_prior["front_index"] != front_index - 1' in (
+        insertion_plan
+    )
+    assert 'gripper_prior["front_index"] != front_index - 1' in (
+        insertion_plan
+    )
+    assert "evaluated_gate_sweeps" in insertion_plan
+    assert '"rejection_witness_counters"' in insertion_plan
+    assert '"shared_shape_cache_scope"' in insertion_plan
     assert '"target_static_cached_mesh_box_pair_count"' in insertion_plan
     assert '"gripper_cached_mesh_box_pair_count"' in insertion_plan
     assert "[L3-A4 insertion candidate progress]" in insertion_plan

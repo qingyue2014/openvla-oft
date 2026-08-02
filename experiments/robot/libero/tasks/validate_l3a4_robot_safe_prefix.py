@@ -5742,6 +5742,7 @@ def _compiled_target_insertion_plan(
     site_size,
     held_eef_offset,
     support_geometry,
+    compiled_shape_cache=None,
 ):
     """Search front-to-back for the foremost native-In, collision-free pose."""
     model = env.sim.model
@@ -5891,11 +5892,27 @@ def _compiled_target_insertion_plan(
     compiled_door_sweep = _compile_target_door_sweep_geometry(
         env, names, target_geoms
     )
-    compiled_geometry_cache = {
-        "convex_mesh": {},
-        "hits": 0,
-        "misses": 0,
-    }
+    if compiled_shape_cache is None:
+        compiled_geometry_cache = {
+            "convex_mesh": {},
+            "hits": 0,
+            "misses": 0,
+        }
+    else:
+        if (
+            not isinstance(compiled_shape_cache, dict)
+            or not isinstance(
+                compiled_shape_cache.get("convex_mesh"), dict
+            )
+        ):
+            raise RuntimeError(
+                "shared insertion shape cache is malformed"
+            )
+        compiled_geometry_cache = compiled_shape_cache
+        compiled_geometry_cache.setdefault("hits", 0)
+        compiled_geometry_cache.setdefault("misses", 0)
+    cache_hits_before = int(compiled_geometry_cache["hits"])
+    cache_misses_before = int(compiled_geometry_cache["misses"])
     compiled_target_sweep_geometry = (
         _compile_translated_sweep_geometry(
             env,
@@ -5923,9 +5940,23 @@ def _compiled_target_insertion_plan(
     execution_endpoint = None
     representative_full_sweeps = {}
     best_gate_values = {}
-    door_rejection_witness = None
-    target_static_rejection_witness = None
-    gripper_rejection_witness = None
+    rejection_witness_by_lane = {
+        "target_door_sweep": {},
+        "target_static_sweep": {},
+        "gripper_sweep": {},
+    }
+    insertion_witness_counters = {
+        gate: {
+            "attempts": 0,
+            "rejections": 0,
+            "full_fallbacks": 0,
+            "not_provided": 0,
+            "metadata_mismatch": 0,
+            "exact_reject": 0,
+            "exact_above_threshold": 0,
+        }
+        for gate in rejection_witness_by_lane
+    }
     lateral_rank_by_value = {
         value: index
         for index, value in enumerate(lateral_search_values)
@@ -5942,6 +5973,7 @@ def _compiled_target_insertion_plan(
     )
     for front_index, front_distance in enumerate(front_search_values):
         for lateral_offset in lateral_search_values:
+            lateral_rank = lateral_rank_by_value[lateral_offset]
             candidate = (
                 site_position
                 + front * float(front_distance)
@@ -6025,6 +6057,17 @@ def _compiled_target_insertion_plan(
                     "gripper_sweep",
                 ]
             if rejection_stage is None:
+                door_prior = rejection_witness_by_lane[
+                    "target_door_sweep"
+                ].get(lateral_rank)
+                if (
+                    door_prior is not None
+                    and door_prior["front_index"] != front_index - 1
+                ):
+                    rejection_witness_by_lane[
+                        "target_door_sweep"
+                    ].pop(lateral_rank, None)
+                    door_prior = None
                 door_clearance, door_sweep = (
                     _compiled_target_door_sweep_clearance(
                         env,
@@ -6034,23 +6077,63 @@ def _compiled_target_insertion_plan(
                         current_target,
                         stop_at_or_below=0.0,
                         cached_rejection_witness=(
-                            door_rejection_witness
+                            None
+                            if door_prior is None
+                            else door_prior["witness"]
                         ),
                         compiled_door_sweep=compiled_door_sweep,
                     )
                 )
+                door_attempted = bool(
+                    door_sweep["cached_rejection_witness_attempted"]
+                )
+                door_rejected = bool(
+                    door_sweep["cached_rejection_witness_rejected"]
+                )
+                insertion_witness_counters[
+                    "target_door_sweep"
+                ]["attempts"] += int(door_attempted)
+                insertion_witness_counters[
+                    "target_door_sweep"
+                ]["rejections"] += int(door_rejected)
+                insertion_witness_counters[
+                    "target_door_sweep"
+                ]["full_fallbacks"] += int(
+                    door_prior is not None and not door_rejected
+                )
+                if door_prior is None:
+                    door_status = "not_provided"
+                elif not door_attempted:
+                    door_status = "metadata_mismatch"
+                elif door_rejected:
+                    door_status = "exact_reject"
+                else:
+                    door_status = "exact_above_threshold"
+                if door_status in insertion_witness_counters[
+                    "target_door_sweep"
+                ]:
+                    insertion_witness_counters[
+                        "target_door_sweep"
+                    ][door_status] += 1
                 if door_clearance <= 0.0:
                     limiting_door_pair = door_sweep["limiting_pair"]
-                    door_rejection_witness = {
-                        "sample_index": limiting_door_pair[
-                            "sample_index"
-                        ],
-                        "target_geom_id": limiting_door_pair[
-                            "target_geom_id"
-                        ],
-                        "door_geom_id": limiting_door_pair[
-                            "door_geom_id"
-                        ],
+                    rejection_witness_by_lane[
+                        "target_door_sweep"
+                    ][lateral_rank] = {
+                        "front_index": int(front_index),
+                        "witness": {
+                            "source_front_index": int(front_index),
+                            "source_lateral_rank": int(lateral_rank),
+                            "sample_index": limiting_door_pair[
+                                "sample_index"
+                            ],
+                            "target_geom_id": limiting_door_pair[
+                                "target_geom_id"
+                            ],
+                            "door_geom_id": limiting_door_pair[
+                                "door_geom_id"
+                            ],
+                        },
                     }
                     rejection_stage = "target_door_sweep"
                     skipped_gates = [
@@ -6058,8 +6141,21 @@ def _compiled_target_insertion_plan(
                         "gripper_sweep",
                     ]
                 else:
-                    door_rejection_witness = None
+                    rejection_witness_by_lane[
+                        "target_door_sweep"
+                    ].pop(lateral_rank, None)
             if rejection_stage is None:
+                target_prior = rejection_witness_by_lane[
+                    "target_static_sweep"
+                ].get(lateral_rank)
+                if (
+                    target_prior is not None
+                    and target_prior["front_index"] != front_index - 1
+                ):
+                    rejection_witness_by_lane[
+                        "target_static_sweep"
+                    ].pop(lateral_rank, None)
+                    target_prior = None
                 target_clearance, target_sweep = (
                     _translated_swept_clearance(
                         env,
@@ -6076,33 +6172,90 @@ def _compiled_target_insertion_plan(
                             compiled_target_sweep_geometry
                         ),
                         cached_rejection_witness=(
-                            target_static_rejection_witness
+                            None
+                            if target_prior is None
+                            else target_prior["witness"]
                         ),
                     )
                 )
+                target_status = target_sweep[
+                    "cached_rejection_witness_status"
+                ]
+                insertion_witness_counters[
+                    "target_static_sweep"
+                ]["attempts"] += int(
+                    target_sweep[
+                        "cached_rejection_witness_attempted"
+                    ]
+                )
+                insertion_witness_counters[
+                    "target_static_sweep"
+                ]["rejections"] += int(
+                    target_sweep[
+                        "cached_rejection_witness_rejected"
+                    ]
+                )
+                insertion_witness_counters[
+                    "target_static_sweep"
+                ]["full_fallbacks"] += int(
+                    target_sweep[
+                        "cached_rejection_witness_fell_back_to_full_sweep"
+                    ]
+                )
+                if target_status == "interval_mismatch" or target_status in (
+                    "pair_missing",
+                    "sample_invalid",
+                ):
+                    target_status = "metadata_mismatch"
+                if target_status in insertion_witness_counters[
+                    "target_static_sweep"
+                ]:
+                    insertion_witness_counters[
+                        "target_static_sweep"
+                    ][target_status] += 1
                 if target_clearance <= 0.0:
                     limiting_target_pair = target_sweep[
                         "limiting_pair"
                     ]
-                    target_static_rejection_witness = {
-                        "sample_intervals": target_sweep[
-                            "sample_intervals"
-                        ],
-                        "sample_index": limiting_target_pair[
-                            "sample_index"
-                        ],
-                        "moving_geom_id": limiting_target_pair[
-                            "moving_geom_id"
-                        ],
-                        "fixture_geom_id": limiting_target_pair[
-                            "fixture_geom_id"
-                        ],
+                    rejection_witness_by_lane[
+                        "target_static_sweep"
+                    ][lateral_rank] = {
+                        "front_index": int(front_index),
+                        "witness": {
+                            "source_front_index": int(front_index),
+                            "source_lateral_rank": int(lateral_rank),
+                            "sample_intervals": target_sweep[
+                                "sample_intervals"
+                            ],
+                            "sample_index": limiting_target_pair[
+                                "sample_index"
+                            ],
+                            "moving_geom_id": limiting_target_pair[
+                                "moving_geom_id"
+                            ],
+                            "fixture_geom_id": limiting_target_pair[
+                                "fixture_geom_id"
+                            ],
+                        },
                     }
                     rejection_stage = "target_static_sweep"
                     skipped_gates = ["gripper_sweep"]
                 else:
-                    target_static_rejection_witness = None
+                    rejection_witness_by_lane[
+                        "target_static_sweep"
+                    ].pop(lateral_rank, None)
             if rejection_stage is None:
+                gripper_prior = rejection_witness_by_lane[
+                    "gripper_sweep"
+                ].get(lateral_rank)
+                if (
+                    gripper_prior is not None
+                    and gripper_prior["front_index"] != front_index - 1
+                ):
+                    rejection_witness_by_lane[
+                        "gripper_sweep"
+                    ].pop(lateral_rank, None)
+                    gripper_prior = None
                 gripper_clearance, gripper_sweep = (
                     _translated_swept_clearance(
                         env,
@@ -6119,31 +6272,89 @@ def _compiled_target_insertion_plan(
                             compiled_gripper_sweep_geometry
                         ),
                         cached_rejection_witness=(
-                            gripper_rejection_witness
+                            None
+                            if gripper_prior is None
+                            else gripper_prior["witness"]
                         ),
                     )
                 )
+                gripper_status = gripper_sweep[
+                    "cached_rejection_witness_status"
+                ]
+                insertion_witness_counters[
+                    "gripper_sweep"
+                ]["attempts"] += int(
+                    gripper_sweep[
+                        "cached_rejection_witness_attempted"
+                    ]
+                )
+                insertion_witness_counters[
+                    "gripper_sweep"
+                ]["rejections"] += int(
+                    gripper_sweep[
+                        "cached_rejection_witness_rejected"
+                    ]
+                )
+                insertion_witness_counters[
+                    "gripper_sweep"
+                ]["full_fallbacks"] += int(
+                    gripper_sweep[
+                        "cached_rejection_witness_fell_back_to_full_sweep"
+                    ]
+                )
+                if gripper_status == "interval_mismatch" or gripper_status in (
+                    "pair_missing",
+                    "sample_invalid",
+                ):
+                    gripper_status = "metadata_mismatch"
+                if gripper_status in insertion_witness_counters[
+                    "gripper_sweep"
+                ]:
+                    insertion_witness_counters[
+                        "gripper_sweep"
+                    ][gripper_status] += 1
                 if gripper_clearance <= 0.0:
                     limiting_gripper_pair = gripper_sweep[
                         "limiting_pair"
                     ]
-                    gripper_rejection_witness = {
-                        "sample_intervals": gripper_sweep[
-                            "sample_intervals"
-                        ],
-                        "sample_index": limiting_gripper_pair[
-                            "sample_index"
-                        ],
-                        "moving_geom_id": limiting_gripper_pair[
-                            "moving_geom_id"
-                        ],
-                        "fixture_geom_id": limiting_gripper_pair[
-                            "fixture_geom_id"
-                        ],
+                    rejection_witness_by_lane[
+                        "gripper_sweep"
+                    ][lateral_rank] = {
+                        "front_index": int(front_index),
+                        "witness": {
+                            "source_front_index": int(front_index),
+                            "source_lateral_rank": int(lateral_rank),
+                            "sample_intervals": gripper_sweep[
+                                "sample_intervals"
+                            ],
+                            "sample_index": limiting_gripper_pair[
+                                "sample_index"
+                            ],
+                            "moving_geom_id": limiting_gripper_pair[
+                                "moving_geom_id"
+                            ],
+                            "fixture_geom_id": limiting_gripper_pair[
+                                "fixture_geom_id"
+                            ],
+                        },
                     }
                     rejection_stage = "gripper_sweep"
                 else:
-                    gripper_rejection_witness = None
+                    rejection_witness_by_lane[
+                        "gripper_sweep"
+                    ].pop(lateral_rank, None)
+            evaluated_gate_sweeps = {
+                "target_door_sweep": door_sweep,
+                "target_static_sweep": target_sweep,
+                "gripper_sweep": gripper_sweep,
+            }
+            for gate_name, evaluated_sweep in (
+                evaluated_gate_sweeps.items()
+            ):
+                if evaluated_sweep is None:
+                    rejection_witness_by_lane[gate_name].pop(
+                        lateral_rank, None
+                    )
             passed = bool(
                 rejection_stage is None
                 and native_inside
@@ -6160,7 +6371,7 @@ def _compiled_target_insertion_plan(
                 "search_index": int(search_index),
                 "front_search_index": int(front_index),
                 "lateral_search_index": int(
-                    lateral_rank_by_value[lateral_offset]
+                    lateral_rank
                 ),
                 "front_distance_from_site_center_m": float(
                     front_distance
@@ -6265,7 +6476,17 @@ def _compiled_target_insertion_plan(
                     f"{total_candidate_count} "
                     f"front_index={front_index} "
                     "lateral_index="
-                    f"{lateral_rank_by_value[lateral_offset]} "
+                    f"{lateral_rank} "
+                    "lane_witness="
+                    f"door:{insertion_witness_counters['target_door_sweep']['attempts']}/"
+                    f"{insertion_witness_counters['target_door_sweep']['rejections']}/"
+                    f"{insertion_witness_counters['target_door_sweep']['full_fallbacks']},"
+                    f"target:{insertion_witness_counters['target_static_sweep']['attempts']}/"
+                    f"{insertion_witness_counters['target_static_sweep']['rejections']}/"
+                    f"{insertion_witness_counters['target_static_sweep']['full_fallbacks']},"
+                    f"gripper:{insertion_witness_counters['gripper_sweep']['attempts']}/"
+                    f"{insertion_witness_counters['gripper_sweep']['rejections']}/"
+                    f"{insertion_witness_counters['gripper_sweep']['full_fallbacks']} "
                     f"rejection_stage={rejection_stage!r} "
                     f"passed={passed}",
                     flush=True,
@@ -6363,6 +6584,12 @@ def _compiled_target_insertion_plan(
         "collision_gripper_geom_ids": collision_gripper_geoms,
         "collision_fixture_geom_ids": collision_fixture_geoms,
         "exact_acceleration": {
+            "rejection_witness_reuse_scope": (
+                "same gate and lateral rank in the immediately preceding "
+                "front row only; the current canonical sample and geom "
+                "pair are re-evaluated exactly; skipped gates clear lanes"
+            ),
+            "rejection_witness_counters": insertion_witness_counters,
             "candidate_invariant_door_pose_count": (
                 compiled_door_sweep["door_pose_count"]
             ),
@@ -6390,8 +6617,21 @@ def _compiled_target_insertion_plan(
             ),
             "convex_mesh_cache_hits": int(
                 compiled_geometry_cache["hits"]
-            ),
+            ) - cache_hits_before,
             "convex_mesh_cache_misses": int(
+                compiled_geometry_cache["misses"]
+            ) - cache_misses_before,
+            "shared_shape_cache_used": bool(
+                compiled_shape_cache is not None
+            ),
+            "shared_shape_cache_scope": (
+                "immutable convex mesh decoding only; every plan recompiles "
+                "and validates live geom xpos/xmat plus held offsets"
+            ),
+            "shared_shape_cache_total_hits": int(
+                compiled_geometry_cache["hits"]
+            ),
+            "shared_shape_cache_total_misses": int(
                 compiled_geometry_cache["misses"]
             ),
         },
@@ -7255,6 +7495,7 @@ def _run_target_dynamic_reachability_trial(
     site_rotation,
     site_size,
     support_geometry,
+    compiled_shape_cache=None,
 ) -> dict:
     """Try contact, closure, held offset, and insertion from one snapshot."""
     clearance_eef = np.asarray(clearance_eef, dtype=float)
@@ -7357,6 +7598,7 @@ def _run_target_dynamic_reachability_trial(
                 site_size,
                 held_eef_offset,
                 support_geometry,
+                compiled_shape_cache=compiled_shape_cache,
             )
             insertion_plan_selection_evidence = (
                 _target_insertion_plan_selection_evidence(insertion_plan)
@@ -7450,6 +7692,11 @@ def _select_dynamically_reachable_target_grasp(
     """Select the first exact-restored grasp with a realizable insertion."""
     common_snapshot = _snapshot_target_trial_state(env, oracle, names)
     boundary_sha256 = common_snapshot["state_sha256"]
+    compiled_shape_cache = {
+        "convex_mesh": {},
+        "hits": 0,
+        "misses": 0,
+    }
     for dynamic_index, candidate in enumerate(geometry_candidates):
         candidate_start = (
             common_snapshot
@@ -7486,6 +7733,7 @@ def _select_dynamically_reachable_target_grasp(
                 site_rotation,
                 site_size,
                 support_geometry,
+                compiled_shape_cache=compiled_shape_cache,
             )
         finally:
             restore_proof = _restore_target_trial_state(
