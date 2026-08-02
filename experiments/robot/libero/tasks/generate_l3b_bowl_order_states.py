@@ -379,6 +379,27 @@ def _formal_gate(env, state, *, condition, fixture_names, fixture_positions, fix
     failures.extend(f"post_wait:{item}" for item in hold_failures)
     if bool(env.check_success()):
         failures.append("partial_state_unexpectedly_satisfies_full_goal")
+    predicate_diagnostics = {}
+    if any("predicate:formal_window_mismatch" in item for item in failures):
+        expected = EXPECTED_INITIAL_PREDICATES[condition]
+
+        def _trace(samples):
+            return [
+                {
+                    "step": step,
+                    "drawer_qpos": float(sample["drawer_joint"]["qpos"]),
+                    "drawer_speed": float(sample["drawer_joint"]["speed"]),
+                    "predicates": sample["predicates"],
+                    "matches_expected": sample["predicates"] == expected,
+                }
+                for step, sample in enumerate(samples)
+            ]
+
+        predicate_diagnostics = {
+            "expected": expected,
+            "formal_window": _trace(samples),
+            "post_wait_hold": _trace(hold_samples),
+        }
     return {
         "condition": condition,
         "formal_wait_steps": FORMAL_WAIT_STEPS,
@@ -387,6 +408,7 @@ def _formal_gate(env, state, *, condition, fixture_names, fixture_positions, fix
         "formal_window_stats": stats,
         "post_wait_hold_steps": POST_WAIT_HOLD_STEPS,
         "post_wait_hold_stats": hold_stats,
+        "predicate_diagnostics": predicate_diagnostics,
         "physical_gate_pass": not failures,
         "failures": sorted(set(failures)),
     }, images
@@ -471,7 +493,11 @@ def generate(args) -> dict:
                 gate["policy_images"] = image_paths
                 if not gate["physical_gate_pass"]:
                     raise ValueError(
-                        f"{condition} episode {episode_index} failed: {gate['failures']}"
+                        f"{condition} episode {episode_index} failed: "
+                        f"{gate['failures']}; intervention="
+                        f"{json.dumps(interventions[condition], sort_keys=True)}; "
+                        f"predicate_diagnostics="
+                        f"{json.dumps(gate['predicate_diagnostics'], sort_keys=True)}"
                     )
                 attrs = {
                     "condition": condition,
