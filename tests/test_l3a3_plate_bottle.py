@@ -67,6 +67,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _select_reachable_trailing_contact,
     _side_contact_targets_from_compiled_bounds,
     _strict_native_high_prebuffer_target,
+    _strict_wrist_yaw_segment_plan,
     _validated_rigid_rotation_matrix,
     _wrist_yaw_attainment_evidence,
     _wrist_yaw_stage_budget_evidence,
@@ -1019,6 +1020,117 @@ def test_native_wrist_yaw_action_resolves_scale_and_gates_clip_contact_stall():
     ]
 
 
+def test_trailing_wrist_yaw_segments_are_minimal_strict_and_cumulative():
+    native_spec = {
+        "source": "test.native.action_spec",
+        "low": (-np.ones(7)).tolist(),
+        "high": np.ones(7).tolist(),
+        "runtime_resolved": True,
+    }
+    rotation_spec = {
+        "source": "test.native.osc",
+        "output_min_axis_angle_rad": [
+            -0.05,
+            -0.05,
+            -0.05,
+            -0.5,
+            -0.5,
+            -0.5,
+        ],
+        "output_max_axis_angle_rad": [
+            0.05,
+            0.05,
+            0.05,
+            0.5,
+            0.5,
+            0.5,
+        ],
+        "output_axis_angle_rad_per_action": [
+            0.05,
+            0.05,
+            0.05,
+            0.5,
+            0.5,
+            0.5,
+        ],
+        "runtime_resolved": True,
+    }
+    trailing_direction = np.array(
+        [0.39274305093731343, -0.9196482457659836], dtype=float
+    )
+    yaw_spec = _hypothetical_wrist_yaw_specs(
+        reference_outward_direction_xy=[1.0, 0.0],
+        target_outward_directions_xy=[trailing_direction],
+        table_normal_world=[0.0, 0.0, 1.0],
+    )[0]
+    assert yaw_spec["yaw_angle_rad"] == pytest.approx(-1.1671839094273593)
+    plan = _strict_wrist_yaw_segment_plan(
+        yaw_spec=yaw_spec,
+        native_action_spec=native_spec,
+        rotation_spec=rotation_spec,
+    )
+
+    assert plan["minimum_segment_count"] == 3
+    assert plan["hardcoded_segment_count_used"] is False
+    assert plan["runtime_fallback_permitted"] is False
+    assert plan["native_axis_angle_norm_bound_rad"] == pytest.approx(0.5)
+    assert plan["strict_directional_yaw_capacity_rad"] < 0.5
+    segments = plan["segments"]
+    relative_targets = np.array(
+        [segment["relative_target_yaw_rad"] for segment in segments]
+    )
+    absolute_targets = np.array(
+        [segment["absolute_target_yaw_rad"] for segment in segments]
+    )
+    assert np.all(relative_targets < 0.0)
+    assert np.all(np.diff(absolute_targets) < 0.0)
+    assert np.all(np.abs(relative_targets) < 0.5)
+    assert np.sum(relative_targets) == pytest.approx(
+        yaw_spec["yaw_angle_rad"], abs=1e-15
+    )
+    assert absolute_targets[-1] == pytest.approx(
+        yaw_spec["yaw_angle_rad"], abs=1e-15
+    )
+    for segment in segments:
+        assert segment["required_rotation_action_peak"] < 1.0
+        assert segment["strictly_inside_native_yaw_capacity"] is True
+        np.testing.assert_allclose(
+            segment["cumulative_yaw_spec"]["target_outward_direction_xy"],
+            segment["target_outward_direction_xy"],
+            rtol=0.0,
+            atol=1e-12,
+        )
+    np.testing.assert_allclose(
+        segments[-1]["target_outward_direction_xy"],
+        trailing_direction,
+        rtol=0.0,
+        atol=1e-12,
+    )
+
+    # Exact multiples of the native 0.5 rad bound need one more segment to
+    # remain strictly interior; this verifies ceil/nextafter, not hardcoded N=3.
+    exact_bound_spec = _hypothetical_wrist_yaw_specs(
+        reference_outward_direction_xy=[1.0, 0.0],
+        target_outward_directions_xy=[[np.cos(-1.0), np.sin(-1.0)]],
+        table_normal_world=[0.0, 0.0, 1.0],
+    )[0]
+    exact_bound_plan = _strict_wrist_yaw_segment_plan(
+        yaw_spec=exact_bound_spec,
+        native_action_spec=native_spec,
+        rotation_spec=rotation_spec,
+    )
+    assert exact_bound_plan["minimum_segment_count"] == 3
+
+    changed_identity = copy.deepcopy(yaw_spec)
+    changed_identity["target_outward_direction_xy"] = [1.0, 0.0]
+    with pytest.raises(RuntimeError, match="native-frame wrist-yaw identity"):
+        _strict_wrist_yaw_segment_plan(
+            yaw_spec=changed_identity,
+            native_action_spec=native_spec,
+            rotation_spec=rotation_spec,
+        )
+
+
 def test_wrist_yaw_settle_and_shared_structural_budgets_fail_closed():
     settle = _wrist_yaw_stage_budget_evidence(
         actions_used=28,
@@ -1059,7 +1171,7 @@ def test_wrist_yaw_settle_and_shared_structural_budgets_fail_closed():
     ]
 
 
-def test_compiled_trailing_candidates_select_live_clockwise_route(monkeypatch):
+def test_compiled_trailing_candidates_select_sole_native_trailing_route(monkeypatch):
     class Model:
         body_names = [
             "world",
@@ -1148,7 +1260,7 @@ def test_compiled_trailing_candidates_select_live_clockwise_route(monkeypatch):
     )
     legacy_plus_x = candidates[0]
     assert legacy_plus_x["offset_xy"] == pytest.approx([0.010, 0.000])
-    assert legacy_plus_x["selection_eligible"] is True
+    assert legacy_plus_x["selection_eligible"] is False
     assert legacy_plus_x["dual_finger_contact_skew_m"] == pytest.approx(
         0.000213
     )
@@ -1157,30 +1269,46 @@ def test_compiled_trailing_candidates_select_live_clockwise_route(monkeypatch):
     )
     assert legacy_plus_x["outside_high_clipped_action_axes"] == [0]
     assert legacy_plus_x["outside_high_action_will_clip"] is True
-    assert legacy_plus_x["selection_violations"] == []
-    assert selected is candidates[4]
+    assert legacy_plus_x["wrist_yaw_route_selected"] is False
+    assert selected is candidates[2]
     assert selected["native_push_direction_relations"] == [
-        "tangent_clockwise"
+        "trailing_minus_push"
     ]
     assert selected["wrist_yaw_route_selected"] is True
+    assert selected["route_selection_candidate"] is True
+    assert selected["diagnostic_only"] is False
+    assert selected["selection_eligible"] is True
+    assert selected["selection_violations"] == []
+    assert sum(
+        candidate["wrist_yaw_route_selected"] for candidate in candidates
+    ) == 1
+    assert sum(
+        candidate["route_selection_candidate"] for candidate in candidates
+    ) == 1
     assert selected["wrist_yaw_route_selection_basis"][
         "old_plus_x_route_fallback_permitted"
     ] is False
+    assert selected["wrist_yaw_route_selection_basis"][
+        "runtime_tangent_fallback_permitted"
+    ] is False
+    assert selected["wrist_yaw_route_selection_basis"][
+        "required_relation"
+    ] == "trailing_minus_push"
     assert selected["wrist_yaw_route_selection_basis"][
         "superpod_diagnostic_authorization"
     ] == {
         "job_id": "502381",
         "commit": "3376794",
-        "observed_minimum_amplitude_relation": "tangent_clockwise",
+        "observed_geometry_eligible_relation": "trailing_minus_push",
         "runtime_revalidation_still_required": True,
     }
     assert _select_executable_wrist_yaw_candidate(candidates) is selected
-    failed_clockwise = copy.deepcopy(candidates)
-    failed_clockwise[4]["hypothetical_wrist_yaw"][
+    failed_trailing = copy.deepcopy(candidates)
+    failed_trailing[2]["hypothetical_wrist_yaw"][
         "hypothetical_compiled_geometry_eligible"
     ] = False
-    with pytest.raises(RuntimeError, match="tangent_clockwise wrist-yaw route"):
-        _select_executable_wrist_yaw_candidate(failed_clockwise)
+    with pytest.raises(RuntimeError, match="trailing_minus_push wrist-yaw route"):
+        _select_executable_wrist_yaw_candidate(failed_trailing)
     rejected = next(
         candidate
         for candidate in candidates
@@ -1201,12 +1329,10 @@ def test_compiled_trailing_candidates_select_live_clockwise_route(monkeypatch):
         "tangent_clockwise",
     ]
     for diagnostic in candidates[2:]:
-        assert diagnostic["diagnostic_only"] is True
-        assert diagnostic["selection_eligible"] is False
-        assert (
-            "native_push_derived_candidate_is_diagnostic_only"
-            in diagnostic["selection_violations"]
-        )
+        is_selected = diagnostic is selected
+        assert diagnostic["diagnostic_only"] is (not is_selected)
+        assert diagnostic["selection_eligible"] is is_selected
+        assert diagnostic["route_selection_candidate"] is is_selected
         assert isinstance(diagnostic["compiled_geometry_eligible"], bool)
         assert isinstance(diagnostic["dual_finger_contact_skew_m"], float)
         assert isinstance(diagnostic["outside_high_action_peak"], float)
@@ -1361,6 +1487,20 @@ def test_compiled_trailing_candidates_select_live_clockwise_route(monkeypatch):
     assert realized["real_sim_geometry_recompile"][
         "hypothetical_geometry_used_for_descent"
     ] is False
+    assert realized["native_push_direction_relations"] == [
+        "trailing_minus_push"
+    ]
+    assert realized["real_sim_geometry_recompile"][
+        "selected_native_push_direction_relation"
+    ] == "trailing_minus_push"
+    np.testing.assert_allclose(
+        realized["real_sim_geometry_recompile"][
+            "selected_outward_direction_xy"
+        ],
+        selected["outward_direction_xy"],
+        rtol=0.0,
+        atol=1e-12,
+    )
 
     real_recompile_source = CONTROLLER_REFERENCE.read_text().split(
         "def _real_recompile_wrist_yaw_candidate(", 1
@@ -6403,7 +6543,7 @@ def test_plate_approach_is_segmented_and_emits_live_geometry_diagnostics():
     assert '"initial_realized_contact_candidate"' in producer
 
 
-def test_clockwise_wrist_yaw_is_mandatory_for_initial_and_recontact_routes():
+def test_segmented_trailing_wrist_yaw_is_mandatory_for_initial_and_recontact_routes():
     producer = CONTROLLER_REFERENCE.read_text()
     task_push = producer[
         producer.index("# Job 499604 established real plate contact") :
@@ -6428,8 +6568,14 @@ def test_clockwise_wrist_yaw_is_mandatory_for_initial_and_recontact_routes():
     )[1].split("\ndef _body_contact_counterparts(", 1)[0]
     assert 'rollout.advance(action, "task_wrist_yaw")' in executor
     assert executor.count("allowed_body_pairs=()") >= 3
-    assert '!= [\n        "tangent_clockwise"\n    ]' in executor
+    assert '!= [\n        "trailing_minus_push"\n    ]' in executor
     assert '"old_plus_x_route_fallback_permitted": False' in executor
+    assert '"runtime_tangent_fallback_permitted": False' in executor
+    assert "_strict_wrist_yaw_segment_plan(" in executor
+    assert '"yaw_segmentation"' in executor
+    assert '"yaw_segments"' in executor
+    assert '"cumulative_attainment_evidence"' in executor
+    assert '"shared_budget_remaining_after_segment"' in executor
     assert executor.count("_wrist_yaw_step_gate(") == 2
     assert "consecutive_angular_stall_steps" in executor
     assert "consecutive_position_stall_steps" in executor

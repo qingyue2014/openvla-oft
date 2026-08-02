@@ -6594,6 +6594,7 @@ def _wrist_yaw_attainment_evidence(
     maximum_position_drift_m,
     angular_progress_epsilon_rad,
     position_progress_epsilon_m,
+    anchor_eef_position=None,
     previous_absolute_error_rad=None,
     previous_position_drift_m=None,
 ):
@@ -6615,6 +6616,13 @@ def _wrist_yaw_attainment_evidence(
     current_eef = np.asarray(
         current_frame["eef_position_world"], dtype=float
     )
+    anchor_eef = (
+        reference_eef
+        if anchor_eef_position is None
+        else np.asarray(anchor_eef_position, dtype=float)
+    )
+    if anchor_eef.shape != (3,) or not np.all(np.isfinite(anchor_eef)):
+        raise ValueError("wrist-yaw anchor EEF position must be finite and 3-D")
     target_rotation = _validated_rigid_rotation_matrix(
         yaw_spec["rotation_matrix_world"], label="selected wrist yaw"
     )
@@ -6699,8 +6707,8 @@ def _wrist_yaw_attainment_evidence(
     target_error_angle = _rotation_matrix_error_angle(
         target_rotation @ measured_rotation.T
     )
-    position_drift = float(np.linalg.norm(current_eef - reference_eef))
-    anchor_position_error = reference_eef - current_eef
+    position_drift = float(np.linalg.norm(current_eef - anchor_eef))
+    anchor_position_error = anchor_eef - current_eef
     axis_error = float(np.linalg.norm(measured_rotation @ normal - normal))
     rotation_direction_valid = bool(
         actual_yaw * target_yaw >= -angular_progress_epsilon_rad
@@ -6748,6 +6756,8 @@ def _wrist_yaw_attainment_evidence(
         "absolute_error_rad": absolute_error,
         "target_rotation_error_rad": target_error_angle,
         "maximum_angle_error_rad": float(maximum_angle_error_rad),
+        "reference_eef_position_world": reference_eef.tolist(),
+        "anchor_eef_position_world": anchor_eef.tolist(),
         "eef_position_drift_m": position_drift,
         "anchor_position_error_world_m": (
             anchor_position_error.tolist()
@@ -7115,7 +7125,7 @@ def _real_recompile_wrist_yaw_candidate(
             "yaw and strict anchor-position attainment"
         )
     relation = selected_candidate.get("native_push_direction_relations")
-    if relation != ["tangent_clockwise"] or not selected_candidate.get(
+    if relation != ["trailing_minus_push"] or not selected_candidate.get(
         "wrist_yaw_route_selected", False
     ):
         raise RuntimeError(
@@ -7281,6 +7291,8 @@ def _real_recompile_wrist_yaw_candidate(
         ),
         "attainment_evidence": attainment_evidence,
         "table_normal_derivation": live_table_normal_evidence,
+        "selected_native_push_direction_relation": relation[0],
+        "selected_outward_direction_xy": outward.tolist(),
         "dual_finger_contact_skew_m": skew,
         "maximum_dual_finger_contact_skew_m": float(
             outside_clearance_m
@@ -7561,71 +7573,318 @@ def _select_reachable_compiled_side_candidate(candidates):
 
 
 def _select_executable_wrist_yaw_candidate(candidates):
-    """Select the preregistered minimum-yaw native push-frame route."""
+    """Select only the preregistered native trailing-minus-push route."""
     candidates = list(candidates)
-    clockwise = [
+    trailing = [
         candidate
         for candidate in candidates
         if candidate.get("native_push_direction_relations")
-        == ["tangent_clockwise"]
+        == ["trailing_minus_push"]
     ]
-    if len(clockwise) != 1:
+    if len(trailing) != 1:
         raise RuntimeError(
-            "wrist-yaw route requires exactly one native tangent_clockwise "
+            "wrist-yaw route requires exactly one native trailing_minus_push "
             "candidate"
         )
-    selected = clockwise[0]
+    selected = trailing[0]
     yaw_diagnostic = selected.get("hypothetical_wrist_yaw", {})
     if not yaw_diagnostic.get(
         "hypothetical_compiled_geometry_eligible", False
     ):
         raise RuntimeError(
-            "preregistered tangent_clockwise wrist-yaw route failed its "
+            "preregistered trailing_minus_push wrist-yaw route failed its "
             "hypothetical compiled geometry gate"
         )
-    eligible = [
-        candidate
-        for candidate in candidates
-        if candidate.get("hypothetical_wrist_yaw", {}).get(
-            "hypothetical_compiled_geometry_eligible", False
-        )
-    ]
     selected_magnitude = abs(
         float(yaw_diagnostic["yaw"]["yaw_angle_rad"])
     )
-    if any(
-        abs(
-            float(
-                candidate["hypothetical_wrist_yaw"]["yaw"][
-                    "yaw_angle_rad"
-                ]
-            )
-        )
-        < selected_magnitude
-        for candidate in eligible
-        if candidate is not selected
-    ):
-        raise RuntimeError(
-            "tangent_clockwise is no longer the minimum-magnitude eligible "
-            "native push-frame wrist yaw"
-        )
+    # Canonicalize execution metadata after all candidates have retained their
+    # hypothetical geometry diagnostics.  No legacy cardinal or tangent can be
+    # promoted at runtime if the sole preregistered route later fails.
+    for candidate in candidates:
+        candidate["wrist_yaw_route_selected"] = False
+        candidate["route_selection_candidate"] = False
+        candidate["diagnostic_only"] = True
+        candidate["selection_eligible"] = False
+    selected["route_selection_candidate"] = True
+    selected["diagnostic_only"] = False
+    selected["selection_eligible"] = True
+    selected["pre_yaw_compiled_geometry_violations"] = list(
+        selected.get("selection_violations", ())
+    )
+    selected["selection_violations"] = []
     selected["wrist_yaw_route_selected"] = True
     selected["wrist_yaw_route_selection_basis"] = {
-        "required_relation": "tangent_clockwise",
-        "minimum_absolute_yaw_among_hypothetically_eligible": True,
+        "required_relation": "trailing_minus_push",
+        "sole_preregistered_actual_route": True,
+        "minimum_absolute_yaw_among_hypothetically_eligible": False,
         "absolute_yaw_rad": selected_magnitude,
         "superpod_diagnostic_authorization": {
             "job_id": "502381",
             "commit": "3376794",
-            "observed_minimum_amplitude_relation": "tangent_clockwise",
+            "observed_geometry_eligible_relation": "trailing_minus_push",
             "runtime_revalidation_still_required": True,
         },
         "old_plus_x_route_fallback_permitted": False,
+        "runtime_tangent_fallback_permitted": False,
         "requires_high_free_space_execution": True,
         "requires_real_pose_attainment": True,
         "requires_real_sim_geometry_recompile_before_descent": True,
     }
+    if sum(
+        bool(candidate.get("wrist_yaw_route_selected", False))
+        for candidate in candidates
+    ) != 1:
+        raise RuntimeError("wrist-yaw execution route is not unique")
     return selected
+
+
+def _strict_wrist_yaw_segment_plan(
+    *,
+    yaw_spec,
+    native_action_spec,
+    rotation_spec,
+):
+    """Split one native-frame yaw into the minimum strict OSC-bound segments."""
+    normal = np.asarray(yaw_spec.get("table_normal_world", ()), dtype=float)
+    reference_outward = np.asarray(
+        yaw_spec.get("reference_outward_direction_xy", ()), dtype=float
+    )
+    target_outward = np.asarray(
+        yaw_spec.get("target_outward_direction_xy", ()), dtype=float
+    )
+    declared_axis_angle = np.asarray(
+        yaw_spec.get("axis_angle_world_rad", ()), dtype=float
+    )
+    total_yaw = float(yaw_spec.get("yaw_angle_rad", np.nan))
+    action_low = np.asarray(native_action_spec.get("low", ()), dtype=float)
+    action_high = np.asarray(native_action_spec.get("high", ()), dtype=float)
+    rotation_scale = np.asarray(
+        rotation_spec.get("output_axis_angle_rad_per_action", ()), dtype=float
+    )
+    rotation_output_min = np.asarray(
+        rotation_spec.get("output_min_axis_angle_rad", ()), dtype=float
+    )
+    rotation_output_max = np.asarray(
+        rotation_spec.get("output_max_axis_angle_rad", ()), dtype=float
+    )
+    if (
+        normal.shape != (3,)
+        or reference_outward.shape != (2,)
+        or target_outward.shape != (2,)
+        or declared_axis_angle.shape != (3,)
+        or action_low.shape != (7,)
+        or action_high.shape != (7,)
+        or rotation_scale.shape != (6,)
+        or rotation_output_min.shape != (6,)
+        or rotation_output_max.shape != (6,)
+        or not np.all(np.isfinite(normal))
+        or not np.all(np.isfinite(reference_outward))
+        or not np.all(np.isfinite(target_outward))
+        or not np.all(np.isfinite(declared_axis_angle))
+        or np.linalg.norm(reference_outward) <= 1e-9
+        or np.linalg.norm(target_outward) <= 1e-9
+        or not np.isfinite(total_yaw)
+        or not np.all(np.isfinite(action_low))
+        or not np.all(np.isfinite(action_high))
+        or not np.all(action_low < action_high)
+        or np.any(rotation_scale[3:6] <= 0.0)
+        or np.any(rotation_output_min[3:6] >= 0.0)
+        or np.any(rotation_output_max[3:6] <= 0.0)
+        or abs(float(np.linalg.norm(normal)) - 1.0) > 1e-7
+    ):
+        raise ValueError("native wrist-yaw segmentation inputs are invalid")
+    if not native_action_spec.get("runtime_resolved", False) or not rotation_spec.get(
+        "runtime_resolved", False
+    ):
+        raise RuntimeError("wrist-yaw segmentation requires live native OSC bounds")
+
+    reference_3d = np.r_[
+        reference_outward / float(np.linalg.norm(reference_outward)), 0.0
+    ]
+    normalized_target_3d = np.r_[
+        target_outward / float(np.linalg.norm(target_outward)), 0.0
+    ]
+    cross_matrix = np.array(
+        [
+            [0.0, -normal[2], normal[1]],
+            [normal[2], 0.0, -normal[0]],
+            [-normal[1], normal[0], 0.0],
+        ],
+        dtype=float,
+    )
+    total_rotation = _validated_rigid_rotation_matrix(
+        np.eye(3)
+        + np.sin(total_yaw) * cross_matrix
+        + (1.0 - np.cos(total_yaw)) * (cross_matrix @ cross_matrix),
+        label="segmented total wrist yaw",
+    )
+    declared_rotation = _validated_rigid_rotation_matrix(
+        yaw_spec.get("rotation_matrix_world", ()),
+        label="declared segmented wrist yaw",
+    )
+    if not (
+        np.allclose(
+            declared_axis_angle,
+            normal * total_yaw,
+            rtol=0.0,
+            atol=1e-12,
+        )
+        and np.allclose(
+            declared_rotation,
+            total_rotation,
+            rtol=0.0,
+            atol=1e-12,
+        )
+        and np.allclose(
+            total_rotation @ reference_3d,
+            normalized_target_3d,
+            rtol=0.0,
+            atol=1e-9,
+        )
+    ):
+        raise RuntimeError(
+            "native-frame wrist-yaw identity changed before segmentation"
+        )
+
+    signed_unit_yaw = -1.0 if total_yaw < 0.0 else 1.0
+    signed_action_per_yaw = (
+        signed_unit_yaw * normal / rotation_scale[3:6]
+    )
+    axis_capacities = []
+    for local_axis, coefficient in enumerate(signed_action_per_yaw):
+        if abs(float(coefficient)) <= 1e-15:
+            continue
+        action_index = int(local_axis + 3)
+        action_bound = float(
+            action_high[action_index]
+            if coefficient > 0.0
+            else action_low[action_index]
+        )
+        capacity = float(action_bound / coefficient)
+        if not np.isfinite(capacity) or capacity <= 0.0:
+            raise RuntimeError(
+                "native OSC rotation bounds have no capacity in selected yaw direction"
+            )
+        axis_capacities.append(
+            {
+                "rotation_action_index": action_index,
+                "table_normal_component": float(normal[local_axis]),
+                "signed_action_per_positive_yaw_magnitude": float(coefficient),
+                "directional_native_action_bound": action_bound,
+                "directional_yaw_capacity_rad": capacity,
+            }
+        )
+    if not axis_capacities:
+        raise RuntimeError("selected native yaw axis has no controlled component")
+    limiting_directional_axis = min(
+        axis_capacities,
+        key=lambda record: record["directional_yaw_capacity_rad"],
+    )
+    native_axis_angle_norm_bound = float(
+        np.min(
+            np.minimum(
+                -rotation_output_min[3:6],
+                rotation_output_max[3:6],
+            )
+        )
+    )
+    native_yaw_capacity = float(
+        min(
+            limiting_directional_axis["directional_yaw_capacity_rad"],
+            native_axis_angle_norm_bound,
+        )
+    )
+    strict_capacity = float(np.nextafter(native_yaw_capacity, 0.0))
+    if not np.isfinite(strict_capacity) or strict_capacity <= 0.0:
+        raise RuntimeError("native yaw capacity has no representable strict interior")
+    segment_count = max(1, int(np.ceil(abs(total_yaw) / strict_capacity)))
+    segment_delta = float(total_yaw / segment_count)
+    if not abs(segment_delta) < native_yaw_capacity:
+        raise RuntimeError("minimum wrist-yaw segmentation is not strictly unclipped")
+
+    segments = []
+    previous_outward = reference_3d[:2].copy()
+    previous_target_yaw = 0.0
+    for segment_index in range(1, segment_count + 1):
+        target_yaw = float(total_yaw * segment_index / segment_count)
+        rotation = (
+            np.eye(3)
+            + np.sin(target_yaw) * cross_matrix
+            + (1.0 - np.cos(target_yaw)) * (cross_matrix @ cross_matrix)
+        )
+        target_outward = (rotation @ reference_3d)[:2]
+        relative_spec = _hypothetical_wrist_yaw_specs(
+            reference_outward_direction_xy=previous_outward,
+            target_outward_directions_xy=[target_outward],
+            table_normal_world=normal,
+        )[0]
+        cumulative_spec = _hypothetical_wrist_yaw_specs(
+            reference_outward_direction_xy=reference_3d[:2],
+            target_outward_directions_xy=[target_outward],
+            table_normal_world=normal,
+        )[0]
+        expected_delta = float(target_yaw - previous_target_yaw)
+        if not (
+            np.isclose(
+                relative_spec["yaw_angle_rad"], expected_delta, rtol=0.0, atol=1e-12
+            )
+            and np.isclose(
+                cumulative_spec["yaw_angle_rad"], target_yaw, rtol=0.0, atol=1e-12
+            )
+        ):
+            raise RuntimeError("native-frame wrist-yaw segment derivation diverged")
+        required_rotation_action = (
+            normal * expected_delta / rotation_scale[3:6]
+        )
+        if not np.all(
+            (action_low[3:6] < required_rotation_action)
+            & (required_rotation_action < action_high[3:6])
+        ):
+            raise RuntimeError("wrist-yaw segment would touch or cross native bounds")
+        segments.append(
+            {
+                "segment_index": int(segment_index),
+                "absolute_target_yaw_rad": target_yaw,
+                "relative_target_yaw_rad": expected_delta,
+                "target_outward_direction_xy": target_outward.tolist(),
+                "relative_yaw_spec": relative_spec,
+                "cumulative_yaw_spec": cumulative_spec,
+                "required_rotation_action": required_rotation_action.tolist(),
+                "required_rotation_action_peak": float(
+                    np.max(np.abs(required_rotation_action))
+                ),
+                "axis_angle_norm_rad": abs(expected_delta),
+                "strictly_inside_native_yaw_capacity": True,
+            }
+        )
+        previous_outward = target_outward
+        previous_target_yaw = target_yaw
+    if not np.isclose(previous_target_yaw, total_yaw, rtol=0.0, atol=1e-15):
+        raise RuntimeError("wrist-yaw segment targets do not sum to the native target")
+    return {
+        "formula": (
+            "directional yaw capacity is the minimum live native rotation-action "
+            "bound divided by signed table-normal action demand; take nextafter "
+            "toward zero, N=ceil(abs(total_yaw)/strict_capacity), and use N equal "
+            "signed native-frame yaw targets"
+        ),
+        "total_native_frame_yaw_rad": total_yaw,
+        "total_native_frame_axis_angle_world_rad": (normal * total_yaw).tolist(),
+        "table_normal_world": normal.tolist(),
+        "native_action_spec_source": native_action_spec.get("source"),
+        "native_rotation_spec_source": rotation_spec.get("source"),
+        "directional_axis_capacities": axis_capacities,
+        "limiting_directional_axis": limiting_directional_axis,
+        "native_axis_angle_norm_bound_rad": native_axis_angle_norm_bound,
+        "native_directional_yaw_capacity_rad": native_yaw_capacity,
+        "strict_directional_yaw_capacity_rad": strict_capacity,
+        "minimum_segment_count": int(segment_count),
+        "equal_segment_target_yaw_rad": segment_delta,
+        "segments": segments,
+        "hardcoded_segment_count_used": False,
+        "runtime_fallback_permitted": False,
+    }
 
 
 def _compiled_trailing_side_contact_candidates(
@@ -7640,7 +7899,7 @@ def _compiled_trailing_side_contact_candidates(
     position_action_scale,
     reference_outward_direction_xy=None,
 ):
-    """Compile push-frame yaw diagnostics and select the clockwise route."""
+    """Compile push-frame yaw diagnostics and select the native trailing route."""
     plate_position = np.asarray(plate_position, dtype=float)
     eef_position = np.asarray(eef_position, dtype=float)
     if plate_position.shape != (3,) or eef_position.shape != (3,):
@@ -7847,7 +8106,7 @@ def _execute_high_safe_wrist_yaw(
 ):
     """Execute selected yaw at center-high, then recompile real geometry."""
     if selected_candidate.get("native_push_direction_relations") != [
-        "tangent_clockwise"
+        "trailing_minus_push"
     ] or not selected_candidate.get("wrist_yaw_route_selected", False):
         raise RuntimeError(
             "high-safe wrist yaw cannot silently execute an unselected direction"
@@ -7869,9 +8128,9 @@ def _execute_high_safe_wrist_yaw(
     table_normal, table_normal_evidence = (
         _compiled_table_normal_evidence(env)
     )
-    yaw_spec = selected_candidate["hypothetical_wrist_yaw"]["yaw"]
+    total_yaw_spec = selected_candidate["hypothetical_wrist_yaw"]["yaw"]
     if not np.allclose(
-        yaw_spec["table_normal_world"],
+        total_yaw_spec["table_normal_world"],
         table_normal,
         rtol=0.0,
         atol=1e-9,
@@ -7879,6 +8138,11 @@ def _execute_high_safe_wrist_yaw(
         raise RuntimeError(
             "selected yaw axis diverged from the live native table normal"
         )
+    yaw_segmentation = _strict_wrist_yaw_segment_plan(
+        yaw_spec=total_yaw_spec,
+        native_action_spec=native_action_spec,
+        rotation_spec=rotation_spec,
+    )
     maximum_controller_world_step = float(
         args.position_action_scale
         * args.plate_contact_seek_max_translation_action
@@ -7903,7 +8167,7 @@ def _execute_high_safe_wrist_yaw(
             f"overhead={json.dumps(initial_overhead_guard, sort_keys=True)} "
             f"contacts={json.dumps(initial_contact_gate, sort_keys=True)}"
         )
-    reference_frame = _compiled_finger_yaw_frame(
+    initial_reference_frame = _compiled_finger_yaw_frame(
         env, eef_position=current_eef
     )
     anchor_eef = current_eef.copy()
@@ -7913,9 +8177,9 @@ def _execute_high_safe_wrist_yaw(
         - hypothetical["dual_finger_contact_skew_m"]
     )
     maximum_radius = float(
-        reference_frame["maximum_finger_radius_from_eef_m"]
+        initial_reference_frame["maximum_finger_radius_from_eef_m"]
     )
-    target_yaw_magnitude = abs(float(yaw_spec["yaw_angle_rad"]))
+    target_yaw_magnitude = abs(float(total_yaw_spec["yaw_angle_rad"]))
     maximum_angle_error = float(
         np.nextafter(
             min(
@@ -7964,33 +8228,107 @@ def _execute_high_safe_wrist_yaw(
         ),
         "maximum_position_settle_steps": int(args.push_tracking_steps),
     }
-    current_frame = reference_frame
+    current_frame = initial_reference_frame
+    yaw_segment_index = 0
+    active_segment = yaw_segmentation["segments"][yaw_segment_index]
+    segment_reference_frame = current_frame
+    segment_yaw_spec = active_segment["relative_yaw_spec"]
     attainment = _wrist_yaw_attainment_evidence(
-        reference_frame=reference_frame,
+        reference_frame=segment_reference_frame,
         current_frame=current_frame,
-        yaw_spec=yaw_spec,
+        yaw_spec=segment_yaw_spec,
         maximum_angle_error_rad=maximum_angle_error,
         maximum_position_drift_m=args.position_tolerance,
         angular_progress_epsilon_rad=angular_progress_epsilon,
         position_progress_epsilon_m=(
             args.minimum_saturated_waypoint_progress
         ),
+        anchor_eef_position=anchor_eef,
     )
     frames = []
+    yaw_segments = []
+    segment_frame_start = 0
     consecutive_angular_stall_steps = 0
     consecutive_position_stall_steps = 0
-    position_settle_steps = 0
+    segment_position_settle_steps = 0
+    total_position_settle_steps = 0
     maximum_observed_position_drift = float(
         attainment["eef_position_drift_m"]
     )
     maximum_commanded_translation_action_peak = 0.0
     for yaw_step in range(1, args.max_waypoint_steps + 1):
         if attainment["attained"]:
-            break
+            cumulative_attainment = _wrist_yaw_attainment_evidence(
+                reference_frame=initial_reference_frame,
+                current_frame=current_frame,
+                yaw_spec=active_segment["cumulative_yaw_spec"],
+                maximum_angle_error_rad=maximum_angle_error,
+                maximum_position_drift_m=args.position_tolerance,
+                angular_progress_epsilon_rad=angular_progress_epsilon,
+                position_progress_epsilon_m=(
+                    args.minimum_saturated_waypoint_progress
+                ),
+                anchor_eef_position=anchor_eef,
+            )
+            if not cumulative_attainment["attained"]:
+                raise RuntimeError(
+                    "wrist-yaw segment accumulated outside its absolute native-"
+                    "frame target: "
+                    f"segment={active_segment['segment_index']} "
+                    f"evidence={json.dumps(cumulative_attainment, sort_keys=True)}"
+                )
+            segment_frames = frames[segment_frame_start:]
+            yaw_segments.append(
+                {
+                    **active_segment,
+                    "action_steps": len(segment_frames),
+                    "global_action_step_start": (
+                        None
+                        if not segment_frames
+                        else segment_frames[0]["yaw_step"]
+                    ),
+                    "global_action_step_end": (
+                        None
+                        if not segment_frames
+                        else segment_frames[-1]["yaw_step"]
+                    ),
+                    "position_settle_steps": int(
+                        segment_position_settle_steps
+                    ),
+                    "local_attainment_evidence": attainment,
+                    "cumulative_attainment_evidence": cumulative_attainment,
+                    "shared_budget_used_after_segment": len(frames),
+                    "shared_budget_remaining_after_segment": int(
+                        args.max_waypoint_steps - len(frames)
+                    ),
+                }
+            )
+            yaw_segment_index += 1
+            if yaw_segment_index == len(yaw_segmentation["segments"]):
+                break
+            active_segment = yaw_segmentation["segments"][yaw_segment_index]
+            segment_reference_frame = current_frame
+            segment_yaw_spec = active_segment["relative_yaw_spec"]
+            attainment = _wrist_yaw_attainment_evidence(
+                reference_frame=segment_reference_frame,
+                current_frame=current_frame,
+                yaw_spec=segment_yaw_spec,
+                maximum_angle_error_rad=maximum_angle_error,
+                maximum_position_drift_m=args.position_tolerance,
+                angular_progress_epsilon_rad=angular_progress_epsilon,
+                position_progress_epsilon_m=(
+                    args.minimum_saturated_waypoint_progress
+                ),
+                anchor_eef_position=anchor_eef,
+            )
+            segment_frame_start = len(frames)
+            consecutive_angular_stall_steps = 0
+            consecutive_position_stall_steps = 0
+            segment_position_settle_steps = 0
         budget_evidence = _wrist_yaw_stage_budget_evidence(
             actions_used=len(frames),
             maximum_actions=args.max_waypoint_steps,
-            position_settle_steps=position_settle_steps,
+            position_settle_steps=segment_position_settle_steps,
             maximum_position_settle_steps=args.push_tracking_steps,
             rotation_attained=attainment["rotation_attained"],
             position_attained=attainment["position_attained"],
@@ -8050,8 +8388,9 @@ def _execute_high_safe_wrist_yaw(
         )
         settle_step_index = None
         if stage == "position_settle":
-            position_settle_steps += 1
-            settle_step_index = int(position_settle_steps)
+            segment_position_settle_steps += 1
+            total_position_settle_steps += 1
+            settle_step_index = int(segment_position_settle_steps)
         rollout.advance(action, "task_wrist_yaw")
         current_eef = np.asarray(
             rollout.obs["robot0_eef_pos"], dtype=float
@@ -8060,9 +8399,9 @@ def _execute_high_safe_wrist_yaw(
             env, eef_position=current_eef
         )
         attainment = _wrist_yaw_attainment_evidence(
-            reference_frame=reference_frame,
+            reference_frame=segment_reference_frame,
             current_frame=current_frame,
-            yaw_spec=yaw_spec,
+            yaw_spec=segment_yaw_spec,
             maximum_angle_error_rad=maximum_angle_error,
             maximum_position_drift_m=args.position_tolerance,
             angular_progress_epsilon_rad=angular_progress_epsilon,
@@ -8071,6 +8410,7 @@ def _execute_high_safe_wrist_yaw(
             ),
             previous_absolute_error_rad=previous_absolute_error,
             previous_position_drift_m=previous_position_drift,
+            anchor_eef_position=anchor_eef,
         )
         consecutive_angular_stall_steps = (
             0
@@ -8122,6 +8462,14 @@ def _execute_high_safe_wrist_yaw(
         )
         frame = {
             "yaw_step": int(yaw_step),
+            "yaw_segment_index": int(active_segment["segment_index"]),
+            "yaw_segment_step": int(len(frames) - segment_frame_start + 1),
+            "segment_absolute_target_yaw_rad": float(
+                active_segment["absolute_target_yaw_rad"]
+            ),
+            "segment_relative_target_yaw_rad": float(
+                active_segment["relative_target_yaw_rad"]
+            ),
             "stage": stage,
             "position_settle_step": settle_step_index,
             "budget_before_action": budget_evidence,
@@ -8142,6 +8490,14 @@ def _execute_high_safe_wrist_yaw(
         frames.append(frame)
         frame_log = {
             "yaw_step": int(yaw_step),
+            "yaw_segment_index": int(active_segment["segment_index"]),
+            "yaw_segment_step": int(len(frames) - segment_frame_start),
+            "segment_absolute_target_yaw_rad": active_segment[
+                "absolute_target_yaw_rad"
+            ],
+            "segment_relative_target_yaw_rad": active_segment[
+                "relative_target_yaw_rad"
+            ],
             "stage": stage,
             "position_settle_step": settle_step_index,
             "shared_budget_remaining_after_action": int(
@@ -8195,18 +8551,29 @@ def _execute_high_safe_wrist_yaw(
                 f"frame={json.dumps(frame, sort_keys=True)} "
                 f"scene={json.dumps(diagnostics(), sort_keys=True)}"
             )
-        if attainment["attained"]:
-            break
     else:
         raise RuntimeError(
             "wrist yaw exhausted the unchanged 180-step waypoint budget "
             f"without pose attainment: frames={json.dumps(frames, sort_keys=True)}"
         )
     yaw_steps = len(frames)
-    if not attainment["attained"] or yaw_steps >= args.max_waypoint_steps:
+    if (
+        len(yaw_segments) != yaw_segmentation["minimum_segment_count"]
+        or yaw_steps >= args.max_waypoint_steps
+        or not yaw_segments[-1]["cumulative_attainment_evidence"]["attained"]
+    ):
         raise RuntimeError(
-            "wrist yaw left no verified pose or structural waypoint budget"
+            "segmented wrist yaw left no verified final pose or structural "
+            "waypoint budget"
         )
+    final_attainment = yaw_segments[-1]["cumulative_attainment_evidence"]
+    if not np.isclose(
+        final_attainment["target_yaw_rad"],
+        float(total_yaw_spec["yaw_angle_rad"]),
+        rtol=0.0,
+        atol=1e-12,
+    ):
+        raise RuntimeError("segmented wrist yaw did not retain its native target")
     live_plate = body_pose(env, PLATE_BODY)[0].copy()
     outward = np.asarray(
         selected_candidate["outward_direction_xy"], dtype=float
@@ -8226,13 +8593,14 @@ def _execute_high_safe_wrist_yaw(
         outside_clearance_m=args.plate_contact_outside_clearance,
         plate_approach_eef_height=args.plate_approach_eef_height,
         position_action_scale=args.position_action_scale,
-        attainment_evidence=attainment,
+        attainment_evidence=final_attainment,
         table_normal_evidence=table_normal_evidence,
     )
     return {
-        "selected_native_push_direction_relation": "tangent_clockwise",
+        "selected_native_push_direction_relation": "trailing_minus_push",
         "selected_outward_direction_xy": outward.tolist(),
         "old_plus_x_route_fallback_permitted": False,
+        "runtime_tangent_fallback_permitted": False,
         "center_high_target": center_high_target.tolist(),
         "anchor_eef_position_world": anchor_eef.tolist(),
         "native_osc_action_spec": native_action_spec,
@@ -8242,25 +8610,29 @@ def _execute_high_safe_wrist_yaw(
         "initial_overhead_guard": initial_overhead_guard,
         "initial_robot_nonrobot_contact_gate": initial_contact_gate,
         "tolerance_derivation": tolerance_derivation,
+        "yaw_segmentation": yaw_segmentation,
+        "yaw_segments": yaw_segments,
         "yaw_frames": frames,
         "yaw_steps": yaw_steps,
         "rotation_with_anchor_compensation_steps": sum(
             frame["stage"] == "rotation_with_anchor_compensation"
             for frame in frames
         ),
-        "position_settle_steps": int(position_settle_steps),
-        "maximum_position_settle_steps": int(args.push_tracking_steps),
+        "position_settle_steps": int(total_position_settle_steps),
+        "maximum_position_settle_steps_per_segment": int(
+            args.push_tracking_steps
+        ),
         "maximum_observed_position_drift_m": float(
             maximum_observed_position_drift
         ),
         "final_position_drift_m": float(
-            attainment["eef_position_drift_m"]
+            final_attainment["eef_position_drift_m"]
         ),
         "maximum_commanded_translation_action_peak": float(
             maximum_commanded_translation_action_peak
         ),
         "simultaneous_yaw_and_position_attainment_required": True,
-        "final_attainment_evidence": attainment,
+        "final_attainment_evidence": final_attainment,
         "real_sim_recompiled_candidate": realized_candidate,
         "remaining_structural_waypoint_steps": int(
             args.max_waypoint_steps - yaw_steps
