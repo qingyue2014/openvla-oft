@@ -94,21 +94,29 @@ to the corridor uses a separate `0.10` lateral cap only after the all-pair
 buffer is recomputed for its `0.008 m` nominal world step. A failed buffer
 routes through the existing compiled positive-Z rebuffer and cannot authorize
 the lateral action until the larger live reserve is observed.
-The preceding far-field pure-Z descent is separately capped at `0.20`, or
-`0.016 m` nominal world displacement. Its positive-Z brake begins when the EEF
-enters a deterministic two-command (`0.032 m`) buffer above the compiled
-staging height and uses the same `0.20` cap until measured vertical progress is
-nonnegative. If braking stops above the staging tolerance, the controller
-returns to bounded descent with both its action cap and two-command brake buffer
-halved (`0.20`, `0.10`, ...), never below the `0.005` near-plate
-bound. This geometric schedule prevents a symmetric descent/brake limit cycle;
-the controller proceeds to zero confirmation only after stopping at the staging
-height. Every action still retains all 55 compiled pair guards and is rechecked
-after execution.
-After every far-field descent action, the controller also recomputes the full
-live lateral corridor-entry evidence: XY error to the unchanged compiled target
-must remain within the existing `position_tolerance` (`0.005 m`), and the live
-outside clearance must remain strictly above the compiled
+The preceding far-field descent is separately capped at `0.20`, or `0.016 m`
+nominal world displacement. Every command jointly holds the registered
+outward corridor XY target while requesting negative Z: the XY error and the
+independent remaining Z error share one scalar action norm under the live
+native OSC bound, the configured `0.20` bound, every one of the 55 compiled
+pair base8/buffer16 capacities, and the latest measured negative-Z inertial
+tail. Reaching zero XY error therefore cannot suppress required descent; any
+subsequent lateral drift is corrected during the same high-authority descent
+step. Its positive-Z brake begins when the EEF enters a deterministic
+two-command (`0.032 m`) buffer above the compiled staging height and uses the
+same `0.20` cap until measured vertical progress is nonnegative. If braking
+stops above the staging tolerance, the controller returns to bounded coupled
+XY/Z descent with both its action cap and two-command brake buffer halved
+(`0.20`, `0.10`, ...), never below the `0.005` near-plate bound. This geometric
+schedule prevents a symmetric descent/brake limit cycle; the controller
+proceeds to zero confirmation only after stopping at the staging height. Every
+action still retains all 55 compiled pair guards and is rechecked after
+execution.
+After every far-field coupled XY/Z descent action, the controller also
+recomputes the full live lateral corridor-entry evidence: XY error to the
+unchanged compiled target must remain within the existing `position_tolerance`
+(`0.005 m`), and the live outside clearance must remain strictly above the
+compiled
 `strict_corridor_entry_clearance_m` (`0.0004 m`). The measured EEF outward step
 progress and outside-clearance step progress are also checked against the existing
 `minimum_saturated_waypoint_progress` (`0.00005 m`) resolution. A response below
@@ -132,10 +140,10 @@ Transition acceptance remains the unchanged full physical
 `corridor_clearance_m`; a residual request error smaller than the existing
 measurement resolution is not promoted into a stricter physical threshold.
 A successful correction above staging
-then resumes the bounded pure-Z descent with the already-halved cap; only a
-correction at the staging height may enter the vertical side corridor. Thus
-controller-coupled drift is corrected while lateral authority remains available
-instead of being accumulated into a low-height correction.
+then resumes the bounded coupled XY/Z descent with the already-halved cap; only
+a correction at the staging height may enter the vertical side corridor. Thus
+controller-coupled drift is corrected continuously while lateral authority
+remains available instead of being accumulated into a low-height correction.
 The complete precontact structural route has a finite default budget of `240`
 actions; native episode termination and horizon-reserve checks remain
 fail-closed and are not bypassed by this route budget.

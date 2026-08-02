@@ -3359,18 +3359,15 @@ def test_500161_adaptive_descent_uses_native_bound_then_tightens_near_base8():
     bounded_seek = CONTROLLER_REFERENCE.read_text().split(
         "def _seek_stable_plate_contact(", 1
     )[1].split("\ndef _calibrate_stable_plate_contact_depth", 1)[0]
-    descent_branch = bounded_seek.split(
-        'if structural_stage == "overhead_corridor_descent":', 1
+    descent_branch = bounded_seek.rsplit(
+        'elif structural_stage == "overhead_corridor_descent":', 1
     )[1].split('elif structural_stage == "vertical_tail_brake":', 1)[0]
-    assert "_compiled_adaptive_vertical_descent_action(" in descent_branch
-    assert (
-        "maximum_translation_action=(\n"
-        "                        active_overhead_descent_translation_action"
-        in descent_branch
-    )
+    assert "prepared_high_lateral_action" in descent_branch
+    assert "prepared_high_lateral_envelope" in descent_branch
+    assert "active_overhead_descent_translation_action" in descent_branch
     assert "event_driven_brake_trigger_buffer_m" in descent_branch
     assert "_fixed_xy_vertical_approach_action(" not in descent_branch
-    assert '"compiled_adaptive_vertical_action_envelope"' in descent_branch
+    assert '"compiled_adaptive_corridor_descent_envelope"' in descent_branch
     assert "native_action_spec = _native_osc_action_spec_evidence(env)" in (
         bounded_seek
     )
@@ -3691,19 +3688,32 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         'structural_stage = "overhead_high_corridor_lateral"'
         in bounded_seek
     )
-    high_transition = bounded_seek.split(
-        'if stage_before_action == "overhead_high_corridor_lateral":', 1
-    )[1].split(
-        'elif stage_before_action == "overhead_corridor_descent":', 1
-    )[0]
     assert 'structural_stage = "overhead_corridor_descent"' in (
-        high_transition
+        bounded_seek
     )
-    descent_action = bounded_seek.split(
-        'if structural_stage == "overhead_corridor_descent":', 1
+    descent_action = bounded_seek.rsplit(
+        'elif structural_stage == "overhead_corridor_descent":', 1
     )[1].split('elif structural_stage == "vertical_tail_brake":', 1)[0]
-    assert "_compiled_adaptive_vertical_descent_action(" in descent_action
+    descent_compilation = bounded_seek.split(
+        'elif stage_before_action == "overhead_corridor_descent":', 1
+    )[1].split(
+        "adaptive_negative_z_action_requires_buffer16", 1
+    )[0]
+    assert (
+        "_compiled_adaptive_workspace_release_action("
+        in descent_compilation
+    )
+    assert "corridor_target_xy=corridor_rebuffer_target[:2]" in (
+        descent_compilation
+    )
+    assert "couple_downward_to_lateral_remaining=False" in (
+        descent_compilation
+    )
+    assert "maximum_translation_action=(" in descent_compilation
     assert "active_overhead_descent_translation_action" in descent_action
+    assert "prepared_high_lateral_action" in descent_action
+    assert "compiled_adaptive_corridor_descent_envelope" in descent_action
+    assert "_compiled_adaptive_vertical_descent_action(" not in descent_action
     assert "_fixed_z_lateral_approach_action(" not in descent_action
     vertical_corridor_action = bounded_seek.split(
         'elif structural_stage == "vertical_corridor_descent":', 1
@@ -3721,7 +3731,7 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         in post_descent_lateral_action
     )
     assert "maximum_post_descent_lateral_world_step" in bounded_seek
-    descent_transition = bounded_seek.split(
+    descent_transition = bounded_seek.rsplit(
         'elif stage_before_action == "overhead_corridor_descent":', 1
     )[1].split('elif stage_before_action == "vertical_tail_brake":', 1)[0]
     assert 'structural_stage = "vertical_tail_brake"' in descent_transition
@@ -3744,7 +3754,7 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         "-float(args.minimum_saturated_waypoint_progress)"
         in descent_transition
     )
-    assert '"eef_inward_step_during_pure_z_descent"' in (
+    assert '"eef_inward_step_during_corridor_holding_descent"' in (
         descent_transition
     )
     assert (
@@ -3809,7 +3819,7 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         in bounded_seek
     )
     assert (
-        '"corridor_xy_adaptive_pure_z_descent_with_position_"'
+        '"corridor_xy_adaptive_coupled_descent_with_position_"'
         in bounded_seek
     )
     assert (
@@ -3843,6 +3853,46 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         'parser.add_argument("--max_waypoint_steps", type=int, default=240)'
         in controller
     )
+
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": [-1.0] * 7,
+        "high": [1.0] * 7,
+        "runtime_resolved": True,
+    }
+    exact_corridor = np.array([corridor_xy[0], corridor_xy[1], 1.03])
+    exact_action, exact_evidence = (
+        _compiled_adaptive_workspace_release_action(
+            current_eef=exact_corridor,
+            corridor_target_xy=corridor_xy,
+            release_target_z=0.94,
+            measured_vertical_step_progress_m=0.0,
+            overhead_guard=overhead_guard,
+            gripper=-1.0,
+            position_action_scale=0.08,
+            native_action_spec=native_spec,
+            expected_pair_count=55,
+            worst_case_controller_world_step_m=0.016,
+            couple_downward_to_lateral_remaining=False,
+            maximum_translation_action=0.20,
+        )
+    )
+    assert np.array_equal(exact_action[:2], np.zeros(2))
+    assert exact_action[2] < 0.0
+    assert np.linalg.norm(exact_action[:3]) < 0.20
+    assert exact_evidence["motion_kind"] == (
+        "corridor_holding_downward_descent"
+    )
+    assert exact_evidence["downward_coupled_to_lateral_remaining"] is False
+    assert exact_evidence["independent_downward_progress_authorized"] is True
+    assert exact_evidence["downward_request_capped_by_xy_remaining"] is False
+    assert exact_evidence["candidate_action_norm_capacities"][
+        "configured_translation_action_norm_bound"
+    ] == np.nextafter(0.20, 0.0)
+    assert exact_evidence["proof"][
+        "corridor_xy_hold_plus_nonpositive_z_zero_rotation"
+    ] is True
 
 
 def test_500193_high_lateral_uses_compiled_dynamic_action_envelope():
@@ -4320,6 +4370,7 @@ def test_500199_routes_reachable_outside_high_before_workspace_release():
     )
     assert evidence["proof"] == {
         "outward_xy_plus_nonpositive_z_zero_rotation": True,
+        "corridor_xy_hold_plus_nonpositive_z_zero_rotation": False,
         "inward_xy_limited_to_prebuffer_one_ulp_bound": False,
         "pure_positive_z_zero_xy_rotation_recovery": False,
         "strictly_inside_native_3d_action_norm_bound": True,
@@ -4779,7 +4830,7 @@ def test_500210_workspace_negative_z_uses_buffer16_without_threshold_changes():
     assert "min(full_downward_z_error, xy_remaining)" in release
     assert "required_clearance_with_fixed_buffer16_m" in release
     assert "negative_z_capacity_exhausted_by_buffer16_or_inertia" in release
-    assert "or workspace_negative_z_action_requires_buffer16" in bounded_seek
+    assert "or adaptive_negative_z_action_requires_buffer16" in bounded_seek
     assert (
         'parser.add_argument("--max_waypoint_steps", type=int, default=240)'
         in controller

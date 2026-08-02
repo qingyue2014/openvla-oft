@@ -2312,14 +2312,15 @@ def _derive_overhead_staging_from_compiled_pairs(
             "nonnegative Z plane-hold actions with zero rotation toward the "
             "reachable outside-high point; then command a constrained outward-"
             "and-downward diagonal to the strict corridor before the remaining "
-            "pure-Z descent. Derive every action norm from the runtime native "
-            "bound and the full live compiled-pair worst-case downward-tail "
+            "corridor-holding XY/Z descent. Derive every action norm from the "
+            "runtime native and configured descent bounds and the full live "
+            "compiled-pair worst-case downward-tail "
             "capacity above strict+base8 after reserving the latest measured "
-            "negative-dz inertia, and recheck base8 afterward; next command pure "
-            "negative Z with zero "
-            "XY/rotation at corridor XY, where each rigid gripper geom lower "
-            "bound decreases monotonically and its minimum vertical clearance "
-            "occurs at the selected endpoint; these are live pre/post world-"
+            "negative-dz inertia, and recheck base8 afterward; jointly command "
+            "the registered corridor XY error and independent negative-Z error "
+            "with zero rotation, conservatively charging the complete 3-D "
+            "translation norm as downward tail against every pair; these are "
+            "live pre/post world-"
             "AABB checks plus the unchanged 8/16 mm action envelopes, not "
             "direct observations of internal controller substeps"
         ),
@@ -6009,10 +6010,21 @@ def _compiled_adaptive_workspace_release_action(
     worst_case_controller_world_step_m,
     outward_direction_xy=None,
     maximum_inward_xy_correction_m=None,
+    couple_downward_to_lateral_remaining=True,
+    maximum_translation_action=None,
 ):
-    """Release toward the corridor under buffer16 and optional ULP return."""
+    """Move along a corridor/downward route under the live buffer16 proof."""
     current_eef = np.asarray(current_eef, dtype=float)
     corridor_target_xy = np.asarray(corridor_target_xy, dtype=float)
+    if not isinstance(
+        couple_downward_to_lateral_remaining, (bool, np.bool_)
+    ):
+        raise ValueError(
+            "workspace-release downward/lateral coupling flag is invalid"
+        )
+    couple_downward_to_lateral_remaining = bool(
+        couple_downward_to_lateral_remaining
+    )
     native_tangent_return_gate_enabled = bool(
         outward_direction_xy is not None
         or maximum_inward_xy_correction_m is not None
@@ -6101,8 +6113,39 @@ def _compiled_adaptive_workspace_release_action(
     strict_native_norm_bound = float(
         np.nextafter(native_norm_bound, 0.0)
     )
+    configured_strict_norm_bound = None
+    if maximum_translation_action is not None:
+        maximum_translation_action = float(maximum_translation_action)
+        if (
+            not np.isfinite(maximum_translation_action)
+            or maximum_translation_action <= 0.0
+            or maximum_translation_action > strict_native_norm_bound
+        ):
+            raise ValueError(
+                "workspace-release translation-action bound must be finite, "
+                "positive, and strictly inside the runtime native 3-D "
+                "translation-action capacity"
+            )
+        configured_strict_norm_bound = float(
+            np.nextafter(maximum_translation_action, 0.0)
+        )
+        if configured_strict_norm_bound <= 0.0:
+            raise RuntimeError(
+                "workspace-release configured action bound has no strict "
+                "interior"
+            )
+    route_strict_norm_bound = float(
+        min(
+            strict_native_norm_bound,
+            (
+                configured_strict_norm_bound
+                if configured_strict_norm_bound is not None
+                else strict_native_norm_bound
+            ),
+        )
+    )
     base_reserve = float(overhead_guard["one_step_vertical_reserve_m"])
-    if strict_native_norm_bound <= 0.0 or base_reserve <= 0.0:
+    if route_strict_norm_bound <= 0.0 or base_reserve <= 0.0:
         raise RuntimeError("workspace-release native/base8 bound is invalid")
 
     xy_error = corridor_target_xy - current_eef[:2]
@@ -6136,9 +6179,14 @@ def _compiled_adaptive_workspace_release_action(
     xy_coupled_downward_world_request = float(
         min(full_downward_z_error, xy_remaining)
     )
+    route_downward_world_request = float(
+        xy_coupled_downward_world_request
+        if couple_downward_to_lateral_remaining
+        else full_downward_z_error
+    )
     downward_world_request = float(
         min(
-            xy_coupled_downward_world_request,
+            route_downward_world_request,
             worst_case_controller_world_step_m,
         )
     )
@@ -6157,7 +6205,7 @@ def _compiled_adaptive_workspace_release_action(
         [
             xy_error[0] / position_action_scale,
             xy_error[1] / position_action_scale,
-            -xy_coupled_downward_world_request / position_action_scale,
+            -route_downward_world_request / position_action_scale,
         ]
     )
     requested_norm = float(np.linalg.norm(requested))
@@ -6330,10 +6378,14 @@ def _compiled_adaptive_workspace_release_action(
             strict_native_norm_bound
         ),
     }
+    if configured_strict_norm_bound is not None:
+        capacities["configured_translation_action_norm_bound"] = (
+            configured_strict_norm_bound
+        )
     selected_source = min(capacities, key=capacities.get)
     selected_norm = float(capacities[selected_source])
     desired_route_norm = float(
-        min(recovery_route_requested_norm, strict_native_norm_bound)
+        min(recovery_route_requested_norm, route_strict_norm_bound)
     )
     if recovery_required:
         desired_route_tail = float(
@@ -6354,7 +6406,11 @@ def _compiled_adaptive_workspace_release_action(
         )
         strict_positive_z_action_bound = float(
             np.nextafter(
-                min(native_high[2], native_norm_bound),
+                min(
+                    native_high[2],
+                    native_norm_bound,
+                    route_strict_norm_bound,
+                ),
                 0.0,
             )
         )
@@ -6414,6 +6470,11 @@ def _compiled_adaptive_workspace_release_action(
             failed_conditions.append("positive_finite_literal_norm")
         if not literal_norm < native_norm_bound:
             failed_conditions.append("strict_native_translation_norm")
+        if (
+            configured_strict_norm_bound is not None
+            and literal_norm > configured_strict_norm_bound
+        ):
+            failed_conditions.append("configured_translation_norm")
         if not (
             translation[2] > 0.0
             if recovery_required
@@ -6595,16 +6656,23 @@ def _compiled_adaptive_workspace_release_action(
             "positive_z_inertial_recovery"
             if recovery_required
             else (
-                "ulp_bounded_inward_downward_workspace_release"
-                if requested_inward_xy_correction > 0.0
-                else "outward_downward_workspace_release"
+                "corridor_holding_downward_descent"
+                if not couple_downward_to_lateral_remaining
+                else (
+                    "ulp_bounded_inward_downward_workspace_release"
+                    if requested_inward_xy_correction > 0.0
+                    else "outward_downward_workspace_release"
+                )
             )
         ),
         "formula": (
             "request corridor XY plus negative Z capped in world magnitude "
-            "by both remaining corridor XY and the existing one-step world "
-            "reserve, then cap only its negative-Z direction component by "
-            "the live minimum all-55-pair pre-action buffer16 surplus after "
+            "by the existing one-step world reserve and, for workspace "
+            "release only, by remaining corridor XY; for corridor-holding "
+            "descent the negative-Z request remains independent of a zero "
+            "lateral error; then cap only its negative-Z direction "
+            "component by the live minimum all-55-pair pre-action buffer16 "
+            "surplus after "
             "the latest measured negative-dz inertial reserve; authorize "
             "negative Z only when every current pair remains strictly above "
             "that fixed buffer16; size and revalidate the literal scalar "
@@ -6642,15 +6710,26 @@ def _compiled_adaptive_workspace_release_action(
         "release_target_z_m": float(release_target_z),
         "xy_remaining_m": xy_remaining,
         "full_release_downward_z_error_m": full_downward_z_error,
+        "downward_coupled_to_lateral_remaining": bool(
+            couple_downward_to_lateral_remaining
+        ),
         "xy_coupled_downward_world_request_before_one_step_cap_m": (
             xy_coupled_downward_world_request
+        ),
+        "route_downward_world_request_before_one_step_cap_m": (
+            route_downward_world_request
         ),
         "downward_world_request_before_live_buffer16_headroom_cap_m": (
             downward_world_request_before_live_buffer_headroom_cap
         ),
         "capped_downward_world_request_m": downward_world_request,
         "downward_request_capped_by_xy_remaining": bool(
-            downward_world_request <= xy_remaining
+            couple_downward_to_lateral_remaining
+            and downward_world_request <= xy_remaining
+        ),
+        "independent_downward_progress_authorized": bool(
+            not couple_downward_to_lateral_remaining
+            and full_downward_z_error > 0.0
         ),
         "downward_request_capped_by_existing_one_step_world_reserve": bool(
             downward_world_request_before_live_buffer_headroom_cap
@@ -6682,6 +6761,9 @@ def _compiled_adaptive_workspace_release_action(
             pre_action_buffer16_limiting_pair
         ),
         "candidate_action_norm_capacities": capacities,
+        "configured_strict_translation_action_norm_bound": (
+            configured_strict_norm_bound
+        ),
         "selected_envelope_source": selected_source,
         "event_driven_positive_z_inertial_recovery": recovery_required,
         "negative_z_action_requires_fixed_buffer16": bool(
@@ -6706,7 +6788,12 @@ def _compiled_adaptive_workspace_release_action(
         "proof": {
             "outward_xy_plus_nonpositive_z_zero_rotation": bool(
                 not recovery_required
+                and couple_downward_to_lateral_remaining
                 and requested_inward_xy_correction == 0.0
+            ),
+            "corridor_xy_hold_plus_nonpositive_z_zero_rotation": bool(
+                not recovery_required
+                and not couple_downward_to_lateral_remaining
             ),
             "inward_xy_limited_to_prebuffer_one_ulp_bound": bool(
                 native_tangent_return_gate_enabled
@@ -12686,7 +12773,7 @@ def _seek_stable_plate_contact(
                     "registered_ulp_bounded_inward_return"
                 ),
                 (
-                    "corridor_xy_adaptive_pure_z_descent_with_position_"
+                    "corridor_xy_adaptive_coupled_descent_with_position_"
                     "tolerance_full_clearance_or_measured_inward_response_"
                     "brake"
                 ),
@@ -12729,8 +12816,13 @@ def _seek_stable_plate_contact(
                 "inertial reserve. If pair capacity is limiting, issue pure "
                 "+Z recovery instead of near-zero XY; remeasure post-action "
                 "base8 and the empty structural robot/native contact allowlist "
-                "on every frame. The unchanged 0.10 bound remains exclusive "
-                "to post-descent correction and contact motion"
+                "on every frame. During the far descent, command the live "
+                "corridor-target XY error together with negative Z under that "
+                "same 55-pair buffer16 and measured-inertia proof, capped by "
+                "the registered 0.20 descent bound; a zero XY error never "
+                "suppresses required Z progress. The unchanged 0.10 bound "
+                "remains exclusive to post-descent correction and contact "
+                "motion"
             ),
             "measurement_scope": (
                 "live pre/post world-AABB and contact observations with the "
@@ -13105,6 +13197,15 @@ def _seek_stable_plate_contact(
                         **pre_action_corridor_entry,
                     }
                 )
+        if structural_stage == "overhead_corridor_descent":
+            latest_overhead_lateral_buffer = (
+                _overhead_lateral_buffer_evidence(
+                    latest_overhead_guard,
+                    worst_case_controller_world_step_m=(
+                        active_overhead_descent_world_step
+                    ),
+                )
+            )
         stage_before_action = structural_stage
         prepared_high_lateral_action = None
         prepared_high_lateral_envelope = None
@@ -13177,8 +13278,35 @@ def _seek_stable_plate_contact(
                     ]
                 ),
             )
-        workspace_negative_z_action_requires_buffer16 = bool(
-            stage_before_action == "workspace_release_diagonal"
+        elif stage_before_action == "overhead_corridor_descent":
+            (
+                prepared_high_lateral_action,
+                prepared_high_lateral_envelope,
+            ) = _compiled_adaptive_workspace_release_action(
+                current_eef=current_eef,
+                corridor_target_xy=corridor_rebuffer_target[:2],
+                release_target_z=overhead_staging_z,
+                measured_vertical_step_progress_m=(
+                    latest_vertical_step_progress_m
+                ),
+                overhead_guard=latest_overhead_guard,
+                gripper=gripper,
+                position_action_scale=args.position_action_scale,
+                native_action_spec=native_action_spec,
+                expected_pair_count=expected_overhead_pair_count,
+                worst_case_controller_world_step_m=(
+                    active_overhead_descent_world_step
+                ),
+                couple_downward_to_lateral_remaining=False,
+                maximum_translation_action=(
+                    active_overhead_descent_translation_action
+                ),
+            )
+        adaptive_negative_z_action_requires_buffer16 = bool(
+            stage_before_action in {
+                "workspace_release_diagonal",
+                "overhead_corridor_descent",
+            }
             and prepared_high_lateral_envelope is not None
             and prepared_high_lateral_envelope.get(
                 "negative_z_action_requires_fixed_buffer16", False
@@ -13197,7 +13325,7 @@ def _seek_stable_plate_contact(
                     expected_pair_count=expected_overhead_pair_count,
                     require_lateral_buffer=(
                         stage_before_action in fixed_buffer_lateral_stages
-                        or workspace_negative_z_action_requires_buffer16
+                        or adaptive_negative_z_action_requires_buffer16
                     ),
                     adaptive_high_lateral_envelope=(
                         prepared_high_lateral_envelope
@@ -13286,24 +13414,20 @@ def _seek_stable_plate_contact(
                 "fixed_xy_vertical_path_control": path_control,
             }
         elif structural_stage == "overhead_corridor_descent":
-            action, path_control = (
-                _compiled_adaptive_vertical_descent_action(
-                    current_eef=current_eef,
-                    target_z=overhead_staging_z,
-                    overhead_guard=latest_overhead_guard,
-                    gripper=gripper,
-                    position_action_scale=args.position_action_scale,
-                    native_action_spec=native_action_spec,
-                    expected_pair_count=expected_overhead_pair_count,
-                    maximum_translation_action=(
-                        active_overhead_descent_translation_action
-                    ),
+            if (
+                prepared_high_lateral_action is None
+                or prepared_high_lateral_envelope is None
+            ):
+                raise RuntimeError(
+                    "corridor-holding descent was not compiled before its "
+                    "live route authorization"
                 )
-            )
+            action = prepared_high_lateral_action
+            path_control = prepared_high_lateral_envelope
             feedback = {
                 "mode": structural_stage,
                 "action": action.tolist(),
-                "compiled_adaptive_vertical_action_envelope": path_control,
+                "compiled_adaptive_corridor_descent_envelope": path_control,
                 "event_driven_brake_trigger_buffer_m": (
                     active_overhead_descent_brake_trigger_buffer
                 ),
@@ -13679,7 +13803,12 @@ def _seek_stable_plate_contact(
                                 in fixed_buffer_lateral_stages
                             )
                         )
-                        else maximum_controller_world_step
+                        else (
+                            active_overhead_descent_world_step
+                            if stage_before_action
+                            == "overhead_corridor_descent"
+                            else maximum_controller_world_step
+                        )
                     ),
                 )
             )
@@ -13975,13 +14104,14 @@ def _seek_stable_plate_contact(
                 "eef_outward_step_progress_m"
             ] < -float(args.minimum_saturated_waypoint_progress):
                 descent_corridor_lateral_violations.add(
-                    "eef_inward_step_during_pure_z_descent"
+                    "eef_inward_step_during_corridor_holding_descent"
                 )
             if current_step_response[
                 "outside_clearance_step_progress_m"
             ] < -float(args.minimum_saturated_waypoint_progress):
                 descent_corridor_lateral_violations.add(
-                    "outside_clearance_decreased_during_pure_z_descent"
+                    "outside_clearance_decreased_during_corridor_holding_"
+                    "descent"
                 )
             if descent_corridor_lateral_violations:
                 vertical_tail_brake_reason = "lateral_drift"
