@@ -53,6 +53,7 @@ from experiments.robot.libero.tasks.l3a4_microwave_common import (
     policy_image,
     resolve_microwave_names,
     segment_aabb_distance,
+    triangle_aabb_distance,
 )
 from experiments.robot.libero.tasks.native_state_replay import (
     materialize_native_scene_state,
@@ -2064,6 +2065,137 @@ def _compiled_geom_evidence(
     return evidence
 
 
+def _convex_mesh_aabb_threshold_distance(
+    vertices, faces, half_size, stop_at_or_below=None
+):
+    """Exact mesh-box distance, stopping on a sufficient face witness."""
+    if stop_at_or_below is None:
+        clearance = convex_mesh_aabb_distance(
+            vertices, faces, half_size
+        )
+        return clearance, {
+            "threshold_m": None,
+            "threshold_witness_seen": False,
+            "terminated_early": False,
+            "face_evaluations": int(len(faces)),
+            "total_faces": int(len(faces)),
+        }
+    vertices = np.asarray(vertices, dtype=float)
+    faces = np.asarray(faces, dtype=int)
+    half = np.asarray(half_size, dtype=float)
+    threshold = float(stop_at_or_below)
+    if (
+        vertices.ndim != 2
+        or vertices.shape[1:] != (3,)
+        or faces.ndim != 2
+        or faces.shape[1:] != (3,)
+        or half.shape != (3,)
+        or len(vertices) < 4
+        or len(faces) < 4
+        or not np.all(np.isfinite(vertices))
+        or not np.all(np.isfinite(half))
+        or np.any(half <= 0.0)
+        or np.any(faces < 0)
+        or np.any(faces >= len(vertices))
+        or not np.isfinite(threshold)
+    ):
+        raise ValueError("invalid finite convex mesh/AABB threshold inputs")
+    if np.any(np.all(np.abs(vertices) <= half, axis=1)):
+        return 0.0, {
+            "threshold_m": threshold,
+            "threshold_witness_seen": 0.0 <= threshold,
+            "terminated_early": True,
+            "face_evaluations": 0,
+            "total_faces": int(len(faces)),
+            "witness_kind": "mesh_vertex_inside_box",
+        }
+
+    minimum = float("inf")
+    face_evaluations = 0
+    for face_index, face in enumerate(faces):
+        distance = triangle_aabb_distance(
+            vertices[face[0]],
+            vertices[face[1]],
+            vertices[face[2]],
+            half,
+        )
+        face_evaluations += 1
+        minimum = min(minimum, distance)
+        if distance <= threshold:
+            return float(distance), {
+                "threshold_m": threshold,
+                "threshold_witness_seen": True,
+                "terminated_early": face_evaluations < len(faces),
+                "face_evaluations": int(face_evaluations),
+                "total_faces": int(len(faces)),
+                "witness_kind": "triangle_aabb_distance",
+                "witness_face_index": int(face_index),
+            }
+
+    box_vertices = np.asarray(
+        [
+            [
+                x_sign * half[0],
+                y_sign * half[1],
+                z_sign * half[2],
+            ]
+            for x_sign in (-1.0, 1.0)
+            for y_sign in (-1.0, 1.0)
+            for z_sign in (-1.0, 1.0)
+        ],
+        dtype=float,
+    )
+    scale = max(
+        1.0,
+        float(np.max(np.abs(vertices))),
+        float(np.max(half)),
+    )
+    tolerance = 64.0 * np.finfo(float).eps * scale
+    for point in box_vertices:
+        inside = True
+        for face in faces:
+            triangle = vertices[face]
+            normal = np.cross(
+                triangle[1] - triangle[0],
+                triangle[2] - triangle[0],
+            )
+            norm = float(np.linalg.norm(normal))
+            if norm <= tolerance:
+                raise ValueError("convex hull contains a degenerate face")
+            signed_vertices = (vertices - triangle[0]) @ normal
+            signed_point = float(
+                np.dot(point - triangle[0], normal)
+            )
+            if float(np.max(signed_vertices)) <= tolerance:
+                if signed_point > tolerance:
+                    inside = False
+                    break
+            elif float(np.min(signed_vertices)) >= -tolerance:
+                if signed_point < -tolerance:
+                    inside = False
+                    break
+            else:
+                raise ValueError(
+                    "mesh faces do not describe a convex hull"
+                )
+        if inside:
+            return 0.0, {
+                "threshold_m": threshold,
+                "threshold_witness_seen": 0.0 <= threshold,
+                "terminated_early": False,
+                "face_evaluations": int(face_evaluations),
+                "total_faces": int(len(faces)),
+                "witness_kind": "box_vertex_inside_convex_mesh",
+            }
+    return float(minimum), {
+        "threshold_m": threshold,
+        "threshold_witness_seen": False,
+        "terminated_early": False,
+        "face_evaluations": int(face_evaluations),
+        "total_faces": int(len(faces)),
+    }
+
+
 def _compiled_geom_pair_clearance(
     env,
     moving_geom,
@@ -2074,6 +2206,7 @@ def _compiled_geom_pair_clearance(
     fixture_center_override=None,
     fixture_rotation_override=None,
     compiled_geometry_cache=None,
+    stop_at_or_below=None,
 ):
     """Conservatively clear a translated geom against native fixture geom."""
     model = env.sim.model
@@ -2112,6 +2245,7 @@ def _compiled_geom_pair_clearance(
             + model.geom_margin[fixture_geom]
         )
     compiled_margin = float(guard_margin) + native_geom_margin
+    mesh_threshold_evidence = None
 
     if moving_type == 6 and fixture_type in (3, 5):
         fixture_size = np.asarray(
@@ -2156,7 +2290,14 @@ def _compiled_geom_pair_clearance(
                 )
                 - float(model.geom_rbound[moving_geom])
             )
-            if sphere_lower_bound > compiled_margin:
+            if (
+                sphere_lower_bound > compiled_margin
+                and (
+                    stop_at_or_below is None
+                    or sphere_lower_bound
+                    > compiled_margin + float(stop_at_or_below)
+                )
+            ):
                 clearance = sphere_lower_bound
                 method = (
                     "certified compiled bounding-sphere-to-box positive "
@@ -2178,10 +2319,19 @@ def _compiled_geom_pair_clearance(
                     fixture_rotation.T
                     @ (world_vertices - fixture_center).T
                 ).T
-                clearance = convex_mesh_aabb_distance(
+                primitive_stop_at_or_below = (
+                    None
+                    if stop_at_or_below is None
+                    else compiled_margin + float(stop_at_or_below)
+                )
+                (
+                    clearance,
+                    mesh_threshold_evidence,
+                ) = _convex_mesh_aabb_threshold_distance(
                     fixture_local_vertices,
                     mesh_faces,
                     fixture_half_size,
+                    primitive_stop_at_or_below,
                 )
                 method = (
                     "exact compiled MuJoCo convex-mesh-to-box distance"
@@ -2231,15 +2381,20 @@ def _compiled_geom_pair_clearance(
                 - float(model.geom_rbound[moving_geom])
             )
             method = "conservative compiled bounding-sphere-to-box distance"
+    components = {
+        "primitive_clearance_m": float(clearance),
+        "native_geom_margin_m": native_geom_margin,
+        "continuous_guard_m": float(guard_margin),
+        "net_clearance_m": float(clearance - compiled_margin),
+    }
+    if mesh_threshold_evidence is not None:
+        components["mesh_threshold_evidence"] = (
+            mesh_threshold_evidence
+        )
     return (
         float(clearance - compiled_margin),
         method,
-        {
-            "primitive_clearance_m": float(clearance),
-            "native_geom_margin_m": native_geom_margin,
-            "continuous_guard_m": float(guard_margin),
-            "net_clearance_m": float(clearance - compiled_margin),
-        },
+        components,
     )
 
 
@@ -3214,9 +3369,12 @@ def _compiled_target_door_sweep_clearance(
 
 
 def _compile_translated_sweep_geometry(
-    env, moving_geoms, fixture_geoms
+    env,
+    moving_geoms,
+    fixture_geoms,
+    compiled_geometry_cache=None,
 ):
-    """Compile static exact OBB terms for repeated translated sweeps."""
+    """Compile static exact OBB and mesh-box translated-sweep terms."""
     model = env.sim.model
     moving_geoms = tuple(int(value) for value in moving_geoms)
     fixture_geoms = tuple(int(value) for value in fixture_geoms)
@@ -3251,12 +3409,64 @@ def _compile_translated_sweep_geometry(
     second_centers = []
     second_rotations = []
     second_half_sizes = []
+    mesh_box_pair_geometry = {}
+    geom_margins = np.asarray(
+        getattr(model, "geom_margin", np.zeros(int(model.ngeom))),
+        dtype=float,
+    )
     for pair_index, (moving_geom, fixture_geom) in enumerate(
         compatible_geom_pairs
     ):
+        moving_type = int(model.geom_type[moving_geom])
+        fixture_type = int(model.geom_type[fixture_geom])
+        if moving_type == 7 and fixture_type == 6:
+            mesh_vertices, mesh_faces, _ = (
+                _cached_compiled_convex_mesh_geometry(
+                    model,
+                    moving_geom,
+                    compiled_geometry_cache,
+                )
+            )
+            moving_rotation = np.asarray(
+                env.sim.data.geom_xmat[moving_geom], dtype=float
+            ).reshape(3, 3)
+            fixture_rotation = np.asarray(
+                env.sim.data.geom_xmat[fixture_geom], dtype=float
+            ).reshape(3, 3)
+            world_vertex_offsets = (
+                moving_rotation @ mesh_vertices.T
+            ).T
+            fixture_local_vertex_offsets = (
+                fixture_rotation.T @ world_vertex_offsets.T
+            ).T
+            mesh_box_pair_geometry[pair_index] = {
+                "moving_geom_id": int(moving_geom),
+                "fixture_geom_id": int(fixture_geom),
+                "moving_center": np.asarray(
+                    env.sim.data.geom_xpos[moving_geom], dtype=float
+                ).copy(),
+                "moving_rbound_m": float(
+                    model.geom_rbound[moving_geom]
+                ),
+                "fixture_center": np.asarray(
+                    env.sim.data.geom_xpos[fixture_geom], dtype=float
+                ).copy(),
+                "fixture_rotation": fixture_rotation.copy(),
+                "fixture_half_size": np.asarray(
+                    model.geom_size[fixture_geom], dtype=float
+                ).copy(),
+                "fixture_local_vertex_offsets": (
+                    fixture_local_vertex_offsets
+                ),
+                "mesh_faces": np.asarray(mesh_faces, dtype=int).copy(),
+                "native_geom_margin_m": float(
+                    geom_margins[moving_geom]
+                    + geom_margins[fixture_geom]
+                ),
+            }
         if (
-            int(model.geom_type[moving_geom]) != 6
-            or int(model.geom_type[fixture_geom]) != 6
+            moving_type != 6
+            or fixture_type != 6
         ):
             continue
         obb_pair_indices.append(pair_index)
@@ -3315,6 +3525,7 @@ def _compile_translated_sweep_geometry(
         "obb_pair_indices": tuple(obb_pair_indices),
         "pair_to_obb_row": pair_to_obb_row,
         "obb_batch": obb_batch,
+        "mesh_box_pair_geometry": mesh_box_pair_geometry,
     }
 
 
@@ -3353,6 +3564,105 @@ def _validate_translated_sweep_geometry(
         )
 
 
+def _compiled_translated_mesh_box_clearance(
+    env,
+    pair_geometry,
+    translation,
+    guard_margin,
+    *,
+    stop_at_or_below=None,
+    compiled_geometry_cache=None,
+):
+    """Reuse exact static mesh-box terms for one rigid translation."""
+    translation = np.asarray(translation, dtype=float)
+    moving_center = pair_geometry["moving_center"] + translation
+    fixture_center = pair_geometry["fixture_center"]
+    fixture_rotation = pair_geometry["fixture_rotation"]
+    fixture_half_size = pair_geometry["fixture_half_size"]
+    native_geom_margin = pair_geometry["native_geom_margin_m"]
+    compiled_margin = float(guard_margin) + native_geom_margin
+    sphere_lower_bound = (
+        _signed_point_box_clearance(
+            moving_center,
+            fixture_center,
+            fixture_rotation,
+            fixture_half_size,
+        )
+        - pair_geometry["moving_rbound_m"]
+    )
+    if (
+        sphere_lower_bound > compiled_margin
+        and (
+            stop_at_or_below is None
+            or sphere_lower_bound
+            > compiled_margin + float(stop_at_or_below)
+        )
+    ):
+        primitive = float(sphere_lower_bound)
+        method = (
+            "certified compiled bounding-sphere-to-box positive lower bound"
+        )
+        mesh_threshold_evidence = None
+    else:
+        fixture_local_center = fixture_rotation.T @ (
+            moving_center - fixture_center
+        )
+        fixture_local_vertices = (
+            pair_geometry["fixture_local_vertex_offsets"]
+            + fixture_local_center
+        )
+        primitive_stop_at_or_below = (
+            None
+            if stop_at_or_below is None
+            else compiled_margin + float(stop_at_or_below)
+        )
+        primitive, mesh_threshold_evidence = (
+            _convex_mesh_aabb_threshold_distance(
+                fixture_local_vertices,
+                pair_geometry["mesh_faces"],
+                fixture_half_size,
+                primitive_stop_at_or_below,
+            )
+        )
+        method = "exact compiled MuJoCo convex-mesh-to-box distance"
+    clearance = float(primitive - compiled_margin)
+    components = {
+        "primitive_clearance_m": float(primitive),
+        "native_geom_margin_m": float(native_geom_margin),
+        "continuous_guard_m": float(guard_margin),
+        "net_clearance_m": clearance,
+        "candidate_invariant_mesh_pair_cache_used": True,
+    }
+    if mesh_threshold_evidence is not None:
+        components["mesh_threshold_evidence"] = (
+            mesh_threshold_evidence
+        )
+    scalar_boundary_refinement = False
+    if _compiled_obb_needs_scalar_threshold_refinement(
+        clearance,
+        stop_at_or_below,
+        primitive,
+        guard_margin,
+        native_geom_margin,
+    ):
+        (
+            clearance,
+            method,
+            components,
+        ) = _compiled_geom_pair_clearance(
+            env,
+            pair_geometry["moving_geom_id"],
+            pair_geometry["fixture_geom_id"],
+            translation,
+            guard_margin,
+            compiled_geometry_cache=compiled_geometry_cache,
+        )
+        components["candidate_invariant_mesh_pair_cache_used"] = True
+        components["scalar_boundary_refinement"] = True
+        scalar_boundary_refinement = True
+    return clearance, method, components, scalar_boundary_refinement
+
+
 def _translated_swept_clearance(
     env,
     moving_geoms,
@@ -3364,6 +3674,7 @@ def _translated_swept_clearance(
     stop_at_or_below=None,
     compiled_geometry_cache=None,
     compiled_sweep_geometry=None,
+    cached_rejection_witness=None,
 ):
     """Bound a straight translation, with threshold-equivalent fail-fast."""
     model = env.sim.model
@@ -3404,15 +3715,137 @@ def _translated_swept_clearance(
             "compiled insertion sweep has no collision-compatible geom pairs"
         )
     total_pair_evaluations = len(fractions) * len(compatible_geom_pairs)
+    mesh_box_pair_geometry = (
+        {}
+        if compiled_sweep_geometry is None
+        else compiled_sweep_geometry["mesh_box_pair_geometry"]
+    )
     minimum = float("inf")
     limiting = None
     compatible_pairs = 0
     threshold_rejection_seen = False
     exact_pair_clearances_computed = 0
     scalar_boundary_refinement_count = 0
+    cached_witness_attempted = False
+    cached_witness_rejected = False
+    cached_witness_clearance = None
+
+    def limiting_record(
+        sample_index,
+        fraction,
+        translated_position,
+        moving_geom,
+        fixture_geom,
+        clearance,
+        method,
+        clearance_components,
+    ):
+        return {
+            "sample_index": int(sample_index),
+            "sample_fraction": float(fraction),
+            "translated_reference_position": (
+                translated_position.tolist()
+            ),
+            "moving_geom_id": int(moving_geom),
+            "moving_geom_name": _geom_name(model, moving_geom),
+            "moving_body_name": str(
+                model.body_id2name(
+                    int(model.geom_bodyid[moving_geom])
+                )
+                or ""
+            ),
+            "fixture_geom_id": int(fixture_geom),
+            "fixture_geom_name": _geom_name(model, fixture_geom),
+            "fixture_body_name": str(
+                model.body_id2name(
+                    int(model.geom_bodyid[fixture_geom])
+                )
+                or ""
+            ),
+            "clearance_m": float(clearance),
+            "method": method,
+            "clearance_components": clearance_components,
+        }
+
+    if (
+        stop_at_or_below is not None
+        and isinstance(cached_rejection_witness, dict)
+        and int(
+            cached_rejection_witness.get("sample_intervals", -1)
+        )
+        == intervals
+    ):
+        cached_pair = (
+            int(cached_rejection_witness.get("moving_geom_id", -1)),
+            int(cached_rejection_witness.get("fixture_geom_id", -1)),
+        )
+        cached_sample_index = int(
+            cached_rejection_witness.get("sample_index", -1)
+        )
+        if (
+            cached_pair in compatible_geom_pairs
+            and 0 <= cached_sample_index < len(fractions)
+        ):
+            cached_witness_attempted = True
+            fraction = fractions[cached_sample_index]
+            translated_position = (
+                start + (end - start) * float(fraction)
+            )
+            translation = translated_position - reference
+            cached_pair_index = compatible_geom_pairs.index(cached_pair)
+            if cached_pair_index in mesh_box_pair_geometry:
+                (
+                    clearance,
+                    method,
+                    clearance_components,
+                    scalar_refined,
+                ) = _compiled_translated_mesh_box_clearance(
+                    env,
+                    mesh_box_pair_geometry[cached_pair_index],
+                    translation,
+                    sweep_guard,
+                    stop_at_or_below=stop_at_or_below,
+                    compiled_geometry_cache=compiled_geometry_cache,
+                )
+                scalar_boundary_refinement_count += int(
+                    scalar_refined
+                )
+            else:
+                (
+                    clearance,
+                    method,
+                    clearance_components,
+                ) = _compiled_geom_pair_clearance(
+                    env,
+                    cached_pair[0],
+                    cached_pair[1],
+                    translation,
+                    sweep_guard,
+                    compiled_geometry_cache=compiled_geometry_cache,
+                    stop_at_or_below=stop_at_or_below,
+                )
+            exact_pair_clearances_computed += 1
+            cached_witness_clearance = float(clearance)
+            if clearance <= float(stop_at_or_below):
+                cached_witness_rejected = True
+                threshold_rejection_seen = True
+                compatible_pairs = 1
+                minimum = float(clearance)
+                limiting = limiting_record(
+                    cached_sample_index,
+                    fraction,
+                    translated_position,
+                    cached_pair[0],
+                    cached_pair[1],
+                    clearance,
+                    method,
+                    clearance_components,
+                )
     batched_obb_clearances = None
     pair_to_obb_row = {}
     if (
+        not threshold_rejection_seen
+        and
         compiled_sweep_geometry is not None
         and compiled_sweep_geometry["obb_pair_indices"]
     ):
@@ -3437,7 +3870,10 @@ def _translated_swept_clearance(
             getattr(model, "geom_margin", np.zeros(int(model.ngeom))),
             dtype=float,
         )
-    for sample_index, fraction in enumerate(fractions):
+    fractions_to_evaluate = (
+        () if threshold_rejection_seen else fractions
+    )
+    for sample_index, fraction in enumerate(fractions_to_evaluate):
         translated_position = (
             start + (end - start) * float(fraction)
         )
@@ -3447,7 +3883,25 @@ def _translated_swept_clearance(
         ):
             compatible_pairs += 1
             obb_row = pair_to_obb_row.get(pair_index)
-            if obb_row is None:
+            if pair_index in mesh_box_pair_geometry:
+                (
+                    clearance,
+                    method,
+                    clearance_components,
+                    scalar_refined,
+                ) = _compiled_translated_mesh_box_clearance(
+                    env,
+                    mesh_box_pair_geometry[pair_index],
+                    translation,
+                    sweep_guard,
+                    stop_at_or_below=stop_at_or_below,
+                    compiled_geometry_cache=compiled_geometry_cache,
+                )
+                scalar_boundary_refinement_count += int(
+                    scalar_refined
+                )
+                exact_pair_clearances_computed += 1
+            elif obb_row is None:
                 (
                     clearance,
                     method,
@@ -3459,6 +3913,7 @@ def _translated_swept_clearance(
                     translation,
                     sweep_guard,
                     compiled_geometry_cache=compiled_geometry_cache,
+                    stop_at_or_below=stop_at_or_below,
                 )
                 exact_pair_clearances_computed += 1
             else:
@@ -3504,32 +3959,16 @@ def _translated_swept_clearance(
                     scalar_boundary_refinement_count += 1
             if clearance < minimum:
                 minimum = clearance
-                limiting = {
-                    "sample_index": int(sample_index),
-                    "sample_fraction": float(fraction),
-                    "translated_reference_position": (
-                        translated_position.tolist()
-                    ),
-                    "moving_geom_id": int(moving_geom),
-                    "moving_geom_name": _geom_name(model, moving_geom),
-                    "moving_body_name": str(
-                        model.body_id2name(
-                            int(model.geom_bodyid[moving_geom])
-                        )
-                        or ""
-                    ),
-                    "fixture_geom_id": int(fixture_geom),
-                    "fixture_geom_name": _geom_name(model, fixture_geom),
-                    "fixture_body_name": str(
-                        model.body_id2name(
-                            int(model.geom_bodyid[fixture_geom])
-                        )
-                        or ""
-                    ),
-                    "clearance_m": float(clearance),
-                    "method": method,
-                    "clearance_components": clearance_components,
-                }
+                limiting = limiting_record(
+                    sample_index,
+                    fraction,
+                    translated_position,
+                    moving_geom,
+                    fixture_geom,
+                    clearance,
+                    method,
+                    clearance_components,
+                )
             if (
                 stop_at_or_below is not None
                 and minimum <= float(stop_at_or_below)
@@ -3579,6 +4018,19 @@ def _translated_swept_clearance(
         ),
         "vectorized_exact_obb_pair_count_per_sample": len(
             pair_to_obb_row
+        ),
+        "candidate_invariant_mesh_box_pair_count": len(
+            mesh_box_pair_geometry
+        ),
+        "cached_rejection_witness_attempted": (
+            cached_witness_attempted
+        ),
+        "cached_rejection_witness_rejected": cached_witness_rejected,
+        "cached_rejection_witness_clearance_m": (
+            cached_witness_clearance
+        ),
+        "cached_rejection_witness_fell_back_to_full_sweep": bool(
+            cached_witness_attempted and not cached_witness_rejected
         ),
         "minimum_clearance_m": minimum,
         "threshold_fail_fast_m": (
@@ -4517,6 +4969,7 @@ def _compact_insertion_sweep_evidence(sweep) -> dict:
         "candidate_invariant_door_pose_count",
         "vectorized_exact_obb_pair_count",
         "vectorized_exact_obb_pair_count_per_sample",
+        "candidate_invariant_mesh_box_pair_count",
         "minimum_clearance_m",
         "threshold_fail_fast_m",
         "terminated_early",
@@ -4698,21 +5151,27 @@ def _compiled_target_insertion_plan(
     compiled_door_sweep = _compile_target_door_sweep_geometry(
         env, names, target_geoms
     )
-    compiled_target_sweep_geometry = (
-        _compile_translated_sweep_geometry(
-            env, target_geoms, target_fixture_geoms
-        )
-    )
-    compiled_gripper_sweep_geometry = (
-        _compile_translated_sweep_geometry(
-            env, collision_gripper_geoms, collision_fixture_geoms
-        )
-    )
     compiled_geometry_cache = {
         "convex_mesh": {},
         "hits": 0,
         "misses": 0,
     }
+    compiled_target_sweep_geometry = (
+        _compile_translated_sweep_geometry(
+            env,
+            target_geoms,
+            target_fixture_geoms,
+            compiled_geometry_cache,
+        )
+    )
+    compiled_gripper_sweep_geometry = (
+        _compile_translated_sweep_geometry(
+            env,
+            collision_gripper_geoms,
+            collision_fixture_geoms,
+            compiled_geometry_cache,
+        )
+    )
 
     front_search_values = np.arange(
         np.nextafter(front_extent, 0.0),
@@ -4725,6 +5184,8 @@ def _compiled_target_insertion_plan(
     representative_full_sweeps = {}
     best_gate_values = {}
     door_rejection_witness = None
+    target_static_rejection_witness = None
+    gripper_rejection_witness = None
     lateral_rank_by_value = {
         value: index
         for index, value in enumerate(lateral_search_values)
@@ -4874,11 +5335,33 @@ def _compiled_target_insertion_plan(
                         compiled_sweep_geometry=(
                             compiled_target_sweep_geometry
                         ),
+                        cached_rejection_witness=(
+                            target_static_rejection_witness
+                        ),
                     )
                 )
                 if target_clearance <= 0.0:
+                    limiting_target_pair = target_sweep[
+                        "limiting_pair"
+                    ]
+                    target_static_rejection_witness = {
+                        "sample_intervals": target_sweep[
+                            "sample_intervals"
+                        ],
+                        "sample_index": limiting_target_pair[
+                            "sample_index"
+                        ],
+                        "moving_geom_id": limiting_target_pair[
+                            "moving_geom_id"
+                        ],
+                        "fixture_geom_id": limiting_target_pair[
+                            "fixture_geom_id"
+                        ],
+                    }
                     rejection_stage = "target_static_sweep"
                     skipped_gates = ["gripper_sweep"]
+                else:
+                    target_static_rejection_witness = None
             if rejection_stage is None:
                 gripper_clearance, gripper_sweep = (
                     _translated_swept_clearance(
@@ -4895,10 +5378,32 @@ def _compiled_target_insertion_plan(
                         compiled_sweep_geometry=(
                             compiled_gripper_sweep_geometry
                         ),
+                        cached_rejection_witness=(
+                            gripper_rejection_witness
+                        ),
                     )
                 )
                 if gripper_clearance <= 0.0:
+                    limiting_gripper_pair = gripper_sweep[
+                        "limiting_pair"
+                    ]
+                    gripper_rejection_witness = {
+                        "sample_intervals": gripper_sweep[
+                            "sample_intervals"
+                        ],
+                        "sample_index": limiting_gripper_pair[
+                            "sample_index"
+                        ],
+                        "moving_geom_id": limiting_gripper_pair[
+                            "moving_geom_id"
+                        ],
+                        "fixture_geom_id": limiting_gripper_pair[
+                            "fixture_geom_id"
+                        ],
+                    }
                     rejection_stage = "gripper_sweep"
+                else:
+                    gripper_rejection_witness = None
             passed = bool(
                 rejection_stage is None
                 and native_inside
@@ -5129,6 +5634,16 @@ def _compiled_target_insertion_plan(
             ),
             "gripper_vectorized_exact_obb_pair_count": len(
                 compiled_gripper_sweep_geometry["obb_pair_indices"]
+            ),
+            "target_static_cached_mesh_box_pair_count": len(
+                compiled_target_sweep_geometry[
+                    "mesh_box_pair_geometry"
+                ]
+            ),
+            "gripper_cached_mesh_box_pair_count": len(
+                compiled_gripper_sweep_geometry[
+                    "mesh_box_pair_geometry"
+                ]
             ),
             "convex_mesh_entry_count": len(
                 compiled_geometry_cache["convex_mesh"]

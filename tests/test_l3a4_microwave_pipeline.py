@@ -265,6 +265,93 @@ def test_l3a4_exact_convex_mesh_box_distance_primitives():
     ) == pytest.approx(0.0)
 
 
+def test_l3a4_mesh_box_threshold_witness_is_exact_and_pass_is_full():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    function = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_convex_mesh_aabb_threshold_distance"
+    )
+    namespace = {
+        "np": np,
+        "convex_mesh_aabb_distance": convex_mesh_aabb_distance,
+        "triangle_aabb_distance": triangle_aabb_distance,
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=[function], type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    threshold_distance = namespace[
+        "_convex_mesh_aabb_threshold_distance"
+    ]
+    half = np.asarray([0.5, 0.5, 0.5])
+    cube = np.asarray(
+        [
+            [-0.5, -0.5, -0.5],
+            [0.5, -0.5, -0.5],
+            [0.5, 0.5, -0.5],
+            [-0.5, 0.5, -0.5],
+            [-0.5, -0.5, 0.5],
+            [0.5, -0.5, 0.5],
+            [0.5, 0.5, 0.5],
+            [-0.5, 0.5, 0.5],
+        ]
+    )
+    faces = np.asarray(
+        [
+            [0, 2, 1],
+            [0, 3, 2],
+            [4, 5, 6],
+            [4, 6, 7],
+            [0, 1, 5],
+            [0, 5, 4],
+            [1, 2, 6],
+            [1, 6, 5],
+            [2, 3, 7],
+            [2, 7, 6],
+            [3, 0, 4],
+            [3, 4, 7],
+        ]
+    )
+    separated = cube + np.asarray([2.0, 0.0, 0.0])
+    baseline = convex_mesh_aabb_distance(separated, faces, half)
+    unbounded, unbounded_evidence = threshold_distance(
+        separated, faces, half
+    )
+    assert unbounded == pytest.approx(baseline)
+    assert unbounded_evidence["face_evaluations"] == len(faces)
+
+    passing, passing_evidence = threshold_distance(
+        separated, faces, half, np.nextafter(baseline, -np.inf)
+    )
+    assert passing == pytest.approx(baseline)
+    assert passing_evidence["threshold_witness_seen"] is False
+    assert passing_evidence["face_evaluations"] == len(faces)
+    assert passing_evidence["terminated_early"] is False
+
+    boundary, boundary_evidence = threshold_distance(
+        separated, faces, half, baseline
+    )
+    assert boundary == pytest.approx(baseline)
+    assert boundary_evidence["threshold_witness_seen"] is True
+    assert boundary_evidence["witness_kind"] == "triangle_aabb_distance"
+    assert boundary_evidence["face_evaluations"] < len(faces)
+
+    overlapping, overlapping_evidence = threshold_distance(
+        cube + np.asarray([0.75, 0.0, 0.0]), faces, half, 0.0
+    )
+    assert overlapping == pytest.approx(0.0)
+    assert overlapping_evidence["threshold_witness_seen"] is True
+
+
 def test_l3a4_decodes_compiled_mujoco_convex_mesh_graph():
     source = ROBOT_SAFE_PREFIX.read_text()
     module = ast.parse(source)
@@ -451,17 +538,19 @@ def test_l3a4_translated_sweep_fail_fast_preserves_threshold_decision():
         guard_margin,
         *,
         compiled_geometry_cache=None,
+        stop_at_or_below=None,
     ):
-        sample_index = len(calls)
+        translated_x = float(np.asarray(translation)[0])
         clearance = (
             0.020
-            if force_pass[0] or sample_index == 0
-            else -0.001 * sample_index
+            if force_pass[0] or translated_x <= 0.0
+            else -translated_x
         )
         calls.append(
             {
                 "translation": np.asarray(translation).tolist(),
                 "cache_id": id(compiled_geometry_cache),
+                "threshold": stop_at_or_below,
             }
         )
         return clearance, "stub exact pair", {"net_clearance_m": clearance}
@@ -524,6 +613,31 @@ def test_l3a4_translated_sweep_fail_fast_preserves_threshold_decision():
     assert evidence["full_sweep_evaluated"] is False
     assert evidence["threshold_fail_fast_m"] == pytest.approx(0.0)
     assert {call["cache_id"] for call in calls} == {id(cache)}
+    witness = {
+        "sample_intervals": evidence["sample_intervals"],
+        "sample_index": evidence["limiting_pair"]["sample_index"],
+        "moving_geom_id": evidence["limiting_pair"]["moving_geom_id"],
+        "fixture_geom_id": evidence["limiting_pair"]["fixture_geom_id"],
+    }
+
+    calls.clear()
+    cached_minimum, cached_evidence = sweep(
+        Env(),
+        [0],
+        [1],
+        np.zeros(3),
+        np.asarray([0.004, 0.0, 0.0]),
+        np.zeros(3),
+        stop_at_or_below=0.0,
+        compiled_geometry_cache=cache,
+        cached_rejection_witness=witness,
+    )
+    assert cached_minimum == pytest.approx(-0.001)
+    assert len(calls) == 1
+    assert calls[0]["translation"] == pytest.approx([0.001, 0.0, 0.0])
+    assert cached_evidence["cached_rejection_witness_attempted"] is True
+    assert cached_evidence["cached_rejection_witness_rejected"] is True
+    assert cached_evidence["full_sweep_evaluated"] is False
 
     calls.clear()
     force_pass[0] = True
@@ -536,11 +650,15 @@ def test_l3a4_translated_sweep_fail_fast_preserves_threshold_decision():
         np.zeros(3),
         stop_at_or_below=0.0,
         compiled_geometry_cache=cache,
+        cached_rejection_witness=witness,
     )
     assert passing_minimum == pytest.approx(0.020)
-    assert len(calls) == 5
+    assert len(calls) == 6
     assert passing_evidence["terminated_early"] is False
     assert passing_evidence["full_sweep_evaluated"] is True
+    assert passing_evidence[
+        "cached_rejection_witness_fell_back_to_full_sweep"
+    ] is True
 
     calls.clear()
     force_pass[0] = False
@@ -704,6 +822,7 @@ def test_l3a4_compiled_translated_sweep_is_exact_and_fails_stale():
         guard_margin,
         *,
         compiled_geometry_cache=None,
+        stop_at_or_below=None,
     ):
         scalar_calls.append((moving_geom, fixture_geom))
         primitive = oriented_box_separating_clearance(
@@ -840,6 +959,241 @@ def test_l3a4_compiled_convex_mesh_cache_reuses_exact_decoding():
     assert decode_calls == [(id(model), 7)]
     assert cache["misses"] == 1
     assert cache["hits"] == 1
+
+
+def test_l3a4_compiles_static_mesh_box_pairs_once_and_fails_stale():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    selected_names = {
+        "_cached_compiled_convex_mesh_geometry",
+        "_compile_translated_sweep_geometry",
+        "_validate_translated_sweep_geometry",
+    }
+    selected = [
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name in selected_names
+    ]
+    cube = np.asarray(
+        [
+            [-0.5, -0.5, -0.5],
+            [0.5, -0.5, -0.5],
+            [0.5, 0.5, -0.5],
+            [-0.5, 0.5, -0.5],
+            [-0.5, -0.5, 0.5],
+            [0.5, -0.5, 0.5],
+            [0.5, 0.5, 0.5],
+            [-0.5, 0.5, 0.5],
+        ]
+    )
+    faces = np.asarray(
+        [
+            [0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7],
+            [0, 1, 5], [0, 5, 4], [1, 2, 6], [1, 6, 5],
+            [2, 3, 7], [2, 7, 6], [3, 0, 4], [3, 4, 7],
+        ]
+    )
+    decode_calls = []
+
+    def decode(model, geom_id):
+        decode_calls.append((id(model), int(geom_id)))
+        return cube, faces, {"geom_id": int(geom_id)}
+
+    namespace = {
+        "np": np,
+        "collision_masks_compatible": lambda *args: True,
+        "_compiled_convex_mesh_geometry": decode,
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=selected, type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+
+    class Model:
+        ngeom = 2
+        geom_contype = np.ones(2, dtype=int)
+        geom_conaffinity = np.ones(2, dtype=int)
+        geom_type = np.asarray([7, 6], dtype=int)
+        geom_size = np.asarray([[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]])
+        geom_rbound = np.asarray([0.9, 0.9])
+        geom_margin = np.zeros(2)
+
+    class Data:
+        geom_xpos = np.asarray([[2.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
+        geom_xmat = np.tile(np.eye(3).reshape(1, 9), (2, 1))
+
+    env = type(
+        "Env",
+        (),
+        {"sim": type("Sim", (), {"model": Model(), "data": Data()})()},
+    )()
+    cache = {"convex_mesh": {}, "hits": 0, "misses": 0}
+    compile_geometry = namespace["_compile_translated_sweep_geometry"]
+    validate_geometry = namespace["_validate_translated_sweep_geometry"]
+    compiled = compile_geometry(env, [0], [1], cache)
+    compiled_again = compile_geometry(env, [0], [1], cache)
+    assert decode_calls == [(id(env.sim.model), 0)]
+    assert cache["misses"] == 1
+    assert cache["hits"] == 1
+    assert tuple(compiled["mesh_box_pair_geometry"]) == (0,)
+    assert compiled_again["mesh_box_pair_geometry"][0][
+        "fixture_local_vertex_offsets"
+    ] == pytest.approx(cube)
+    validate_geometry(env, [0], [1], compiled)
+    env.sim.data.geom_xmat[1, 0] = np.nextafter(1.0, 2.0)
+    with pytest.raises(RuntimeError, match="changed after compilation"):
+        validate_geometry(env, [0], [1], compiled)
+
+
+def test_l3a4_compiled_mesh_box_threshold_cache_matches_and_refines_boundary():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    selected_names = {
+        "_signed_point_box_clearance",
+        "_convex_mesh_aabb_threshold_distance",
+        "_compiled_obb_needs_scalar_threshold_refinement",
+        "_compiled_translated_mesh_box_clearance",
+    }
+    selected = [
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name in selected_names
+    ]
+    cube = np.asarray(
+        [
+            [-0.5, -0.5, -0.5],
+            [0.5, -0.5, -0.5],
+            [0.5, 0.5, -0.5],
+            [-0.5, 0.5, -0.5],
+            [-0.5, -0.5, 0.5],
+            [0.5, -0.5, 0.5],
+            [0.5, 0.5, 0.5],
+            [-0.5, 0.5, 0.5],
+        ]
+    )
+    faces = np.asarray(
+        [
+            [0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7],
+            [0, 1, 5], [0, 5, 4], [1, 2, 6], [1, 6, 5],
+            [2, 3, 7], [2, 7, 6], [3, 0, 4], [3, 4, 7],
+        ]
+    )
+    scalar_calls = []
+
+    class Data:
+        geom_xpos = np.asarray([[2.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
+
+    env = type(
+        "Env", (), {"sim": type("Sim", (), {"data": Data()})()}
+    )()
+
+    def scalar_pair(
+        env,
+        moving_geom,
+        fixture_geom,
+        translation,
+        guard_margin,
+        **kwargs,
+    ):
+        scalar_calls.append((int(moving_geom), int(fixture_geom)))
+        primitive = convex_mesh_aabb_distance(
+            cube + env.sim.data.geom_xpos[0] + translation,
+            faces,
+            np.asarray([0.5, 0.5, 0.5]),
+        )
+        clearance = primitive - guard_margin
+        return clearance, "scalar exact mesh-box", {
+            "primitive_clearance_m": primitive,
+            "native_geom_margin_m": 0.0,
+            "continuous_guard_m": guard_margin,
+            "net_clearance_m": clearance,
+        }
+
+    namespace = {
+        "np": np,
+        "convex_mesh_aabb_distance": convex_mesh_aabb_distance,
+        "triangle_aabb_distance": triangle_aabb_distance,
+        "_compiled_geom_pair_clearance": scalar_pair,
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=selected, type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    cached_clearance = namespace[
+        "_compiled_translated_mesh_box_clearance"
+    ]
+
+    def pair_geometry(center):
+        env.sim.data.geom_xpos[0] = center
+        return {
+            "moving_geom_id": 0,
+            "fixture_geom_id": 1,
+            "moving_center": np.asarray(center, dtype=float),
+            "moving_rbound_m": 3.0,
+            "fixture_center": np.zeros(3),
+            "fixture_rotation": np.eye(3),
+            "fixture_half_size": np.full(3, 0.5),
+            "fixture_local_vertex_offsets": cube.copy(),
+            "mesh_faces": faces.copy(),
+            "native_geom_margin_m": 0.0,
+        }
+
+    passing, _, passing_components, scalar_refined = cached_clearance(
+        env,
+        pair_geometry([2.0, 0.0, 0.0]),
+        np.zeros(3),
+        0.0,
+        stop_at_or_below=0.0,
+    )
+    assert passing == pytest.approx(1.0)
+    assert scalar_refined is False
+    assert scalar_calls == []
+    assert passing_components["mesh_threshold_evidence"][
+        "face_evaluations"
+    ] == len(faces)
+
+    rejected, _, rejected_components, scalar_refined = cached_clearance(
+        env,
+        pair_geometry([1.002, 0.0, 0.0]),
+        np.zeros(3),
+        0.005,
+        stop_at_or_below=0.0,
+    )
+    assert rejected == pytest.approx(-0.003)
+    assert scalar_refined is False
+    assert scalar_calls == []
+    assert rejected_components["mesh_threshold_evidence"][
+        "threshold_witness_seen"
+    ] is True
+    assert rejected_components["mesh_threshold_evidence"][
+        "face_evaluations"
+    ] < len(faces)
+
+    boundary, _, boundary_components, scalar_refined = cached_clearance(
+        env,
+        pair_geometry([1.0, 0.0, 0.0]),
+        np.zeros(3),
+        0.0,
+        stop_at_or_below=0.0,
+    )
+    assert boundary == pytest.approx(0.0)
+    assert scalar_refined is True
+    assert scalar_calls == [(0, 1)]
+    assert boundary_components["scalar_boundary_refinement"]
 
 
 def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose():
@@ -2918,7 +3272,7 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     )
     assert '"lower bound"' in geom_clearance
     assert "_compiled_convex_mesh_geometry(" in geom_clearance
-    assert "convex_mesh_aabb_distance(" in geom_clearance
+    assert "_convex_mesh_aabb_threshold_distance(" in geom_clearance
     assert "exact compiled MuJoCo convex-mesh-to-box distance" in (
         geom_clearance
     )
@@ -2927,6 +3281,17 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert '"primitive_clearance_m"' in geom_clearance
     assert '"native_geom_margin_m"' in geom_clearance
     assert '"continuous_guard_m"' in geom_clearance
+
+    mesh_threshold_distance = ast.get_source_segment(
+        source, functions["_convex_mesh_aabb_threshold_distance"]
+    )
+    assert "convex_mesh_aabb_distance(" in mesh_threshold_distance
+    assert "triangle_aabb_distance(" in mesh_threshold_distance
+    assert '"witness_kind": "triangle_aabb_distance"' in (
+        mesh_threshold_distance
+    )
+    assert "signed_vertices" in mesh_threshold_distance
+    assert "box_vertex_inside_convex_mesh" in mesh_threshold_distance
 
     convex_mesh = ast.get_source_segment(
         source, functions["_compiled_convex_mesh_geometry"]
@@ -3023,6 +3388,33 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert '"vectorized_exact_obb_pair_count_per_sample"' in (
         swept_clearance
     )
+    assert "cached_rejection_witness" in swept_clearance
+    assert "cached_pair in compatible_geom_pairs" in swept_clearance
+    assert "_compiled_translated_mesh_box_clearance(" in swept_clearance
+    assert '"cached_rejection_witness_attempted"' in swept_clearance
+    assert '"candidate_invariant_mesh_box_pair_count"' in (
+        swept_clearance
+    )
+
+    compile_translated = ast.get_source_segment(
+        source, functions["_compile_translated_sweep_geometry"]
+    )
+    assert "_cached_compiled_convex_mesh_geometry(" in compile_translated
+    assert '"mesh_box_pair_geometry"' in compile_translated
+    assert '"fixture_local_vertex_offsets"' in compile_translated
+    assert '"native_geom_margin_m"' in compile_translated
+
+    compiled_mesh_box = ast.get_source_segment(
+        source, functions["_compiled_translated_mesh_box_clearance"]
+    )
+    assert "_convex_mesh_aabb_threshold_distance(" in compiled_mesh_box
+    assert "_compiled_obb_needs_scalar_threshold_refinement(" in (
+        compiled_mesh_box
+    )
+    assert "_compiled_geom_pair_clearance(" in compiled_mesh_box
+    assert '"candidate_invariant_mesh_pair_cache_used"' in (
+        compiled_mesh_box
+    )
 
     safe_portal = ast.get_source_segment(
         source, functions["_compiled_safe_insertion_portal"]
@@ -3055,6 +3447,7 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert insertion_plan.count(
         "_compile_translated_sweep_geometry("
     ) == 2
+    assert insertion_plan.count("compiled_geometry_cache") >= 10
     assert "compiled_door_sweep=compiled_door_sweep" in insertion_plan
     assert insertion_plan.count("compiled_sweep_geometry=(") == 2
     assert '"exact_acceleration"' in insertion_plan
@@ -3082,6 +3475,10 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "representative_full_sweeps" in insertion_plan
     assert "record.update(full_sweeps)" in insertion_plan
     assert insertion_plan.count("stop_at_or_below=0.0") >= 3
+    assert "target_static_rejection_witness" in insertion_plan
+    assert "gripper_rejection_witness" in insertion_plan
+    assert '"target_static_cached_mesh_box_pair_count"' in insertion_plan
+    assert '"gripper_cached_mesh_box_pair_count"' in insertion_plan
     assert "[L3-A4 insertion candidate progress]" in insertion_plan
     insertion_candidate_loop = insertion_plan.split(
         "for front_index, front_distance", 1
