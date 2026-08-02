@@ -3809,6 +3809,13 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
     assert "correction_requires_pre_descent_controller_reserve" in (
         correction_transition
     )
+    assert "post_descent_vertical_tail_handoff_accepted" in (
+        correction_transition
+    )
+    assert (
+        ">= -float(args.minimum_saturated_waypoint_progress)"
+        in correction_transition
+    )
     assert 'structural_stage = "overhead_corridor_descent"' in (
         correction_transition
     )
@@ -4218,6 +4225,11 @@ def test_500193_high_lateral_uses_compiled_dynamic_action_envelope():
     )
     assert (
         "not correction_requires_pre_descent_controller_reserve"
+        in bounded_seek
+    )
+    assert '"post_descent_vertical_tail_handoff_gate"' in bounded_seek
+    assert (
+        '"existing minimum_saturated_waypoint_progress"'
         in bounded_seek
     )
     assert "0.5 * maximum_post_descent_lateral_world_step" in bounded_seek
