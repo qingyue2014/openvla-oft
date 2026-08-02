@@ -12898,7 +12898,7 @@ def _seek_stable_plate_contact(
         * post_descent_lateral_max_translation_action
     )
     tail_recovery_descent_translation_action_floor = float(
-        0.5 * post_descent_lateral_max_translation_action
+        post_descent_lateral_max_translation_action
     )
     if not (
         structural_max_translation_action
@@ -12952,7 +12952,7 @@ def _seek_stable_plate_contact(
                 tail_recovery_descent_translation_action_floor
             ),
             "tail_recovery_descent_floor_derivation": (
-                "one half of the existing post-descent lateral action bound"
+                "the existing post-descent lateral action bound"
             ),
         }
     )
@@ -15277,8 +15277,7 @@ def _seek_stable_plate_contact(
                             tail_recovery_descent_translation_action_floor
                         ),
                         "tail_recovery_descent_floor_source": (
-                            "one half of the existing post-descent lateral "
-                            "action bound"
+                            "the existing post-descent lateral action bound"
                         ),
                         "minimum_lateral_entry_buffer_surplus_m": (
                             latest_overhead_lateral_buffer[

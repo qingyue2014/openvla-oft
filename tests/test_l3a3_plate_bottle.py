@@ -3126,19 +3126,19 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert job503168_formal_entry["violations"] == []
     assert -0.00023933083913896258 < 0.0
 
-    # Job503176 then showed why the bounded descent must not keep halving to
-    # the 0.005 structural floor: its exact 0.05 descent/tail window made
-    # 2.554 mm net downward progress, while the later 0.005 limit cycle made
-    # only 0.901 mm over 66 actions.  Keep the existing 0.10 post-descent bound
-    # and derive the descent floor from half of it; no action limit is raised.
-    tail_recovery_descent_floor = 0.5 * 0.10
-    assert tail_recovery_descent_floor == pytest.approx(0.05)
-    assert 0.005 < tail_recovery_descent_floor < 0.10
-    assert 0.9445294804725799 - 0.9470836934130403 == pytest.approx(
-        -0.002554212940460432
+    # Job503182 then showed that the 0.05 half-bound still settled into a
+    # one-descent/three-brake cycle: only 0.668 mm net downward progress in 59
+    # actions.  The unchanged 0.10 post-descent bound had already sustained 62
+    # consecutive proved descent frames and 107.509 mm of progress.  Bind the
+    # recovery floor to that existing bound; no registered limit is raised.
+    tail_recovery_descent_floor = 0.10
+    assert tail_recovery_descent_floor == pytest.approx(0.10)
+    assert 0.005 < tail_recovery_descent_floor < 0.20
+    assert 0.9477388181679267 - 1.0552474188949972 == pytest.approx(
+        -0.10750860072707047
     )
-    assert 0.9395550014633565 - 0.9404564007049626 == pytest.approx(
-        -0.0009013992416061489
+    assert 0.9397046835577004 - 0.9403726320041634 == pytest.approx(
+        -0.000667948446463007
     )
 
     bounded_seek = CONTROLLER_REFERENCE.read_text().split(
@@ -3178,7 +3178,9 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert "tail_recovery_descent_translation_action_floor" in (
         brake_transition
     )
-    assert "one half of the existing post-descent lateral" in brake_transition
+    assert "the existing post-descent lateral action bound" in (
+        brake_transition
+    )
     assert 'elif structural_stage == "vertical_tail_brake"' in bounded_seek
     brake_action_branch = bounded_seek.split(
         'elif structural_stage == "vertical_tail_brake":', 1
