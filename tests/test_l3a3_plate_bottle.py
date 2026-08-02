@@ -4205,7 +4205,11 @@ def test_500193_high_lateral_uses_compiled_dynamic_action_envelope():
         in bounded_seek
     )
     assert (
-        '"applies_only_before_first_overhead_descent": True'
+        '"controller_handoff_applies_only_before_first_overhead_descent": True'
+        in bounded_seek
+    )
+    assert (
+        '"plane_recovery_applies_only_above_staging_tolerance": True'
         in bounded_seek
     )
     assert (
