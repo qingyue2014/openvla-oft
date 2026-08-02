@@ -464,6 +464,18 @@ reserves pass. Exact-zero damping frames are excluded from this sign
 interlock so their existing two-frame absolute-response stability test remains
 authoritative. No threshold, action bound, task, asset, target, or budget
 changes.
+Job503664 verified the positive-ramp sign interlock; the terminal failure
+occurred before another damping latch. The final `0.050` geometric-floor
+descent issued `-0.061771` Z action and left `2.059867 mm` outside reserve.
+Its first unchanged full outward/positive-Z settle brake observed a
+`-1.467453 mm` vertical response and `-0.199558 mm` clearance response. The
+coupled inward tail did not reverse under subsequent full brakes and reached
+`0.162608 mm`, below the unchanged `0.400 mm` one-step corridor line. The
+geometric height-action floor is now one quarter, rather than one half, of the
+unchanged `0.10` vertical-corridor descent bound, yielding `0.025`. This
+reduces only the descent impulse that enters settle; the `0.20` outward/+Z
+settle brake, runtime action bounds, `0.025` damping decrement, all physical
+reserves, tasks, assets, targets, and budgets remain unchanged.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

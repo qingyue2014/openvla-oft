@@ -10338,6 +10338,10 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
         settle_transition_logic
     )
     assert (
+        "0.25 * vertical_corridor_descent_max_translation_action"
+        in bounded_seek
+    )
+    assert (
         ">= vertical_corridor_geometric_height_action_floor"
         in settle_transition_logic
     )

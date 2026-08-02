@@ -15134,7 +15134,7 @@ def _seek_stable_plate_contact(
         + vertical_corridor_settle_brake_trigger_buffer
     )
     vertical_corridor_geometric_height_action_floor = float(
-        0.5 * vertical_corridor_descent_max_translation_action
+        0.25 * vertical_corridor_descent_max_translation_action
     )
 
     def _active_vertical_corridor_control_envelope(
