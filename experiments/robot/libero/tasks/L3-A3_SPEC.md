@@ -118,10 +118,11 @@ threshold is introduced. If any lateral predicate fails, the same positive-Z
 brake starts immediately, even above the staging-height brake buffer. Once
 measured vertical progress is nonnegative, a zero-translation confirmation is
 required and the XY correction runs at that higher stopped Z under the same
-all-55-pair `0.008 m`-step buffer. A lateral-reversal brake preserves the current
-bounded descent action cap; only a staging-height vertical-tail recovery above
-the staging tolerance applies the geometric cap-halving schedule. The brake and
-resume thresholds form explicit hysteresis: descent stops when full corridor
+all-55-pair `0.008 m`-step buffer. A meaningful lateral reversal outside the
+deadband and a staging-height vertical-tail recovery above the staging tolerance
+both apply the same geometric cap-halving schedule; motion inside the deadband
+does not trigger a brake or a reduction. The brake and resume thresholds form
+explicit hysteresis: descent stops when full corridor
 clearance is lost or a measured inward response exceeds the deadband, but
 cannot resume merely by recrossing that boundary; zero confirmation or lateral
 correction must restore `corridor_clearance_m` plus one existing structural

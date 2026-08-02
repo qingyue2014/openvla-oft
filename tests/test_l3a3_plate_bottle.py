@@ -3761,9 +3761,6 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
     assert 'brake_reason_before_recovery == "lateral_drift"' in (
         brake_transition
     )
-    assert 'brake_reason_before_recovery != "lateral_drift"' in (
-        brake_transition
-    )
     assert 'structural_stage = "vertical_tail_zero_confirmation"' in (
         brake_transition
     )

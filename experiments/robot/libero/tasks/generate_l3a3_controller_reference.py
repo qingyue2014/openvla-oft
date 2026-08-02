@@ -14049,20 +14049,19 @@ def _seek_stable_plate_contact(
                 if after_eef[2] > (
                     overhead_staging_z + args.position_tolerance
                 ):
-                    if brake_reason_before_recovery != "lateral_drift":
-                        active_overhead_descent_translation_action = float(
-                            max(
-                                structural_max_translation_action,
-                                previous_active_translation_action / 2.0,
-                            )
+                    active_overhead_descent_translation_action = float(
+                        max(
+                            structural_max_translation_action,
+                            previous_active_translation_action / 2.0,
                         )
-                        active_overhead_descent_world_step = float(
-                            args.position_action_scale
-                            * active_overhead_descent_translation_action
-                        )
-                        active_overhead_descent_brake_trigger_buffer = float(
-                            2.0 * active_overhead_descent_world_step
-                        )
+                    )
+                    active_overhead_descent_world_step = float(
+                        args.position_action_scale
+                        * active_overhead_descent_translation_action
+                    )
+                    active_overhead_descent_brake_trigger_buffer = float(
+                        2.0 * active_overhead_descent_world_step
+                    )
                     if brake_reason_before_recovery == "lateral_drift":
                         structural_stage = "vertical_tail_zero_confirmation"
                         recovered_event = (
