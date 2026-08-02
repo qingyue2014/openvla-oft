@@ -5252,6 +5252,8 @@ def _fixed_safe_z_lateral_hold_action(
         if (
             previous_commanded_action_xyz.shape != (3,)
             or not np.all(np.isfinite(previous_commanded_action_xyz))
+            or np.any(previous_commanded_action_xyz < native_low[:3])
+            or np.any(previous_commanded_action_xyz > native_high[:3])
             or not np.isfinite(maximum_positive_safety_release_action)
             or not 0.0 < maximum_positive_safety_release_action
             < maximum_safety_brake_action
@@ -5504,6 +5506,22 @@ def _fixed_safe_z_lateral_hold_action(
     if negative_z_suspended_for_outside_recovery:
         commanded_z_action = 0.0
 
+    guard_bounded_z_action_before_response_hold = float(
+        commanded_z_action
+    )
+    captured_safe_z_response_hold_requested = bool(
+        release_slew_enabled
+        and not lateral_target_reached
+        and inside_safe_z_band
+        and abs(measured_vertical_step_progress_m)
+        <= progress_resolution_m
+        and not outside_recovery_active
+        and not table_recovery_active
+        and previous_commanded_action_xyz[2] >= 0.0
+    )
+    if captured_safe_z_response_hold_requested:
+        commanded_z_action = float(previous_commanded_action_xyz[2])
+
     pre_release_slew_xy_action = commanded_xy_action.copy()
     pre_release_slew_z_action = float(commanded_z_action)
     outward_release_slew_applied = False
@@ -5656,6 +5674,17 @@ def _fixed_safe_z_lateral_hold_action(
             pre_release_slew_xy_action.tolist()
         ),
         "pre_release_slew_z_action": pre_release_slew_z_action,
+        "guard_bounded_z_action_before_response_hold": (
+            guard_bounded_z_action_before_response_hold
+        ),
+        "captured_safe_z_response_hold_requested": (
+            captured_safe_z_response_hold_requested
+        ),
+        "captured_safe_z_response_hold_action": (
+            float(previous_commanded_action_xyz[2])
+            if captured_safe_z_response_hold_requested
+            else None
+        ),
         "previous_outward_action": previous_outward_action,
         "minimum_released_outward_action": (
             minimum_released_outward_action
@@ -5769,6 +5798,8 @@ def _fixed_safe_z_lateral_hold_action(
             "safe_z_unload_is_required": True,
             "safe_z_upward_overshoot_uses_guard_bounded_pd_command": True,
             "downward_tail_retains_positive_release_slew": True,
+            "captured_safe_z_stable_response_retains_predecessor": True,
+            "captured_safe_z_hold_requires_live_clearance_reserve": True,
             "first_stable_frame_uses_neutral_z_confirmation": True,
             "noninward_refill_band_uses_exact_nominal_action": True,
             "recovery_release_requires_exit_headroom": True,

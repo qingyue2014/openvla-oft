@@ -760,6 +760,19 @@ caps. Every downward response and every below-band state retains the positive
 release slew and full brake behavior. Rim coverage and all other formal gates
 remain unchanged.
 
+Job503873 eliminated that coverage loss and sustained every physical guard for
+57 fixed-safe-Z actions, but ended at `6.119 mm` lateral error. The fixed stage
+had discarded an immediately preceding measured equilibrium: steps 182 and
+183 used Z actions `0.338783` and `0.347212`, with respective responses
+`+0.012887 mm` and `+0.047361 mm`. At the exact captured safe Z, step 184
+released Z to `0.297212` and measured `-0.131050 mm`, starting a long response
+limit cycle. While lateral return is not yet complete, a frame inside the
+safe-Z band with vertical response within `0.050 mm`, accepted live clearance
+reserves, and a finite native-bounded nonnegative predecessor now retains that
+predecessor Z action. Any response, height, or clearance-reserve loss
+immediately restores the existing PD and brake logic. No physical threshold,
+budget, prompt, goal, inventory, state, or intervention field changes.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
