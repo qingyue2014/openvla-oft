@@ -105,6 +105,17 @@ bound. This geometric schedule prevents a symmetric descent/brake limit cycle;
 the controller proceeds to zero confirmation only after stopping at the staging
 height. Every action still retains all 55 compiled pair guards and is rechecked
 after execution.
+After every far-field descent action, the controller also recomputes the live
+XY error to the unchanged compiled corridor target. If that error exceeds the
+existing `position_tolerance` (`0.005 m`), the same positive-Z brake starts
+immediately, even above the staging-height brake buffer. Once measured vertical
+progress is nonnegative, a zero-translation confirmation is required and the
+XY correction runs at that higher stopped Z under the same all-55-pair
+`0.008 m`-step buffer. A successful correction above staging resumes the
+bounded pure-Z descent with the already-halved cap; only a correction at the
+staging height may enter the vertical side corridor. Thus controller-coupled
+drift is corrected while lateral authority remains available instead of being
+accumulated into a low-height correction.
 The complete precontact structural route has a finite default budget of `240`
 actions; native episode termination and horizon-reserve checks remain
 fail-closed and are not bypassed by this route budget.

@@ -3725,6 +3725,52 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         'elif stage_before_action == "overhead_corridor_descent":', 1
     )[1].split('elif stage_before_action == "vertical_tail_brake":', 1)[0]
     assert 'structural_stage = "vertical_tail_brake"' in descent_transition
+    assert (
+        "descent_corridor_lateral_error > args.position_tolerance"
+        in descent_transition
+    )
+    assert (
+        'vertical_tail_brake_reason = "lateral_drift"'
+        in descent_transition
+    )
+    assert (
+        "corridor_xy_drift_exceeded_tolerance_to_"
+        in descent_transition
+    )
+    brake_transition = bounded_seek.split(
+        'elif stage_before_action == "vertical_tail_brake":', 1
+    )[1].split('elif stage_before_action == "lateral_rebuffer_brake":', 1)[0]
+    assert 'brake_reason_before_recovery == "lateral_drift"' in (
+        brake_transition
+    )
+    assert 'structural_stage = "vertical_tail_zero_confirmation"' in (
+        brake_transition
+    )
+    zero_transition = bounded_seek.split(
+        'elif stage_before_action == "vertical_tail_zero_confirmation":', 1
+    )[1].split(
+        'elif stage_before_action == "overhead_post_descent_corridor_lateral":',
+        1,
+    )[0]
+    assert (
+        "overhead_staging_z + args.position_tolerance" in zero_transition
+    )
+    assert 'structural_stage = "overhead_corridor_descent"' in (
+        zero_transition
+    )
+    correction_transition = bounded_seek.split(
+        'elif stage_before_action == "overhead_post_descent_corridor_lateral":',
+        1,
+    )[1].split(
+        'elif stage_before_action == "vertical_corridor_settle":', 1
+    )[0]
+    assert (
+        '"high_z_corridor_correction_complete_to_"'
+        in correction_transition
+    )
+    assert 'structural_stage = "overhead_corridor_descent"' in (
+        correction_transition
+    )
     assert bounded_seek.index(
         'structural_stage = "overhead_high_corridor_lateral"'
     ) < bounded_seek.index(
@@ -3739,9 +3785,10 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         in bounded_seek
     )
     assert (
-        '"corridor_xy_adaptive_pure_z_descent",'
+        '"corridor_xy_adaptive_pure_z_descent_with_position_"'
         in bounded_seek
     )
+    assert '"tolerance_drift_brake"' in bounded_seek
     controller = CONTROLLER_REFERENCE.read_text()
     assert "after the monotone pure-Z sweep, command pure XY" not in controller
     assert "internal controller substeps" in controller
