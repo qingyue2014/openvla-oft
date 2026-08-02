@@ -1227,13 +1227,13 @@ def test_l3a4_compiled_mesh_box_threshold_cache_matches_and_refines_boundary():
         "_compiled_translated_mesh_box_clearance"
     ]
 
-    def pair_geometry(center):
+    def pair_geometry(center, moving_rbound=3.0):
         env.sim.data.geom_xpos[0] = center
         return {
             "moving_geom_id": 0,
             "fixture_geom_id": 1,
             "moving_center": np.asarray(center, dtype=float),
-            "moving_rbound_m": 3.0,
+            "moving_rbound_m": float(moving_rbound),
             "fixture_center": np.zeros(3),
             "fixture_rotation": np.eye(3),
             "fixture_half_size": np.full(3, 0.5),
@@ -1273,6 +1273,39 @@ def test_l3a4_compiled_mesh_box_threshold_cache_matches_and_refines_boundary():
         "face_evaluations"
     ] < len(faces)
 
+    positive_threshold_pass, _, pass_components, scalar_refined = (
+        cached_clearance(
+            env,
+            pair_geometry([1.02, 0.0, 0.0], moving_rbound=0.515),
+            np.zeros(3),
+            0.0,
+            stop_at_or_below=0.012,
+        )
+    )
+    assert positive_threshold_pass == pytest.approx(0.020)
+    assert scalar_refined is False
+    assert scalar_calls == []
+    assert pass_components["mesh_threshold_evidence"][
+        "threshold_witness_seen"
+    ] is False
+    assert pass_components["mesh_threshold_evidence"][
+        "face_evaluations"
+    ] == len(faces)
+
+    positive_boundary, _, boundary_components, scalar_refined = (
+        cached_clearance(
+            env,
+            pair_geometry([1.012, 0.0, 0.0]),
+            np.zeros(3),
+            0.0,
+            stop_at_or_below=0.012,
+        )
+    )
+    assert positive_boundary == pytest.approx(0.012)
+    assert scalar_refined is True
+    assert scalar_calls == [(0, 1)]
+    assert boundary_components["scalar_boundary_refinement"]
+
     boundary, _, boundary_components, scalar_refined = cached_clearance(
         env,
         pair_geometry([1.0, 0.0, 0.0]),
@@ -1282,11 +1315,13 @@ def test_l3a4_compiled_mesh_box_threshold_cache_matches_and_refines_boundary():
     )
     assert boundary == pytest.approx(0.0)
     assert scalar_refined is True
-    assert scalar_calls == [(0, 1)]
+    assert scalar_calls == [(0, 1), (0, 1)]
     assert boundary_components["scalar_boundary_refinement"]
 
 
-def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose():
+def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose(
+    capsys,
+):
     source = ROBOT_SAFE_PREFIX.read_text()
     module = ast.parse(source)
     function = next(
@@ -1307,6 +1342,8 @@ def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose():
         *,
         stop_at_or_below=None,
         compiled_geometry_cache=None,
+        compiled_sweep_geometry=None,
+        cached_rejection_witness=None,
     ):
         start = np.asarray(start_position, dtype=float)
         end = np.asarray(end_position, dtype=float)
@@ -1316,6 +1353,8 @@ def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose():
                 "fixture": tuple(fixture_geoms),
                 "threshold": stop_at_or_below,
                 "cache_id": id(compiled_geometry_cache),
+                "compiled_id": id(compiled_sweep_geometry),
+                "witness": cached_rejection_witness,
             }
         )
         if tuple(fixture_geoms) == (1,):
@@ -1330,10 +1369,34 @@ def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose():
             clearance = -0.001
         else:
             clearance = 0.020
-        return clearance, {"minimum_clearance_m": clearance}
+        rejected = clearance <= float(stop_at_or_below)
+        attempted = cached_rejection_witness is not None
+        compatible_pair_evaluations = 1 if rejected else 2
+        return clearance, {
+            "minimum_clearance_m": clearance,
+            "sample_intervals": 1,
+            "compatible_pair_evaluations": compatible_pair_evaluations,
+            "total_pair_evaluations_without_fail_fast": 2,
+            "exact_pair_clearances_computed": (
+                1 if attempted and rejected else compatible_pair_evaluations
+            ),
+            "scalar_threshold_boundary_refinement_count": 0,
+            "cached_rejection_witness_attempted": attempted,
+            "cached_rejection_witness_rejected": attempted and rejected,
+            "cached_rejection_witness_fell_back_to_full_sweep": (
+                attempted and not rejected
+            ),
+            "full_sweep_evaluated": not rejected,
+            "threshold_rejection_seen": rejected,
+            "limiting_pair": {
+                "sample_index": 0,
+                "moving_geom_id": int(moving_geoms[0]),
+                "fixture_geom_id": int(fixture_geoms[0]),
+            },
+        }
 
     class Model:
-        geom_rbound = np.asarray([0.020, 0.020, 0.10, 0.020])
+        geom_rbound = np.asarray([0.020, 0.100, 0.10, 0.020])
 
     class Data:
         geom_xpos = np.asarray(
@@ -1427,6 +1490,16 @@ def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose():
             ]
         ),
         "_translated_swept_clearance": swept,
+        "_compile_translated_sweep_geometry": (
+            lambda env, moving, fixture, cache: {
+                "compatible_geom_pairs": tuple(
+                    (int(first), int(second))
+                    for first in moving
+                    for second in fixture
+                ),
+                "mesh_box_pair_geometry": {},
+            }
+        ),
     }
     exec(
         compile(
@@ -1511,6 +1584,30 @@ def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose():
     }
     assert calls[0]["threshold"] == pytest.approx(0.012)
     assert any(call["threshold"] == 0.0 for call in calls)
+    assert len({call["compiled_id"] for call in calls}) == 3
+    assert any(call["witness"] is not None for call in calls)
+    acceleration = evidence["prefilter_acceleration"]
+    assert acceleration["candidates_evaluated"] == len(
+        evidence["candidate_trace"]
+    )
+    assert acceleration["candidates_total"] == len(
+        evidence["candidate_trace"]
+    )
+    assert acceleration["sweep_calls"] == len(calls)
+    assert acceleration["cached_rejection_witness_attempts"] > 0
+    progress = capsys.readouterr().out
+    assert "[L3-A4 grasp prefilter progress] started total=" in progress
+    assert "[L3-A4 grasp prefilter progress] compiled target_pairs=" in (
+        progress
+    )
+    assert f"completed={len(evidence['candidate_trace'])}/" in progress
+    assert "completed=25/" in progress
+    assert "completed=50/" in progress
+    assert "completed=75/" in progress
+    assert "exact_pairs=" in progress
+    assert "full_pairs=" in progress
+    assert "boundary_refinements=" in progress
+    assert "witness=" in progress
 
 
 def test_l3a4_native_site_grasp_directions_are_auditable_and_unique():
@@ -3357,6 +3454,7 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "segment_aabb_distance(" in geom_clearance
     assert "moving_type == 7" in geom_clearance
     assert "sphere_lower_bound > compiled_margin" in geom_clearance
+    assert "compiled_margin + float(stop_at_or_below)" in geom_clearance
     assert "certified compiled bounding-sphere-to-box positive" in (
         geom_clearance
     )
@@ -3498,6 +3596,9 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
         source, functions["_compiled_translated_mesh_box_clearance"]
     )
     assert "_convex_mesh_aabb_threshold_distance(" in compiled_mesh_box
+    assert "compiled_margin + float(stop_at_or_below)" in (
+        compiled_mesh_box
+    )
     assert "_compiled_obb_needs_scalar_threshold_refinement(" in (
         compiled_mesh_box
     )
@@ -3644,6 +3745,24 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "compiled_geometry_cache=compiled_geometry_cache" in (
         target_grasp_clearance
     )
+    assert target_grasp_clearance.count(
+        "_compile_translated_sweep_geometry("
+    ) == 3
+    assert "compiled_sweep_geometry_by_name" in target_grasp_clearance
+    assert "rejection_witness_by_sweep" in target_grasp_clearance
+    assert "== candidate_index - 1" in target_grasp_clearance
+    assert "cached_rejection_witness=(" in target_grasp_clearance
+    assert '"sample_intervals": evidence[' in target_grasp_clearance
+    assert '"sample_index": limiting_pair[' in target_grasp_clearance
+    assert '"moving_geom_id": limiting_pair[' in target_grasp_clearance
+    assert '"fixture_geom_id": limiting_pair[' in target_grasp_clearance
+    assert '"prefilter_acceleration"' in target_grasp_clearance
+    assert "[L3-A4 grasp prefilter progress]" in target_grasp_clearance
+    assert "(candidate_index + 1) % 25 == 0" in target_grasp_clearance
+    assert '"cached_rejection_witness_attempts"' in (
+        target_grasp_clearance
+    )
+    assert '"full_sweep_pair_evaluations"' in target_grasp_clearance
     assert '"rejection_stage": rejection_stage' in target_grasp_clearance
     assert '"skipped_sweeps"' in target_grasp_clearance
     assert "value > EEF_POSITION_TOLERANCE" in target_grasp_clearance

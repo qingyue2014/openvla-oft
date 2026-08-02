@@ -4496,7 +4496,88 @@ def _compiled_target_grasp_clearance(
     ordered_candidate_specs = _ordered_grasp_direction_offset_specs(
         offset_values, direction_records, legacy_direction_count
     )
-    for candidate_spec in ordered_candidate_specs:
+    total_candidates = len(ordered_candidate_specs)
+    print(
+        "[L3-A4 grasp prefilter progress] "
+        f"started total={total_candidates} "
+        f"legacy={len(offset_values) * legacy_direction_count} "
+        "native="
+        f"{total_candidates - len(offset_values) * legacy_direction_count}",
+        flush=True,
+    )
+    compiled_target_sweep_geometry = (
+        _compile_translated_sweep_geometry(
+            env,
+            collision_gripper_geoms,
+            collision_target_geoms,
+            compiled_geometry_cache,
+        )
+    )
+    compiled_porcelain_sweep_geometry = (
+        _compile_translated_sweep_geometry(
+            env,
+            porcelain_gripper_geoms,
+            collision_porcelain_geoms,
+            compiled_geometry_cache,
+        )
+    )
+    compiled_fixture_sweep_geometry = (
+        _compile_translated_sweep_geometry(
+            env,
+            fixture_compatible_gripper_geoms,
+            fixture_geoms,
+            compiled_geometry_cache,
+        )
+    )
+    compiled_sweep_geometry_by_name = {
+        "target_descend": compiled_target_sweep_geometry,
+        "target_approach": compiled_target_sweep_geometry,
+        "porcelain_lateral": compiled_porcelain_sweep_geometry,
+        "porcelain_descend": compiled_porcelain_sweep_geometry,
+        "porcelain_approach": compiled_porcelain_sweep_geometry,
+        "fixture_lateral": compiled_fixture_sweep_geometry,
+        "fixture_descend": compiled_fixture_sweep_geometry,
+        "fixture_approach": compiled_fixture_sweep_geometry,
+    }
+    compiled_mesh_box_pair_count = sum(
+        len(item["mesh_box_pair_geometry"])
+        for item in (
+            compiled_target_sweep_geometry,
+            compiled_porcelain_sweep_geometry,
+            compiled_fixture_sweep_geometry,
+        )
+    )
+    print(
+        "[L3-A4 grasp prefilter progress] compiled "
+        "target_pairs="
+        f"{len(compiled_target_sweep_geometry['compatible_geom_pairs'])} "
+        "porcelain_pairs="
+        f"{len(compiled_porcelain_sweep_geometry['compatible_geom_pairs'])} "
+        "fixture_pairs="
+        f"{len(compiled_fixture_sweep_geometry['compatible_geom_pairs'])} "
+        "mesh_box_pairs="
+        f"{compiled_mesh_box_pair_count}",
+        flush=True,
+    )
+    rejection_witness_by_sweep = {}
+    prefilter_counters = {
+        "candidates_total": int(total_candidates),
+        "candidates_evaluated": 0,
+        "sweep_calls": 0,
+        "full_sweeps": 0,
+        "threshold_rejection_sweeps": 0,
+        "compatible_pair_evaluations": 0,
+        "full_sweep_pair_evaluations": 0,
+        "total_pair_evaluations_without_fail_fast": 0,
+        "exact_pair_clearances_computed": 0,
+        "scalar_threshold_boundary_refinements": 0,
+        "cached_rejection_witness_attempts": 0,
+        "cached_rejection_witness_rejections": 0,
+        "cached_rejection_witness_full_fallbacks": 0,
+    }
+    for candidate_index, candidate_spec in enumerate(
+        ordered_candidate_specs
+    ):
         for offset, direction_index, direction_record in (
             (
                 candidate_spec["offset_m"],
@@ -4597,6 +4678,16 @@ def _compiled_target_grasp_clearance(
                 sweep_end,
                 required_clearance,
             ) in sweep_specs:
+                prior_witness = rejection_witness_by_sweep.get(
+                    sweep_name
+                )
+                cached_rejection_witness = (
+                    prior_witness["witness"]
+                    if prior_witness is not None
+                    and prior_witness["candidate_index"]
+                    == candidate_index - 1
+                    else None
+                )
                 clearance, evidence = _translated_swept_clearance(
                     env,
                     moving_geoms,
@@ -4606,14 +4697,86 @@ def _compiled_target_grasp_clearance(
                     current_eef,
                     stop_at_or_below=required_clearance,
                     compiled_geometry_cache=compiled_geometry_cache,
+                    compiled_sweep_geometry=(
+                        compiled_sweep_geometry_by_name[sweep_name]
+                    ),
+                    cached_rejection_witness=(
+                        cached_rejection_witness
+                    ),
                 )
+                prefilter_counters["sweep_calls"] += 1
+                prefilter_counters[
+                    "compatible_pair_evaluations"
+                ] += int(evidence["compatible_pair_evaluations"])
+                prefilter_counters[
+                    "total_pair_evaluations_without_fail_fast"
+                ] += int(
+                    evidence[
+                        "total_pair_evaluations_without_fail_fast"
+                    ]
+                )
+                prefilter_counters[
+                    "exact_pair_clearances_computed"
+                ] += int(evidence["exact_pair_clearances_computed"])
+                prefilter_counters[
+                    "scalar_threshold_boundary_refinements"
+                ] += int(
+                    evidence[
+                        "scalar_threshold_boundary_refinement_count"
+                    ]
+                )
+                prefilter_counters[
+                    "cached_rejection_witness_attempts"
+                ] += int(
+                    evidence["cached_rejection_witness_attempted"]
+                )
+                prefilter_counters[
+                    "cached_rejection_witness_rejections"
+                ] += int(
+                    evidence["cached_rejection_witness_rejected"]
+                )
+                prefilter_counters[
+                    "cached_rejection_witness_full_fallbacks"
+                ] += int(
+                    evidence[
+                        "cached_rejection_witness_fell_back_to_full_sweep"
+                    ]
+                )
+                if evidence["full_sweep_evaluated"]:
+                    prefilter_counters["full_sweeps"] += 1
+                    prefilter_counters[
+                        "full_sweep_pair_evaluations"
+                    ] += int(evidence["compatible_pair_evaluations"])
+                if evidence["threshold_rejection_seen"]:
+                    prefilter_counters[
+                        "threshold_rejection_sweeps"
+                    ] += 1
                 clearance_values[
                     f"{sweep_name}_clearance_m"
                 ] = clearance
                 sweep_evidence[sweep_name] = evidence
                 if clearance <= required_clearance:
+                    limiting_pair = evidence["limiting_pair"]
+                    rejection_witness_by_sweep[sweep_name] = {
+                        "candidate_index": int(candidate_index),
+                        "witness": {
+                            "sample_intervals": evidence[
+                                "sample_intervals"
+                            ],
+                            "sample_index": limiting_pair[
+                                "sample_index"
+                            ],
+                            "moving_geom_id": limiting_pair[
+                                "moving_geom_id"
+                            ],
+                            "fixture_geom_id": limiting_pair[
+                                "fixture_geom_id"
+                            ],
+                        },
+                    }
                     rejection_stage = sweep_name
                     break
+                rejection_witness_by_sweep.pop(sweep_name, None)
             target_clearances = {
                 name: clearance_values[name]
                 for name in (
@@ -4690,6 +4853,39 @@ def _compiled_target_grasp_clearance(
                         "sweep_evidence": sweep_evidence,
                     }
                 )
+            evaluated_sweep_names = set(sweep_evidence)
+            for sweep_name in compiled_sweep_geometry_by_name:
+                if sweep_name not in evaluated_sweep_names:
+                    rejection_witness_by_sweep.pop(sweep_name, None)
+            prefilter_counters["candidates_evaluated"] = int(
+                candidate_index + 1
+            )
+            if (
+                (candidate_index + 1) % 25 == 0
+                or candidate_index + 1 == total_candidates
+            ):
+                print(
+                    "[L3-A4 grasp prefilter progress] "
+                    f"completed={candidate_index + 1}/{total_candidates} "
+                    f"passes={len(geometry_passes)} "
+                    f"rejection_stage={rejection_stage!r} "
+                    f"sweeps={prefilter_counters['sweep_calls']} "
+                    f"full_sweeps={prefilter_counters['full_sweeps']} "
+                    "pairs="
+                    f"{prefilter_counters['compatible_pair_evaluations']}/"
+                    f"{prefilter_counters['total_pair_evaluations_without_fail_fast']} "
+                    "exact_pairs="
+                    f"{prefilter_counters['exact_pair_clearances_computed']} "
+                    "full_pairs="
+                    f"{prefilter_counters['full_sweep_pair_evaluations']} "
+                    "boundary_refinements="
+                    f"{prefilter_counters['scalar_threshold_boundary_refinements']} "
+                    "witness="
+                    f"{prefilter_counters['cached_rejection_witness_attempts']}/"
+                    f"{prefilter_counters['cached_rejection_witness_rejections']}/"
+                    f"{prefilter_counters['cached_rejection_witness_full_fallbacks']}",
+                    flush=True,
+                )
     if not geometry_passes:
         raise RuntimeError(
             "no compiled no-contact outside target grasp pose; "
@@ -4727,6 +4923,31 @@ def _compiled_target_grasp_clearance(
             ),
             "hits": int(compiled_geometry_cache["hits"]),
             "misses": int(compiled_geometry_cache["misses"]),
+        },
+        "prefilter_acceleration": {
+            "witness_reuse_scope": (
+                "same sweep in the immediately preceding candidate only; "
+                "the exact canonical sample and geom pair are re-evaluated"
+            ),
+            "compiled_target_pair_count": len(
+                compiled_target_sweep_geometry[
+                    "compatible_geom_pairs"
+                ]
+            ),
+            "compiled_porcelain_pair_count": len(
+                compiled_porcelain_sweep_geometry[
+                    "compatible_geom_pairs"
+                ]
+            ),
+            "compiled_fixture_pair_count": len(
+                compiled_fixture_sweep_geometry[
+                    "compatible_geom_pairs"
+                ]
+            ),
+            "compiled_mesh_box_pair_count": (
+                compiled_mesh_box_pair_count
+            ),
+            **prefilter_counters,
         },
         "collision_gripper_geom_ids": collision_gripper_geoms,
         "collision_target_geom_ids": collision_target_geoms,
