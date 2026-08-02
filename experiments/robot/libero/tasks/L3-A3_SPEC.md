@@ -165,6 +165,19 @@ and reached full rim coverage, but the finger-table clearance fell from
 `0.784 mm` to `-0.037 mm` because the real OSC tail was still descending by
 `0.824 mm` per frame. Thus only the pre-brake trigger height is geometrically
 reduced; both outward and positive-Z safety authority remain invariant.
+After this structural capture, any remaining measured positive-Z response must
+be cancelled before the lateral contact search. Job503292 completed every
+structural gate at `z=0.91965 m`, but the ordinary `0.10`-norm contact command
+allocated almost all authority to its `70 mm` lateral error and climbed to
+`z=0.95141 m` over 64 frames without contacting the plate. A separate pure-Z
+tail-damping loop is therefore permitted only while measured vertical response
+exceeds the existing `0.05 mm` progress resolution. Each action has zero XY and
+rotation, remains inside the unchanged `0.10` contact-seek norm and runtime
+native bounds, and uses at most half of the live table reserve above the strict
+`0.400 mm` post-action clearance. The full outside-side and all physical/contact
+gates are recomputed after every frame. The loop reuses the existing 64-step
+contact-seek limit as a fail-closed bound; the following lateral contact search
+keeps its original independent 64-step limit.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
