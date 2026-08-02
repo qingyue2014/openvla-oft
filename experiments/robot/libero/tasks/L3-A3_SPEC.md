@@ -109,6 +109,13 @@ waypoints are not an EB/ER/EC intervention and do not alter the task prompt,
 goal, inventory, serialized states, evaluation policy, camera, oracle, or
 thresholds.
 
+The descent-to-low-lateral transition does not use the generic `0.005 m`
+waypoint tolerance blindly. Its live Z tolerance is the smaller of that bound
+and one quarter of the compiled terminal under-cabinet headroom above the
+`0.008 m` hard gate. This preserves at least 75% of the certified headroom
+before the first zero-Z lateral action; the live under-cabinet guard still runs
+before and after every action and fails closed on any loss.
+
 ## Hard physical and visual gates
 
 Every episode and condition is restored through the evaluator sequence:

@@ -7949,6 +7949,8 @@ def test_native_front_right_low_detour_compiles_from_live_geometry():
     assert plan["predicted_right_clearance_m"] > 0.013
     assert plan["predicted_high_above_plate_clearance_m"] > 0.008
     assert plan["predicted_under_clearance_at_terminal_m"] > 0.008
+    assert 0.0 < plan["low_route_entry_z_tolerance_m"] <= 0.005
+    assert plan["low_route_entry_headroom_retained_fraction"] == 0.75
     assert plan["predicted_right_of_rack_clearance_at_terminal_m"] > 0.008
     assert plan["maximum_route_translation_action"] > 0.99
     assert plan["maximum_route_world_command_m"] == pytest.approx(0.08)

@@ -1453,6 +1453,20 @@ def _compiled_native_front_right_low_detour_plan(
             "native cabinet detour trailing column is not strictly below the "
             "cabinet by one controller world step"
         )
+    under_clearance_headroom = float(
+        predicted_under_clearance - maximum_controller_world_step_m
+    )
+    low_route_entry_z_tolerance = float(
+        min(
+            position_tolerance_m,
+            np.nextafter(0.25 * under_clearance_headroom, 0.0),
+        )
+    )
+    if not low_route_entry_z_tolerance > 0.0:
+        raise RuntimeError(
+            "native cabinet detour has no positive low-route entry Z "
+            "tolerance after preserving under-cabinet headroom"
+        )
     if not predicted_right_of_rack_clearance > maximum_controller_world_step_m:
         raise RuntimeError(
             "native cabinet detour terminal column is not strictly right of "
@@ -1587,6 +1601,9 @@ def _compiled_native_front_right_low_detour_plan(
             predicted_high_above_plate_clearance
         ),
         "predicted_under_clearance_at_terminal_m": predicted_under_clearance,
+        "under_clearance_headroom_m": under_clearance_headroom,
+        "low_route_entry_z_tolerance_m": low_route_entry_z_tolerance,
+        "low_route_entry_headroom_retained_fraction": 0.75,
         "predicted_right_of_rack_clearance_at_terminal_m": (
             predicted_right_of_rack_clearance
         ),
@@ -12610,7 +12627,9 @@ def _seek_stable_plate_contact(
                 cabinet_detour_plan["waypoints"]["front_low"],
                 dtype=float,
             )
-            if current_eef[2] <= detour_target[2] + args.position_tolerance:
+            if current_eef[2] <= detour_target[2] + float(
+                cabinet_detour_plan["low_route_entry_z_tolerance_m"]
+            ):
                 next_guard = _live_native_cabinet_detour_guard(
                     env,
                     eef_position=current_eef,
