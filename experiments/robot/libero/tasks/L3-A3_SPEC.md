@@ -82,15 +82,20 @@ robot/native structural-contact allowlist, plate support/tilt/drift/velocity
 checks, native OSC action bounds, and finite action budget before every action
 and again after every action. The `0.0005 m` outside-rim clearance is an exact
 precontact separation threshold, not permission to contact the plate early;
-the structural near-plate action is capped at `0.05`, or `0.004 m` in world
-space, so the compiled corridor reserve exceeds a complete permitted step.
+the structural near-plate lateral action is capped at `0.005`, or `0.0004 m`
+in world space, so the compiled corridor reserve exceeds a complete permitted
+step.
+Once the controller has stopped inside that reachable corridor, its pure-Z
+side-height descent and positive-Z settle brake use a separate `0.10` action
+cap; this changes no lateral reserve and every step remains subject to the live
+outside/table/plate guards before and after execution.
 The preceding far-field pure-Z descent is separately capped at `0.20`, or
 `0.016 m` nominal world displacement. Its positive-Z brake begins when the EEF
 enters a deterministic two-command (`0.032 m`) buffer above the compiled
 staging height and uses the same `0.20` cap until measured vertical progress is
 nonnegative. If braking stops above the staging tolerance, the controller
 returns to bounded descent with both its action cap and two-command brake buffer
-halved (`0.20`, `0.10`, `0.05`), never below the `0.05` near-plate
+halved (`0.20`, `0.10`, ...), never below the `0.005` near-plate
 bound. This geometric schedule prevents a symmetric descent/brake limit cycle;
 the controller proceeds to zero confirmation only after stopping at the staging
 height. Every action still retains all 55 compiled pair guards and is rechecked

@@ -12272,6 +12272,9 @@ def _seek_stable_plate_contact(
     overhead_descent_max_translation_action = float(
         args.overhead_descent_max_translation_action
     )
+    vertical_corridor_descent_max_translation_action = float(
+        args.vertical_corridor_descent_max_translation_action
+    )
     maximum_controller_world_step = float(
         args.position_action_scale * structural_max_translation_action
     )
@@ -12307,6 +12310,9 @@ def _seek_stable_plate_contact(
             ),
             "overhead_descent_brake_trigger_buffer_m": (
                 overhead_descent_brake_trigger_buffer
+            ),
+            "vertical_corridor_descent_max_translation_action": (
+                vertical_corridor_descent_max_translation_action
             ),
         }
     )
@@ -13418,7 +13424,7 @@ def _seek_stable_plate_contact(
                     gripper=gripper,
                     position_action_scale=args.position_action_scale,
                     maximum_translation_action=(
-                        structural_max_translation_action
+                        vertical_corridor_descent_max_translation_action
                     ),
                 )
             )
@@ -13452,7 +13458,7 @@ def _seek_stable_plate_contact(
                     gripper=gripper,
                     position_action_scale=args.position_action_scale,
                     maximum_translation_action=(
-                        structural_max_translation_action
+                        vertical_corridor_descent_max_translation_action
                     ),
                     active_positive_z_brake=active_brake,
                 )
@@ -14701,6 +14707,21 @@ def generate(args):
         raise ValueError(
             "--overhead_descent_max_translation_action must be greater than "
             "the near-plate bound and no greater than 1.0"
+        )
+    if (
+        not np.isfinite(
+            args.vertical_corridor_descent_max_translation_action
+        )
+        or not (
+            args.structural_near_plate_max_translation_action
+            < args.vertical_corridor_descent_max_translation_action
+            <= args.plate_contact_seek_max_translation_action
+        )
+    ):
+        raise ValueError(
+            "--vertical_corridor_descent_max_translation_action must be "
+            "greater than the lateral near-plate bound and no greater than "
+            "the contact-seek bound"
         )
     if args.plate_contact_seek_max_steps < 1:
         raise ValueError(
@@ -16092,7 +16113,12 @@ def main():
     parser.add_argument(
         "--structural_near_plate_max_translation_action",
         type=float,
-        default=0.05,
+        default=0.005,
+    )
+    parser.add_argument(
+        "--vertical_corridor_descent_max_translation_action",
+        type=float,
+        default=0.10,
     )
     parser.add_argument(
         "--overhead_descent_max_translation_action",
