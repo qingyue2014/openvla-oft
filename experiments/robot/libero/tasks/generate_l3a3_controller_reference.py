@@ -13719,7 +13719,7 @@ def _seek_stable_plate_contact(
                 _overhead_lateral_buffer_evidence(
                     latest_overhead_guard,
                     worst_case_controller_world_step_m=(
-                        maximum_overhead_descent_world_step
+                        maximum_post_descent_lateral_world_step
                     ),
                 )
             )
@@ -14269,14 +14269,14 @@ def _seek_stable_plate_contact(
                 "active_overhead_descent_translation_action_bound": (
                     active_overhead_descent_translation_action
                 ),
-                "maximum_tail_brake_translation_action_bound": (
-                    overhead_descent_max_translation_action
+                "tail_brake_lateral_entry_action_bound": (
+                    post_descent_lateral_max_translation_action
                 ),
-                "maximum_tail_brake_world_step_m": (
-                    maximum_overhead_descent_world_step
+                "tail_brake_lateral_entry_world_step_m": (
+                    maximum_post_descent_lateral_world_step
                 ),
-                "maximum_tail_brake_bound_source": (
-                    "existing overhead_descent_max_translation_action"
+                "tail_brake_buffer_bound_source": (
+                    "existing post_descent_lateral_max_translation_action"
                 ),
                 "corridor_descent_hold_target_xy": (
                     corridor_descent_hold_target_xy.tolist()
@@ -14302,7 +14302,7 @@ def _seek_stable_plate_contact(
                     native_action_spec=native_action_spec,
                     expected_pair_count=expected_overhead_pair_count,
                     worst_case_controller_world_step_m=(
-                        maximum_overhead_descent_world_step
+                        maximum_post_descent_lateral_world_step
                     ),
                     lateral_target_xy=(
                         corridor_correction_hold_target_xy
@@ -14334,14 +14334,14 @@ def _seek_stable_plate_contact(
                 "active_overhead_descent_translation_action_bound": (
                     active_overhead_descent_translation_action
                 ),
-                "maximum_tail_brake_translation_action_bound": (
-                    overhead_descent_max_translation_action
+                "tail_brake_lateral_entry_action_bound": (
+                    post_descent_lateral_max_translation_action
                 ),
-                "maximum_tail_brake_world_step_m": (
-                    maximum_overhead_descent_world_step
+                "tail_brake_lateral_entry_world_step_m": (
+                    maximum_post_descent_lateral_world_step
                 ),
-                "maximum_tail_brake_bound_source": (
-                    "existing overhead_descent_max_translation_action"
+                "tail_brake_buffer_bound_source": (
+                    "existing post_descent_lateral_max_translation_action"
                 ),
                 "active_overhead_descent_brake_trigger_buffer_m": (
                     active_overhead_descent_brake_trigger_buffer
@@ -14801,7 +14801,7 @@ def _seek_stable_plate_contact(
                             )
                         )
                         else (
-                            maximum_overhead_descent_world_step
+                            maximum_post_descent_lateral_world_step
                             if stage_before_action
                             == "vertical_tail_brake"
                             else (
