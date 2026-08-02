@@ -3736,6 +3736,7 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         in descent_transition
     )
     assert "if descent_corridor_lateral_violations:" in descent_transition
+    assert '"strict_corridor_entry_clearance_m"' in descent_transition
     assert (
         'vertical_tail_brake_reason = "lateral_drift"'
         in descent_transition
@@ -3765,6 +3766,7 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
     assert 'structural_stage = "overhead_corridor_descent"' in (
         zero_transition
     )
+    assert '"corridor_clearance_m"' in zero_transition
     correction_transition = bounded_seek.split(
         'elif stage_before_action == "overhead_post_descent_corridor_lateral":',
         1,
@@ -3778,6 +3780,7 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
     assert 'structural_stage = "overhead_corridor_descent"' in (
         correction_transition
     )
+    assert '"corridor_clearance_m"' in correction_transition
     assert bounded_seek.index(
         'structural_stage = "overhead_high_corridor_lateral"'
     ) < bounded_seek.index(
@@ -3796,6 +3799,8 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         in bounded_seek
     )
     assert '"tolerance_or_outside_clearance_drift_brake"' in bounded_seek
+    assert '"descent_corridor_resume_clearance_m"' in bounded_seek
+    assert '"compiled full corridor clearance"' in bounded_seek
     controller = CONTROLLER_REFERENCE.read_text()
     assert "after the monotone pure-Z sweep, command pure XY" not in controller
     assert "internal controller substeps" in controller
@@ -4339,7 +4344,7 @@ def test_500199_workspace_release_stage_preserves_all_hard_thresholds():
     assert "_compiled_adaptive_workspace_release_action(" in bounded_seek
     assert 'structural_stage = "workspace_release_diagonal"' in bounded_seek
     assert '"compiled_adaptive_workspace_release_envelope"' in bounded_seek
-    assert "workspace_release_reached_strict_corridor_to_" in bounded_seek
+    assert "workspace_release_reached_full_corridor_to_" in bounded_seek
     assert '"overhead_corridor_descent"' in bounded_seek
     assert (
         'parser.add_argument("--max_waypoint_steps", type=int, default=240)'

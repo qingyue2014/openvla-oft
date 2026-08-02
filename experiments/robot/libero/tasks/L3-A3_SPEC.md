@@ -113,11 +113,15 @@ clearance. If either lateral predicate fails, the same positive-Z brake starts
 immediately, even above the staging-height brake buffer. Once measured vertical
 progress is nonnegative, a zero-translation confirmation is required and the
 XY correction runs at that higher stopped Z under the same all-55-pair
-`0.008 m`-step buffer. A successful correction above staging resumes the
-bounded pure-Z descent with the already-halved cap; only a correction at the
-staging height may enter the vertical side corridor. Thus controller-coupled
-drift is corrected while lateral authority remains available instead of being
-accumulated into a low-height correction.
+`0.008 m`-step buffer. The brake threshold and resume threshold form explicit
+hysteresis: descent stops at the strict one-step entry clearance but cannot
+resume merely by recrossing that boundary; zero confirmation or lateral
+correction must restore the larger compiled `corridor_clearance_m`. A successful
+correction above staging then resumes the bounded pure-Z descent with the
+already-halved cap; only a correction at the staging height may enter the
+vertical side corridor. Thus controller-coupled drift is corrected while
+lateral authority remains available instead of being accumulated into a
+low-height correction.
 The complete precontact structural route has a finite default budget of `240`
 actions; native episode termination and horizon-reserve checks remain
 fail-closed and are not bypassed by this route budget.
