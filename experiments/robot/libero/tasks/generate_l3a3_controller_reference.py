@@ -12651,6 +12651,14 @@ def _seek_stable_plate_contact(
             "descent_corridor_rebuffer_target": (
                 corridor_rebuffer_target.tolist()
             ),
+            "descent_motion_reversal_brake": {
+                "eef_outward_step_progress_threshold_m": 0.0,
+                "outside_clearance_step_progress_threshold_m": 0.0,
+                "threshold_rule": (
+                    "brake on either strictly negative measured response; "
+                    "no empirical Z threshold"
+                ),
+            },
             "structural_route_order": [
                 (
                     "native_center_high_to_registered_corridor_high_"
@@ -12662,7 +12670,8 @@ def _seek_stable_plate_contact(
                 ),
                 (
                     "corridor_xy_adaptive_pure_z_descent_with_position_"
-                    "tolerance_or_full_corridor_clearance_drift_brake"
+                    "tolerance_full_clearance_or_measured_inward_response_"
+                    "brake"
                 ),
                 "vertical_tail_brake_and_zero_confirmation",
                 "live_corridor_entry_or_xy_drift_correction",
@@ -13940,6 +13949,18 @@ def _seek_stable_plate_contact(
             }.intersection(
                 descent_corridor_entry_after_action["violations"]
             )
+            if current_step_response[
+                "eef_outward_step_progress_m"
+            ] < 0.0:
+                descent_corridor_lateral_violations.add(
+                    "eef_inward_step_during_pure_z_descent"
+                )
+            if current_step_response[
+                "outside_clearance_step_progress_m"
+            ] < 0.0:
+                descent_corridor_lateral_violations.add(
+                    "outside_clearance_decreased_during_pure_z_descent"
+                )
             if descent_corridor_lateral_violations:
                 vertical_tail_brake_reason = "lateral_drift"
                 structural_stage = "vertical_tail_brake"
@@ -13973,6 +13994,7 @@ def _seek_stable_plate_contact(
                         "corridor_entry_after_descent": (
                             descent_corridor_entry_after_action
                         ),
+                        "descent_step_response": current_step_response,
                     }
                 )
             elif after_eef[2] <= (

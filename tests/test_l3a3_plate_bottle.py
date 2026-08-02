@@ -3738,6 +3738,11 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
     assert "if descent_corridor_lateral_violations:" in descent_transition
     assert "strict_corridor_entry_clearance_m=(" in descent_transition
     assert '"corridor_clearance_m"' in descent_transition
+    assert '"eef_outward_step_progress_m"' in descent_transition
+    assert '"outside_clearance_step_progress_m"' in descent_transition
+    assert '"eef_inward_step_during_pure_z_descent"' in (
+        descent_transition
+    )
     assert (
         'vertical_tail_brake_reason = "lateral_drift"'
         in descent_transition
@@ -3802,15 +3807,17 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         in bounded_seek
     )
     assert (
-        '"tolerance_or_full_corridor_clearance_drift_brake"'
+        '"tolerance_full_clearance_or_measured_inward_response_"'
         in bounded_seek
     )
+    assert '"brake"' in bounded_seek
     assert '"descent_corridor_resume_clearance_m"' in bounded_seek
     assert (
         '"compiled full corridor clearance plus one structural "'
         in bounded_seek
     )
     assert "corridor_rebuffer_target[:2] += (" in bounded_seek
+    assert '"no empirical Z threshold"' in bounded_seek
     controller = CONTROLLER_REFERENCE.read_text()
     assert "after the monotone pure-Z sweep, command pure XY" not in controller
     assert "internal controller substeps" in controller
