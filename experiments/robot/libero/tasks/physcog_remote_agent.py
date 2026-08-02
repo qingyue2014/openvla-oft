@@ -1929,6 +1929,69 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "review/L3-B_bowl_order_v2_openvla_oft_task/L3-B_bowl_formal_report.json",
         ),
     ),
+    ("l3b_bowl", "prepare_v2r1_native50"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "bash",
+            "experiments/robot/libero/tasks/run_l3b_bowl_order_v2r1.sh",
+            "prepare",
+        ),
+        count_env="NUM_STATES",
+        cleanup_artifacts=(
+            "experiments/robot/libero/tasks/l3b_bowl_v2r1_eb_states.hdf5",
+            "experiments/robot/libero/tasks/l3b_bowl_v2r1_er_states.hdf5",
+            "experiments/robot/libero/tasks/l3b_bowl_v2r1_ec_states.hdf5",
+            "review/L3-B_bowl_order_v2r1_task",
+        ),
+        artifacts=(
+            "experiments/robot/libero/tasks/l3b_bowl_v2r1_eb_states.hdf5",
+            "experiments/robot/libero/tasks/l3b_bowl_v2r1_er_states.hdf5",
+            "experiments/robot/libero/tasks/l3b_bowl_v2r1_ec_states.hdf5",
+            "review/L3-B_bowl_order_v2r1_task",
+        ),
+    ),
+    ("l3b_bowl", "smoke_v2r1_pi05"): PhaseSpec(
+        command=(
+            "env",
+            "OPENPI_ROOT=/home/drwqyhappy/04-mycode/openpi-15a9616",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SMOKE_TRIALS=3",
+            "bash",
+            "experiments/robot/libero/tasks/run_l3b_bowl_order_v2r1.sh",
+            "pi05_smoke",
+        ),
+        count_env="SMOKE_TRIALS",
+        cleanup_artifacts=(
+            "experiments/logs/l3b_bowl_v2r1_pi05_server.log",
+            "review/L3-B_bowl_order_v2r1_pi05_task",
+        ),
+        artifacts=(
+            "experiments/logs/l3b_bowl_v2r1_pi05_server.log",
+            "review/L3-B_bowl_order_v2r1_pi05_task",
+        ),
+    ),
+    ("l3b_bowl", "formal_v2r1_pi05"): PhaseSpec(
+        command=(
+            "env",
+            "OPENPI_ROOT=/home/drwqyhappy/04-mycode/openpi-15a9616",
+            "RENDER_GPU_DEVICE_ID=1",
+            "bash",
+            "experiments/robot/libero/tasks/run_l3b_bowl_order_v2r1.sh",
+            "pi05_formal",
+        ),
+        count_env="NUM_STATES",
+        cleanup_artifacts=(
+            "review/L3-B_bowl_order_v2r1_pi05_task/v2r1_pi05_trajectories/formal",
+            "review/L3-B_bowl_order_v2r1_pi05_task/formal",
+            "review/L3-B_bowl_order_v2r1_pi05_task/L3-B_bowl_formal_report.json",
+        ),
+        artifacts=(
+            "review/L3-B_bowl_order_v2r1_pi05_task/v2r1_pi05_trajectories/formal",
+            "review/L3-B_bowl_order_v2r1_pi05_task/formal",
+            "review/L3-B_bowl_order_v2r1_pi05_task/L3-B_bowl_formal_report.json",
+        ),
+    ),
 }
 
 

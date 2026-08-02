@@ -374,6 +374,22 @@ def test_l3b_bowl_openvla_v2_phases_pin_gcc_for_triton():
         assert "CC=/usr/bin/gcc" in PHASES[("l3b_bowl", phase)].command
 
 
+def test_l3b_bowl_v2r1_remote_phases_are_pi05_only_and_isolated():
+    prepare = PHASES[("l3b_bowl", "prepare_v2r1_native50")]
+    smoke = PHASES[("l3b_bowl", "smoke_v2r1_pi05")]
+    formal = PHASES[("l3b_bowl", "formal_v2r1_pi05")]
+    assert any(token.endswith("run_l3b_bowl_order_v2r1.sh") for token in prepare.command)
+    assert any(path.endswith("l3b_bowl_v2r1_er_states.hdf5") for path in prepare.artifacts)
+    assert "pi05_smoke" in smoke.command
+    assert "pi05_formal" in formal.command
+    assert all("openvla_oft" not in token for spec in (prepare, smoke, formal) for token in spec.command)
+    assert all(
+        "L3-B_bowl_order_v2r1" in path or "l3b_bowl_v2r1" in path
+        for spec in (prepare, smoke, formal)
+        for path in spec.artifacts
+    )
+
+
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
     spec = PhaseSpec(command=("bash", "path with space/runner.sh", "phase"), count_env="N")
     script = build_batch_script(
