@@ -1189,9 +1189,313 @@ def test_l3a4_compiles_static_mesh_box_pairs_once_and_fails_stale():
         "fixture_local_vertex_offsets"
     ] == pytest.approx(cube)
     validate_geometry(env, [0], [1], compiled)
+    original_batch_center = float(
+        compiled["mesh_box_sphere_batch"]["moving_centers"][0, 0]
+    )
+    compiled["mesh_box_sphere_batch"]["moving_centers"][0, 0] = (
+        np.nextafter(original_batch_center, np.inf)
+    )
+    with pytest.raises(RuntimeError, match="sphere batch changed"):
+        validate_geometry(env, [0], [1], compiled)
+    compiled["mesh_box_sphere_batch"]["moving_centers"][0, 0] = (
+        original_batch_center
+    )
+    validate_geometry(env, [0], [1], compiled)
     env.sim.data.geom_xmat[1, 0] = np.nextafter(1.0, 2.0)
     with pytest.raises(RuntimeError, match="changed after compilation"):
         validate_geometry(env, [0], [1], compiled)
+
+
+def test_l3a4_mesh_box_sphere_batch_envelope_is_scalar_conservative():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    selected = [
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name
+        in {
+            "_signed_point_box_clearance",
+            "_evaluate_compiled_mesh_box_sphere_batch",
+        }
+    ]
+    namespace = {"np": np}
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=selected, type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    evaluate = namespace[
+        "_evaluate_compiled_mesh_box_sphere_batch"
+    ]
+    scalar = namespace["_signed_point_box_clearance"]
+    rng = np.random.default_rng(20260802)
+    pair_count = 7
+    sample_count = 37
+    rotations = []
+    for _ in range(pair_count):
+        orthogonal, _ = np.linalg.qr(rng.normal(size=(3, 3)))
+        if np.linalg.det(orthogonal) < 0.0:
+            orthogonal[:, 0] *= -1.0
+        rotations.append(orthogonal)
+    batch = {
+        "pair_indices": tuple(range(pair_count)),
+        "moving_centers": rng.uniform(-0.4, 0.4, (pair_count, 3)),
+        "moving_rbounds_m": rng.uniform(0.01, 0.08, pair_count),
+        "fixture_centers": rng.uniform(-0.3, 0.3, (pair_count, 3)),
+        "fixture_rotations": np.asarray(rotations),
+        "fixture_half_sizes": rng.uniform(0.02, 0.15, (pair_count, 3)),
+        "native_geom_margins_m": rng.uniform(0.0, 0.003, pair_count),
+    }
+    translations = rng.uniform(-0.15, 0.15, (sample_count, 3))
+    guard = 0.0025
+    threshold = 0.012
+    result = evaluate(batch, translations, guard, threshold)
+    assert result["usable"]
+    for sample_index, translation in enumerate(translations):
+        for pair_index in range(pair_count):
+            scalar_clearance = (
+                scalar(
+                    batch["moving_centers"][pair_index] + translation,
+                    batch["fixture_centers"][pair_index],
+                    batch["fixture_rotations"][pair_index],
+                    batch["fixture_half_sizes"][pair_index],
+                )
+                - batch["moving_rbounds_m"][pair_index]
+                - guard
+                - batch["native_geom_margins_m"][pair_index]
+            )
+            batched_clearance = result["clearances_m"][
+                sample_index, pair_index
+            ]
+            envelope = result["roundoff_envelopes_m"][
+                sample_index, pair_index
+            ]
+            assert abs(batched_clearance - scalar_clearance) <= envelope
+            if result["certified_far"][sample_index, pair_index]:
+                assert scalar_clearance > threshold
+
+    rbound = 0.017
+    boundary_batch = {
+        "pair_indices": (0,),
+        "moving_centers": np.asarray([[0.05 + rbound + threshold, 0, 0]]),
+        "moving_rbounds_m": np.asarray([rbound]),
+        "fixture_centers": np.zeros((1, 3)),
+        "fixture_rotations": np.eye(3)[None, :, :],
+        "fixture_half_sizes": np.asarray([[0.05, 0.05, 0.05]]),
+        "native_geom_margins_m": np.zeros(1),
+    }
+    boundary = evaluate(boundary_batch, np.zeros((1, 3)), 0.0, threshold)
+    assert boundary["clearances_m"][0, 0] == pytest.approx(threshold)
+    assert not boundary["certified_far"][0, 0]
+
+    nonfinite_batch = dict(boundary_batch)
+    nonfinite_batch["moving_centers"] = np.asarray([[np.nan, 0.0, 0.0]])
+    nonfinite = evaluate(
+        nonfinite_batch, np.zeros((1, 3)), 0.0, threshold
+    )
+    assert not nonfinite["usable"]
+    assert nonfinite["reason"] == "nonfinite_or_malformed_batch"
+
+
+def test_l3a4_mesh_box_batch_matches_real_shape_scalar_sweep():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    selected_names = {
+        "_cached_compiled_convex_mesh_geometry",
+        "_compile_translated_sweep_geometry",
+        "_validate_translated_sweep_geometry",
+        "_signed_point_box_clearance",
+        "_convex_mesh_aabb_threshold_distance",
+        "_compiled_obb_needs_scalar_threshold_refinement",
+        "_compiled_translated_mesh_box_clearance",
+        "_evaluate_compiled_mesh_box_sphere_batch",
+        "_translated_swept_clearance",
+    }
+    selected = [
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name in selected_names
+    ]
+    cube = np.asarray(
+        [
+            [-0.01, -0.01, -0.01],
+            [0.01, -0.01, -0.01],
+            [0.01, 0.01, -0.01],
+            [-0.01, 0.01, -0.01],
+            [-0.01, -0.01, 0.01],
+            [0.01, -0.01, 0.01],
+            [0.01, 0.01, 0.01],
+            [-0.01, 0.01, 0.01],
+        ]
+    )
+    faces = np.asarray(
+        [
+            [0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7],
+            [0, 1, 5], [0, 5, 4], [1, 2, 6], [1, 6, 5],
+            [2, 3, 7], [2, 7, 6], [3, 0, 4], [3, 4, 7],
+        ]
+    )
+    rbound = float(np.sqrt(3.0) * 0.01)
+
+    class Model:
+        ngeom = 2
+        geom_contype = np.ones(2, dtype=int)
+        geom_conaffinity = np.ones(2, dtype=int)
+        geom_type = np.asarray([7, 6], dtype=int)
+        geom_size = np.asarray([[0.0, 0.0, 0.0], [0.01, 0.01, 0.01]])
+        geom_rbound = np.asarray([rbound, rbound])
+        geom_margin = np.zeros(2)
+        geom_bodyid = np.asarray([0, 1], dtype=int)
+
+        @staticmethod
+        def body_id2name(body_id):
+            return ("moving", "fixture")[body_id]
+
+    class Data:
+        geom_xpos = np.asarray([[0.05, 0.0, 0.0], [0.0, 0.0, 0.0]])
+        geom_xmat = np.tile(np.eye(3).reshape(1, 9), (2, 1))
+
+    env = type(
+        "Env",
+        (),
+        {"sim": type("Sim", (), {"model": Model(), "data": Data()})()},
+    )()
+
+    def scalar_pair(
+        env,
+        moving_geom,
+        fixture_geom,
+        translation,
+        guard_margin,
+        **kwargs,
+    ):
+        primitive = convex_mesh_aabb_distance(
+            cube + env.sim.data.geom_xpos[moving_geom] + translation,
+            faces,
+            env.sim.model.geom_size[fixture_geom],
+        )
+        clearance = primitive - guard_margin
+        return clearance, "independent scalar 12-face cube", {
+            "primitive_clearance_m": primitive,
+            "native_geom_margin_m": 0.0,
+            "continuous_guard_m": guard_margin,
+            "net_clearance_m": clearance,
+        }
+
+    namespace = {
+        "np": np,
+        "TARGET_INSERTION_SWEEP_STEP_M": 0.005,
+        "collision_masks_compatible": lambda *args: True,
+        "_compiled_convex_mesh_geometry": (
+            lambda model, geom_id: (cube, faces, {"geom_id": int(geom_id)})
+        ),
+        "_compiled_geom_pair_clearance": scalar_pair,
+        "_compiled_geom_evidence": (
+            lambda model, geom_id, compiled_geometry_cache=None: {
+                "geom_id": int(geom_id)
+            }
+        ),
+        "_geom_name": lambda model, geom_id: ("moving", "fixture")[geom_id],
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=selected, type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    compile_geometry = namespace["_compile_translated_sweep_geometry"]
+    sweep = namespace["_translated_swept_clearance"]
+    compiled = compile_geometry(env, [0], [1], {"convex_mesh": {}})
+    sweep_arguments = (
+        env,
+        [0],
+        [1],
+        np.zeros(3),
+        np.asarray([0.03, 0.0, 0.0]),
+        np.zeros(3),
+    )
+    batch_evaluator = namespace[
+        "_evaluate_compiled_mesh_box_sphere_batch"
+    ]
+    namespace["_evaluate_compiled_mesh_box_sphere_batch"] = (
+        lambda *args, **kwargs: {
+            "usable": False,
+            "reason": "forced_scalar_test_baseline",
+        }
+    )
+    scalar_minimum, scalar_evidence = sweep(
+        *sweep_arguments,
+        stop_at_or_below=0.012,
+        compiled_sweep_geometry=compiled,
+    )
+    namespace["_evaluate_compiled_mesh_box_sphere_batch"] = batch_evaluator
+    batched_minimum, batched_evidence = sweep(
+        *sweep_arguments,
+        stop_at_or_below=0.012,
+        compiled_sweep_geometry=compiled,
+    )
+    assert batched_minimum == scalar_minimum
+    assert batched_evidence["limiting_pair"] == scalar_evidence[
+        "limiting_pair"
+    ]
+    assert batched_evidence["full_sweep_evaluated"]
+    assert scalar_evidence["full_sweep_evaluated"]
+    assert batched_evidence["compatible_pair_evaluations"] == (
+        scalar_evidence["compatible_pair_evaluations"]
+    )
+    assert scalar_evidence["exact_pair_clearances_computed"] == 7
+    assert batched_evidence["exact_pair_clearances_computed"] == 1
+    assert batched_evidence["vectorized_mesh_box_certified_skips"] > 0
+    assert batched_evidence[
+        "vectorized_mesh_box_scalar_minimum_replays"
+    ] > 0
+    assert batched_evidence[
+        "vectorized_mesh_box_scalar_boundary_fallbacks"
+    ] == 0
+    independent_clearances = [
+        convex_mesh_aabb_distance(
+            cube + env.sim.data.geom_xpos[0] + translation,
+            faces,
+            env.sim.model.geom_size[1],
+        )
+        - batched_evidence["continuous_sweep_guard_m"]
+        for translation in np.linspace(
+            np.zeros(3), np.asarray([0.03, 0.0, 0.0]), 7
+        )
+    ]
+    assert (batched_minimum <= 0.012) == (
+        min(independent_clearances) <= 0.012
+    )
+
+    boundary_translation = np.asarray(
+        [0.01 + rbound + 0.012 - 0.05, 0.0, 0.0]
+    )
+    boundary_minimum, boundary_evidence = sweep(
+        env,
+        [0],
+        [1],
+        boundary_translation,
+        boundary_translation,
+        np.zeros(3),
+        stop_at_or_below=0.012,
+        compiled_sweep_geometry=compiled,
+    )
+    assert boundary_minimum > 0.012
+    assert boundary_evidence[
+        "vectorized_mesh_box_scalar_boundary_fallbacks"
+    ] == boundary_evidence["compatible_pair_evaluations"]
+    assert boundary_evidence["vectorized_mesh_box_certified_skips"] == 0
 
 
 def test_l3a4_compiled_mesh_box_threshold_cache_matches_and_refines_boundary():
@@ -1728,6 +2032,7 @@ def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose(
     assert "exact_pairs=" in progress
     assert "full_pairs=" in progress
     assert "boundary_refinements=" in progress
+    assert "mesh_batch=" in progress
     assert "witness=" in progress
     assert "witness_status=" in progress
 

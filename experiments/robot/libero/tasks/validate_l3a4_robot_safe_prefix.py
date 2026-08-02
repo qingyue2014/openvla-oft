@@ -3510,6 +3510,70 @@ def _compile_translated_sweep_geometry(
         pair_index: row_index
         for row_index, pair_index in enumerate(obb_pair_indices)
     }
+    mesh_box_pair_indices = tuple(sorted(mesh_box_pair_geometry))
+    mesh_box_sphere_batch = None
+    if mesh_box_pair_indices:
+        mesh_box_sphere_batch = {
+            "pair_indices": mesh_box_pair_indices,
+            "moving_centers": np.asarray(
+                [
+                    mesh_box_pair_geometry[pair_index][
+                        "moving_center"
+                    ]
+                    for pair_index in mesh_box_pair_indices
+                ],
+                dtype=float,
+            ),
+            "moving_rbounds_m": np.asarray(
+                [
+                    mesh_box_pair_geometry[pair_index][
+                        "moving_rbound_m"
+                    ]
+                    for pair_index in mesh_box_pair_indices
+                ],
+                dtype=float,
+            ),
+            "fixture_centers": np.asarray(
+                [
+                    mesh_box_pair_geometry[pair_index][
+                        "fixture_center"
+                    ]
+                    for pair_index in mesh_box_pair_indices
+                ],
+                dtype=float,
+            ),
+            "fixture_rotations": np.asarray(
+                [
+                    mesh_box_pair_geometry[pair_index][
+                        "fixture_rotation"
+                    ]
+                    for pair_index in mesh_box_pair_indices
+                ],
+                dtype=float,
+            ),
+            "fixture_half_sizes": np.asarray(
+                [
+                    mesh_box_pair_geometry[pair_index][
+                        "fixture_half_size"
+                    ]
+                    for pair_index in mesh_box_pair_indices
+                ],
+                dtype=float,
+            ),
+            "native_geom_margins_m": np.asarray(
+                [
+                    mesh_box_pair_geometry[pair_index][
+                        "native_geom_margin_m"
+                    ]
+                    for pair_index in mesh_box_pair_indices
+                ],
+                dtype=float,
+            ),
+        }
+    pair_to_mesh_box_row = {
+        pair_index: row_index
+        for row_index, pair_index in enumerate(mesh_box_pair_indices)
+    }
     return {
         "model_identity": id(model),
         "moving_geoms": moving_geoms,
@@ -3526,6 +3590,8 @@ def _compile_translated_sweep_geometry(
         "pair_to_obb_row": pair_to_obb_row,
         "obb_batch": obb_batch,
         "mesh_box_pair_geometry": mesh_box_pair_geometry,
+        "mesh_box_sphere_batch": mesh_box_sphere_batch,
+        "pair_to_mesh_box_row": pair_to_mesh_box_row,
     }
 
 
@@ -3561,6 +3627,105 @@ def _validate_translated_sweep_geometry(
     ):
         raise RuntimeError(
             "compiled translated sweep geometry changed after compilation"
+        )
+    mesh_box_pair_geometry = compiled_sweep_geometry[
+        "mesh_box_pair_geometry"
+    ]
+    expected_mesh_pair_indices = tuple(
+        sorted(mesh_box_pair_geometry)
+    )
+    mesh_box_sphere_batch = compiled_sweep_geometry[
+        "mesh_box_sphere_batch"
+    ]
+    if expected_mesh_pair_indices:
+        expected_pair_to_row = {
+            pair_index: row_index
+            for row_index, pair_index in enumerate(
+                expected_mesh_pair_indices
+            )
+        }
+        expected_batch_arrays = {
+            "moving_centers": np.asarray(
+                [
+                    mesh_box_pair_geometry[pair_index][
+                        "moving_center"
+                    ]
+                    for pair_index in expected_mesh_pair_indices
+                ],
+                dtype=float,
+            ),
+            "moving_rbounds_m": np.asarray(
+                [
+                    mesh_box_pair_geometry[pair_index][
+                        "moving_rbound_m"
+                    ]
+                    for pair_index in expected_mesh_pair_indices
+                ],
+                dtype=float,
+            ),
+            "fixture_centers": np.asarray(
+                [
+                    mesh_box_pair_geometry[pair_index][
+                        "fixture_center"
+                    ]
+                    for pair_index in expected_mesh_pair_indices
+                ],
+                dtype=float,
+            ),
+            "fixture_rotations": np.asarray(
+                [
+                    mesh_box_pair_geometry[pair_index][
+                        "fixture_rotation"
+                    ]
+                    for pair_index in expected_mesh_pair_indices
+                ],
+                dtype=float,
+            ),
+            "fixture_half_sizes": np.asarray(
+                [
+                    mesh_box_pair_geometry[pair_index][
+                        "fixture_half_size"
+                    ]
+                    for pair_index in expected_mesh_pair_indices
+                ],
+                dtype=float,
+            ),
+            "native_geom_margins_m": np.asarray(
+                [
+                    mesh_box_pair_geometry[pair_index][
+                        "native_geom_margin_m"
+                    ]
+                    for pair_index in expected_mesh_pair_indices
+                ],
+                dtype=float,
+            ),
+        }
+        if (
+            not isinstance(mesh_box_sphere_batch, dict)
+            or tuple(mesh_box_sphere_batch.get("pair_indices", ()))
+            != expected_mesh_pair_indices
+            or compiled_sweep_geometry["pair_to_mesh_box_row"]
+            != expected_pair_to_row
+            or any(
+                not np.array_equal(
+                    np.asarray(
+                        mesh_box_sphere_batch.get(name), dtype=float
+                    ),
+                    expected,
+                )
+                for name, expected in expected_batch_arrays.items()
+            )
+        ):
+            raise RuntimeError(
+                "compiled translated mesh-box sphere batch changed after "
+                "compilation"
+            )
+    elif (
+        mesh_box_sphere_batch is not None
+        or compiled_sweep_geometry["pair_to_mesh_box_row"]
+    ):
+        raise RuntimeError(
+            "compiled translated mesh-box sphere batch is unexpected"
         )
 
 
@@ -3663,6 +3828,160 @@ def _compiled_translated_mesh_box_clearance(
     return clearance, method, components, scalar_boundary_refinement
 
 
+def _evaluate_compiled_mesh_box_sphere_batch(
+    compiled_batch,
+    translations,
+    guard_margin,
+    stop_at_or_below,
+):
+    """Conservatively batch the existing mesh-box sphere lower bound."""
+    translations = np.asarray(translations, dtype=float)
+    moving_centers = np.asarray(
+        compiled_batch["moving_centers"], dtype=float
+    )
+    moving_rbounds = np.asarray(
+        compiled_batch["moving_rbounds_m"], dtype=float
+    )
+    fixture_centers = np.asarray(
+        compiled_batch["fixture_centers"], dtype=float
+    )
+    fixture_rotations = np.asarray(
+        compiled_batch["fixture_rotations"], dtype=float
+    )
+    fixture_half_sizes = np.asarray(
+        compiled_batch["fixture_half_sizes"], dtype=float
+    )
+    native_geom_margins = np.asarray(
+        compiled_batch["native_geom_margins_m"], dtype=float
+    )
+    pair_count = len(compiled_batch["pair_indices"])
+    if (
+        translations.ndim != 2
+        or translations.shape[1:] != (3,)
+        or moving_centers.shape != (pair_count, 3)
+        or moving_rbounds.shape != (pair_count,)
+        or fixture_centers.shape != (pair_count, 3)
+        or fixture_rotations.shape != (pair_count, 3, 3)
+        or fixture_half_sizes.shape != (pair_count, 3)
+        or native_geom_margins.shape != (pair_count,)
+        or not np.all(np.isfinite(translations))
+        or not np.all(np.isfinite(moving_centers))
+        or not np.all(np.isfinite(moving_rbounds))
+        or not np.all(np.isfinite(fixture_centers))
+        or not np.all(np.isfinite(fixture_rotations))
+        or not np.all(np.isfinite(fixture_half_sizes))
+        or not np.all(np.isfinite(native_geom_margins))
+        or np.any(moving_rbounds < 0.0)
+        or np.any(fixture_half_sizes <= 0.0)
+        or not np.isfinite(float(guard_margin))
+        or (
+            stop_at_or_below is not None
+            and not np.isfinite(float(stop_at_or_below))
+        )
+    ):
+        return {
+            "usable": False,
+            "reason": "nonfinite_or_malformed_batch",
+        }
+    deltas = (
+        moving_centers[None, :, :]
+        + translations[:, None, :]
+        - fixture_centers[None, :, :]
+    )
+    fixture_local_centers = np.einsum(
+        "pji,spj->spi",
+        fixture_rotations,
+        deltas,
+        optimize=False,
+    )
+    absolute_local = np.abs(fixture_local_centers)
+    outside = np.maximum(
+        absolute_local - fixture_half_sizes[None, :, :], 0.0
+    )
+    outside_distance = np.linalg.norm(outside, axis=2)
+    inside_distance = -np.min(
+        fixture_half_sizes[None, :, :] - absolute_local,
+        axis=2,
+    )
+    signed_point_box = np.where(
+        outside_distance > 0.0,
+        outside_distance,
+        inside_distance,
+    )
+    clearances = (
+        signed_point_box
+        - moving_rbounds[None, :]
+        - float(guard_margin)
+        - native_geom_margins[None, :]
+    )
+
+    # A three-term dot product has gamma_3 relative error.  The signed
+    # distance to an AABB is 1-Lipschitz in its local point, so this much
+    # larger 4096-epsilon envelope covers both the batched and scalar dot,
+    # input add/subtract, abs/max/min, norm, and final margin arithmetic.
+    term_scale = np.max(
+        np.einsum(
+            "pji,spj->spi",
+            np.abs(fixture_rotations),
+            np.abs(deltas),
+            optimize=False,
+        ),
+        axis=2,
+    )
+    arithmetic_scale = np.maximum.reduce(
+        (
+            np.ones_like(clearances),
+            term_scale,
+            np.max(absolute_local, axis=2),
+            np.broadcast_to(
+                np.max(fixture_half_sizes, axis=1)[None, :],
+                clearances.shape,
+            ),
+            np.broadcast_to(
+                moving_rbounds[None, :], clearances.shape
+            ),
+            np.broadcast_to(
+                native_geom_margins[None, :], clearances.shape
+            ),
+            np.full_like(clearances, abs(float(guard_margin))),
+        )
+    )
+    roundoff_envelopes = (
+        4096.0 * np.finfo(float).eps * arithmetic_scale
+    )
+    if (
+        not np.all(np.isfinite(clearances))
+        or not np.all(np.isfinite(roundoff_envelopes))
+    ):
+        return {
+            "usable": False,
+            "reason": "nonfinite_evaluation",
+        }
+    decision_boundary = max(
+        0.0,
+        0.0
+        if stop_at_or_below is None
+        else float(stop_at_or_below),
+    )
+    certified_far = (
+        clearances - roundoff_envelopes > decision_boundary
+    )
+    return {
+        "usable": True,
+        "reason": None,
+        "clearances_m": clearances,
+        "roundoff_envelopes_m": roundoff_envelopes,
+        "certified_far": certified_far,
+        "decision_boundary_m": float(decision_boundary),
+        "roundoff_derivation": (
+            "4096*eps*max(1,abs-dot-term scale,local coordinate,box "
+            "half-size,rbound,native margin,sweep guard); signed AABB "
+            "distance is 1-Lipschitz; boundary and possible-minimum "
+            "values are replayed by the scalar helper"
+        ),
+    }
+
+
 def _translated_swept_clearance(
     env,
     moving_geoms,
@@ -3730,6 +4049,9 @@ def _translated_swept_clearance(
     cached_witness_rejected = False
     cached_witness_clearance = None
     cached_witness_status = "not_provided"
+    mesh_box_batch_certified_skips = 0
+    mesh_box_batch_scalar_minimum_replays = 0
+    mesh_box_batch_scalar_boundary_fallbacks = 0
 
     def limiting_record(
         sample_index,
@@ -3870,17 +4192,23 @@ def _translated_swept_clearance(
                 )
     batched_obb_clearances = None
     pair_to_obb_row = {}
+    batched_mesh_box_spheres = None
+    pair_to_mesh_box_row = {}
+    translations = None
     if (
         not threshold_rejection_seen
         and
         compiled_sweep_geometry is not None
-        and compiled_sweep_geometry["obb_pair_indices"]
     ):
         translations = (
             start[None, :]
             + fractions[:, None] * (end - start)[None, :]
             - reference[None, :]
         )
+    if (
+        translations is not None
+        and compiled_sweep_geometry["obb_pair_indices"]
+    ):
         batched_obb_clearances = (
             _evaluate_compiled_exact_obb_sat_batch(
                 compiled_sweep_geometry["obb_batch"], translations
@@ -3891,6 +4219,23 @@ def _translated_swept_clearance(
             len(fractions)
             * len(compiled_sweep_geometry["obb_pair_indices"])
         )
+    if (
+        translations is not None
+        and compiled_sweep_geometry["mesh_box_sphere_batch"]
+        is not None
+    ):
+        batched_mesh_box_spheres = (
+            _evaluate_compiled_mesh_box_sphere_batch(
+                compiled_sweep_geometry["mesh_box_sphere_batch"],
+                translations,
+                sweep_guard,
+                stop_at_or_below,
+            )
+        )
+        if batched_mesh_box_spheres["usable"]:
+            pair_to_mesh_box_row = compiled_sweep_geometry[
+                "pair_to_mesh_box_row"
+            ]
     geom_margins = None
     if pair_to_obb_row:
         geom_margins = np.asarray(
@@ -3911,6 +4256,29 @@ def _translated_swept_clearance(
             compatible_pairs += 1
             obb_row = pair_to_obb_row.get(pair_index)
             if pair_index in mesh_box_pair_geometry:
+                mesh_box_row = pair_to_mesh_box_row.get(pair_index)
+                if (
+                    mesh_box_row is not None
+                    and batched_mesh_box_spheres["certified_far"][
+                        sample_index, mesh_box_row
+                    ]
+                ):
+                    batched_clearance = float(
+                        batched_mesh_box_spheres["clearances_m"][
+                            sample_index, mesh_box_row
+                        ]
+                    )
+                    roundoff_envelope = float(
+                        batched_mesh_box_spheres[
+                            "roundoff_envelopes_m"
+                        ][sample_index, mesh_box_row]
+                    )
+                    if batched_clearance - roundoff_envelope >= minimum:
+                        mesh_box_batch_certified_skips += 1
+                        continue
+                    mesh_box_batch_scalar_minimum_replays += 1
+                else:
+                    mesh_box_batch_scalar_boundary_fallbacks += 1
                 (
                     clearance,
                     method,
@@ -4048,6 +4416,30 @@ def _translated_swept_clearance(
         ),
         "candidate_invariant_mesh_box_pair_count": len(
             mesh_box_pair_geometry
+        ),
+        "vectorized_mesh_box_sphere_batch_usable": bool(
+            batched_mesh_box_spheres is not None
+            and batched_mesh_box_spheres["usable"]
+        ),
+        "vectorized_mesh_box_sphere_batch_fallback_reason": (
+            None
+            if batched_mesh_box_spheres is None
+            else batched_mesh_box_spheres["reason"]
+        ),
+        "vectorized_mesh_box_certified_skips": int(
+            mesh_box_batch_certified_skips
+        ),
+        "vectorized_mesh_box_scalar_minimum_replays": int(
+            mesh_box_batch_scalar_minimum_replays
+        ),
+        "vectorized_mesh_box_scalar_boundary_fallbacks": int(
+            mesh_box_batch_scalar_boundary_fallbacks
+        ),
+        "vectorized_mesh_box_roundoff_derivation": (
+            None
+            if batched_mesh_box_spheres is None
+            or not batched_mesh_box_spheres["usable"]
+            else batched_mesh_box_spheres["roundoff_derivation"]
         ),
         "cached_rejection_witness_attempted": (
             cached_witness_attempted
@@ -4614,6 +5006,10 @@ def _compiled_target_grasp_clearance(
         "cached_rejection_witness_status_counts": {
             status: 0 for status in witness_status_names
         },
+        "vectorized_mesh_box_certified_skips": 0,
+        "vectorized_mesh_box_scalar_minimum_replays": 0,
+        "vectorized_mesh_box_scalar_boundary_fallbacks": 0,
+        "vectorized_mesh_box_unusable_sweeps": 0,
     }
     for candidate_index, candidate_spec in enumerate(
         ordered_candidate_specs
@@ -4767,6 +5163,39 @@ def _compiled_target_grasp_clearance(
                     evidence[
                         "scalar_threshold_boundary_refinement_count"
                     ]
+                )
+                prefilter_counters[
+                    "vectorized_mesh_box_certified_skips"
+                ] += int(
+                    evidence.get(
+                        "vectorized_mesh_box_certified_skips", 0
+                    )
+                )
+                prefilter_counters[
+                    "vectorized_mesh_box_scalar_minimum_replays"
+                ] += int(
+                    evidence.get(
+                        "vectorized_mesh_box_scalar_minimum_replays", 0
+                    )
+                )
+                prefilter_counters[
+                    "vectorized_mesh_box_scalar_boundary_fallbacks"
+                ] += int(
+                    evidence.get(
+                        "vectorized_mesh_box_scalar_boundary_fallbacks",
+                        0,
+                    )
+                )
+                prefilter_counters[
+                    "vectorized_mesh_box_unusable_sweeps"
+                ] += int(
+                    evidence.get(
+                        "candidate_invariant_mesh_box_pair_count", 0
+                    )
+                    > 0
+                    and not evidence.get(
+                        "vectorized_mesh_box_sphere_batch_usable", True
+                    )
                 )
                 prefilter_counters[
                     "cached_rejection_witness_attempts"
@@ -4958,6 +5387,11 @@ def _compiled_target_grasp_clearance(
                     f"{prefilter_counters['full_sweep_pair_evaluations']} "
                     "boundary_refinements="
                     f"{prefilter_counters['scalar_threshold_boundary_refinements']} "
+                    "mesh_batch="
+                    f"{prefilter_counters['vectorized_mesh_box_certified_skips']}/"
+                    f"{prefilter_counters['vectorized_mesh_box_scalar_minimum_replays']}/"
+                    f"{prefilter_counters['vectorized_mesh_box_scalar_boundary_fallbacks']}/"
+                    f"{prefilter_counters['vectorized_mesh_box_unusable_sweeps']} "
                     "witness="
                     f"{prefilter_counters['cached_rejection_witness_attempts']}/"
                     f"{prefilter_counters['cached_rejection_witness_rejections']}/"
