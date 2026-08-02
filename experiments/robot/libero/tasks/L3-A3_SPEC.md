@@ -639,6 +639,14 @@ inside `0.050 mm` before handoff. The action remains one-sided outward/+Z,
 zero-rotation, runtime-native bounded, and protected by the unchanged
 `1.550 mm` live reserves. No formal threshold, task field, inventory, state,
 target, or structural budget changes.
+Job503695 failed closed inside the response-balance compiler before its action
+could advance the simulator, but the first implementation collapsed all
+native-bound, live-reserve, guard, predecessor-action, response, tolerance, and
+decrement checks into one generic exception. The deterministic first balance
+input reconstructs successfully, so no threshold or action is changed for the
+diagnostic rerun. Every validation predicate and its exact runtime scalar is
+now serialized on rejection; this is diagnostic evidence only and cannot
+authorize or relax a failed gate.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

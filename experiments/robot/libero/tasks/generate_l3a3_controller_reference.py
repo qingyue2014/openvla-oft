@@ -9448,33 +9448,104 @@ def _compiled_hazard_release_response_balance_action(
     damping_guard = _outside_side_neutral_damping_guard_evidence(
         outside_side_guard, damping_active_before=True
     )
-    if (
-        not native_action_spec.get("runtime_resolved", False)
-        or native_action_spec.get("action_dimension") != 7
-        or native_low.shape != (7,)
-        or native_high.shape != (7,)
-        or previous_action.shape != (3,)
-        or outward_direction.shape != (2,)
-        or not np.all(np.isfinite(native_low))
-        or not np.all(np.isfinite(native_high))
-        or not np.all(np.isfinite(previous_action))
-        or not np.all(np.isfinite(outward_direction))
-        or not np.all(native_low < native_high)
-        or not np.all(native_low[:6] < 0.0)
-        or not np.all(native_high[:6] > 0.0)
-        or not (native_low[6] <= gripper <= native_high[6])
-        or not reserve_evidence["accepted"]
-        or not damping_guard["damping_guard_authorized"]
-        or not np.isfinite(vertical_response)
-        or not np.isfinite(eef_outward_response)
-        or not np.isfinite(clearance_response)
-        or not np.isfinite(maximum_settled_step_response_m)
-        or maximum_settled_step_response_m <= 0.0
-        or not np.isfinite(maximum_axis_decrement_action)
-        or maximum_axis_decrement_action <= 0.0
-    ):
+    validation_checks = {
+        "native_runtime_resolved": bool(
+            native_action_spec.get("runtime_resolved", False)
+        ),
+        "native_action_dimension_is_7": bool(
+            native_action_spec.get("action_dimension") == 7
+        ),
+        "native_low_shape_is_7": bool(native_low.shape == (7,)),
+        "native_high_shape_is_7": bool(native_high.shape == (7,)),
+        "previous_action_shape_is_3": bool(
+            previous_action.shape == (3,)
+        ),
+        "outward_direction_shape_is_2": bool(
+            outward_direction.shape == (2,)
+        ),
+        "native_low_finite": bool(np.all(np.isfinite(native_low))),
+        "native_high_finite": bool(np.all(np.isfinite(native_high))),
+        "previous_action_finite": bool(
+            np.all(np.isfinite(previous_action))
+        ),
+        "outward_direction_finite": bool(
+            np.all(np.isfinite(outward_direction))
+        ),
+        "native_interval_ordered": bool(
+            native_low.shape == (7,)
+            and native_high.shape == (7,)
+            and np.all(native_low < native_high)
+        ),
+        "native_translation_straddles_zero": bool(
+            native_low.shape == (7,)
+            and native_high.shape == (7,)
+            and np.all(native_low[:6] < 0.0)
+            and np.all(native_high[:6] > 0.0)
+        ),
+        "gripper_inside_native_bounds": bool(
+            native_low.shape == (7,)
+            and native_high.shape == (7,)
+            and native_low[6] <= gripper <= native_high[6]
+        ),
+        "live_reserves_accepted": bool(reserve_evidence["accepted"]),
+        "damping_guard_authorized": bool(
+            damping_guard["damping_guard_authorized"]
+        ),
+        "vertical_response_finite": bool(
+            np.isfinite(vertical_response)
+        ),
+        "eef_outward_response_finite": bool(
+            np.isfinite(eef_outward_response)
+        ),
+        "clearance_response_finite": bool(
+            np.isfinite(clearance_response)
+        ),
+        "settle_tolerance_positive_finite": bool(
+            np.isfinite(maximum_settled_step_response_m)
+            and maximum_settled_step_response_m > 0.0
+        ),
+        "axis_decrement_positive_finite": bool(
+            np.isfinite(maximum_axis_decrement_action)
+            and maximum_axis_decrement_action > 0.0
+        ),
+    }
+    validation_violations = [
+        name
+        for name, accepted in validation_checks.items()
+        if not accepted
+    ]
+    if validation_violations:
         raise RuntimeError(
-            "hazard-release response balance lacks registered evidence"
+            "hazard-release response balance lacks registered evidence: "
+            + json.dumps(
+                {
+                    "violations": validation_violations,
+                    "checks": validation_checks,
+                    "native_low": native_low.tolist(),
+                    "native_high": native_high.tolist(),
+                    "gripper": float(gripper),
+                    "previous_action": previous_action.tolist(),
+                    "outward_direction": outward_direction.tolist(),
+                    "previous_step_response": {
+                        "vertical_step_progress_m": vertical_response,
+                        "eef_outward_step_progress_m": (
+                            eef_outward_response
+                        ),
+                        "outside_clearance_step_progress_m": (
+                            clearance_response
+                        ),
+                    },
+                    "maximum_settled_step_response_m": (
+                        maximum_settled_step_response_m
+                    ),
+                    "maximum_axis_decrement_action": (
+                        maximum_axis_decrement_action
+                    ),
+                    "reserve_evidence": reserve_evidence,
+                    "damping_guard": damping_guard,
+                },
+                sort_keys=True,
+            )
         )
     outward_norm = float(np.linalg.norm(outward_direction))
     if abs(outward_norm - 1.0) > 1e-7:
