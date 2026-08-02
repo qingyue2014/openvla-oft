@@ -5554,10 +5554,14 @@ def _fixed_safe_z_lateral_hold_action(
     positive_z_release_slew_bypass_overshoot_threshold_m = float(
         3.0 * vertical_position_tolerance_m
     )
+    positive_z_release_slew_bypass_projected_overshoot_m = float(
+        max(0.0, -position_error_m)
+        + max(0.0, measured_vertical_step_progress_m)
+    )
     positive_z_release_slew_bypass_requested = bool(
         above_safe_z_band
         and measured_vertical_step_progress_m >= 0.0
-        and -position_error_m
+        and positive_z_release_slew_bypass_projected_overshoot_m
         > positive_z_release_slew_bypass_overshoot_threshold_m
     )
     if release_slew_enabled:
@@ -5732,6 +5736,9 @@ def _fixed_safe_z_lateral_hold_action(
         "positive_z_release_slew_bypass_overshoot_threshold_m": (
             positive_z_release_slew_bypass_overshoot_threshold_m
         ),
+        "positive_z_release_slew_bypass_projected_overshoot_m": (
+            positive_z_release_slew_bypass_projected_overshoot_m
+        ),
         "positive_z_release_slew_bypass_reason": (
             "above_band_nonnegative_response"
             if positive_z_release_slew_bypass_requested
@@ -5839,9 +5846,8 @@ def _fixed_safe_z_lateral_hold_action(
             "captured_safe_z_hold_continues_until_stability_confirmation": (
                 True
             ),
-            "above_band_unload_bypass_requires_three_tolerance_overshoot": (
-                True
-            ),
+            "above_band_unload_bypass_requires_projected_three_tolerance_"
+            "overshoot": True,
             "vertical_capture_removes_only_inward_component": True,
             "outside_recovery_preserves_bounded_tangential_return": True,
             "first_stable_frame_uses_neutral_z_confirmation": True,

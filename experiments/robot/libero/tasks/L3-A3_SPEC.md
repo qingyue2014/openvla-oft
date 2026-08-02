@@ -805,6 +805,18 @@ exceeds three existing `0.4 mm` safe-Z position tolerances. Beyond that derived
 changes no acceptance threshold, route, budget, task, inventory, state, prompt,
 goal, or intervention.
 
+Job503894 exposed why current height alone cannot select that unload. At step
+212 the EEF was `1.077869 mm` above safe Z, just inside the derived `1.2 mm`
+boundary, but was already rising by `0.455531 mm`. Release slew replaced the
+guard-bounded `-0.024862` Z action with `+0.15`; the next frame rose another
+`0.354800 mm` and the left finger lost rim-center coverage. The exact physical
+gate stopped immediately. The bypass comparison now uses current upward
+overshoot plus the nonnegative measured vertical response. Its one-response
+projection was `1.533400 mm` for Job503894 and therefore selects the existing
+guard-bounded unload. The earlier Job503891 shallow case projects to only
+`0.983951 mm` and retains the existing release limit. No physical threshold,
+route, budget, task, inventory, state, prompt, goal, or intervention changes.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

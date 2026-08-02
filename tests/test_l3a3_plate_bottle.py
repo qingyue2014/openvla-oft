@@ -1377,6 +1377,9 @@ def test_fixed_safe_z_lateral_hold_unloads_job503872_upward_overshoot():
     assert evidence[
         "positive_z_release_slew_bypass_overshoot_threshold_m"
     ] == pytest.approx(0.0012)
+    assert evidence[
+        "positive_z_release_slew_bypass_projected_overshoot_m"
+    ] == pytest.approx(0.0017959168091106874)
     assert evidence["predicted_table_clearance_m"] > 0.0004
     assert evidence["proof"][
         "safe_z_upward_overshoot_uses_guard_bounded_pd_command"
@@ -1573,8 +1576,12 @@ def test_fixed_safe_z_lateral_hold_rate_limits_job503891_shallow_overshoot():
     )
     assert evidence["positive_z_release_slew_bypass_requested"] is False
     assert evidence["positive_z_release_slew_applied"] is True
+    assert evidence[
+        "positive_z_release_slew_bypass_projected_overshoot_m"
+    ] == pytest.approx(0.0009839510292306564)
     assert evidence["proof"][
-        "above_band_unload_bypass_requires_three_tolerance_overshoot"
+        "above_band_unload_bypass_requires_projected_three_tolerance_"
+        "overshoot"
     ] is True
 
 
@@ -1631,6 +1638,67 @@ def test_fixed_safe_z_lateral_hold_tracks_job503891_after_xy_entry():
     ] == pytest.approx(-0.009522394211666785)
     assert evidence["proof"][
         "captured_safe_z_hold_continues_until_stability_confirmation"
+    ] is True
+
+
+def test_fixed_safe_z_lateral_hold_unloads_job503894_projected_overshoot():
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": (-np.ones(7, dtype=float)).tolist(),
+        "high": np.ones(7, dtype=float).tolist(),
+        "runtime_resolved": True,
+    }
+    action, evidence = _fixed_safe_z_lateral_hold_action(
+        current_eef=np.array(
+            [0.13290290618253883, -0.02376806705288844, 0.921659157723341]
+        ),
+        lateral_target_xy=np.array(
+            [0.13242106705090634, -0.02850777957668001]
+        ),
+        lateral_position_tolerance_m=0.005,
+        fixed_safe_z_m=0.920581288496378,
+        vertical_position_tolerance_m=0.0004,
+        measured_vertical_step_progress_m=0.0004555306556717209,
+        measured_outward_step_progress_m=0.00009448902945910498,
+        outside_side_guard={
+            "minimum_outside_clearance_m": 0.00159224907048984,
+            "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+            "finger_table_vertical_clearance_m": 0.00901865727212825,
+            "required_finger_table_clearance_m": np.nextafter(
+                0.0, np.inf
+            ),
+        },
+        outward_direction_xy=np.array([1.0, 0.0]),
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_lateral_translation_action=0.005,
+        maximum_safety_brake_action=0.20,
+        strict_outside_clearance_m=0.0004,
+        strict_table_clearance_m=0.0004,
+        closed_loop_hazard_response_bound_m=0.0011,
+        full_outward_brake_clearance_m=0.00095,
+        progress_resolution_m=0.00005,
+        derivative_gain=2.0,
+        native_action_spec=native_spec,
+        previous_commanded_action_xyz=np.array([0.20, 0.0, 0.20]),
+        maximum_positive_safety_release_action=0.05,
+    )
+    assert action[:3] == pytest.approx(
+        [0.15, 0.0, -0.02486163172882999]
+    )
+    assert evidence["positive_z_release_slew_bypass_requested"] is True
+    assert evidence["positive_z_release_slew_applied"] is False
+    assert evidence[
+        "positive_z_release_slew_bypass_projected_overshoot_m"
+    ] == pytest.approx(0.0015333998826346784)
+    assert evidence[
+        "positive_z_release_slew_bypass_overshoot_threshold_m"
+    ] == pytest.approx(0.0012)
+    assert evidence["predicted_table_clearance_m"] > 0.0004
+    assert evidence["proof"][
+        "above_band_unload_bypass_requires_projected_three_tolerance_"
+        "overshoot"
     ] is True
 
 
