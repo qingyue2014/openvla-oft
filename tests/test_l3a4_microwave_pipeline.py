@@ -352,6 +352,78 @@ def test_l3a4_mesh_box_threshold_witness_is_exact_and_pass_is_full():
     assert overlapping_evidence["threshold_witness_seen"] is True
 
 
+def test_l3a4_mesh_box_threshold_decisions_match_independent_replay():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    function = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_convex_mesh_aabb_threshold_distance"
+    )
+    namespace = {
+        "np": np,
+        "convex_mesh_aabb_distance": convex_mesh_aabb_distance,
+        "triangle_aabb_distance": triangle_aabb_distance,
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=[function], type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    threshold_distance = namespace[
+        "_convex_mesh_aabb_threshold_distance"
+    ]
+    cube = np.asarray(
+        [
+            [-0.5, -0.5, -0.5],
+            [0.5, -0.5, -0.5],
+            [0.5, 0.5, -0.5],
+            [-0.5, 0.5, -0.5],
+            [-0.5, -0.5, 0.5],
+            [0.5, -0.5, 0.5],
+            [0.5, 0.5, 0.5],
+            [-0.5, 0.5, 0.5],
+        ]
+    )
+    faces = np.asarray(
+        [
+            [0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7],
+            [0, 1, 5], [0, 5, 4], [1, 2, 6], [1, 6, 5],
+            [2, 3, 7], [2, 7, 6], [3, 0, 4], [3, 4, 7],
+        ]
+    )
+    half = np.asarray([0.5, 0.5, 0.5])
+    rng = np.random.default_rng(20260731)
+    translations = rng.uniform(
+        low=[0.65, -0.8, -0.8],
+        high=[2.25, 0.8, 0.8],
+        size=(48, 3),
+    )
+    thresholds = (-0.001, 0.0, 0.005, 0.05, 0.25)
+    for translation in translations:
+        translated = cube + translation
+        independent = convex_mesh_aabb_distance(
+            translated, faces, half
+        )
+        for threshold in thresholds:
+            accelerated, _ = threshold_distance(
+                translated, faces, half, threshold
+            )
+            assert (accelerated <= threshold) == (
+                independent <= threshold
+            )
+            if independent > threshold:
+                assert accelerated == pytest.approx(
+                    independent, abs=2e-15
+                )
+
+
 def test_l3a4_decodes_compiled_mujoco_convex_mesh_graph():
     source = ROBOT_SAFE_PREFIX.read_text()
     module = ast.parse(source)
@@ -662,6 +734,24 @@ def test_l3a4_translated_sweep_fail_fast_preserves_threshold_decision():
 
     calls.clear()
     force_pass[0] = False
+    changed_grid_minimum, changed_grid_evidence = sweep(
+        Env(),
+        [0],
+        [1],
+        np.zeros(3),
+        np.asarray([0.005, 0.0, 0.0]),
+        np.zeros(3),
+        stop_at_or_below=0.0,
+        compiled_geometry_cache=cache,
+        cached_rejection_witness=witness,
+    )
+    assert changed_grid_minimum == pytest.approx(-0.001)
+    assert len(calls) == 2
+    assert changed_grid_evidence[
+        "cached_rejection_witness_attempted"
+    ] is False
+
+    calls.clear()
     full_minimum, full_evidence = sweep(
         Env(),
         [0],
