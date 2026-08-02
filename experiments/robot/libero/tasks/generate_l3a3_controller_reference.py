@@ -13111,6 +13111,43 @@ def _seek_stable_plate_contact(
         + corridor_outward_direction
         * maximum_post_descent_lateral_world_step
     )
+    vertical_corridor_balanced_hold_world_step = float(
+        args.position_action_scale
+        * vertical_corridor_descent_max_translation_action
+        / np.sqrt(2.0)
+    )
+    vertical_corridor_balanced_hold_target_xy = (
+        corridor_rebuffer_target[:2]
+        + corridor_outward_direction
+        * vertical_corridor_balanced_hold_world_step
+    )
+    if not (
+        np.isfinite(vertical_corridor_balanced_hold_world_step)
+        and 0.0 < vertical_corridor_balanced_hold_world_step
+        < maximum_post_descent_lateral_world_step
+        and np.all(
+            np.isfinite(vertical_corridor_balanced_hold_target_xy)
+        )
+    ):
+        raise RuntimeError(
+            "vertical corridor balanced hold is not strictly inside the "
+            "existing post-descent controller reserve"
+        )
+    structural_seek_context.update(
+        {
+            "vertical_corridor_balanced_hold_world_step_m": (
+                vertical_corridor_balanced_hold_world_step
+            ),
+            "vertical_corridor_balanced_hold_target_xy": (
+                vertical_corridor_balanced_hold_target_xy.tolist()
+            ),
+            "vertical_corridor_balanced_hold_derivation": (
+                "position action scale times the existing vertical-corridor "
+                "translation-action bound divided by sqrt(2), retaining "
+                "equal strict action-norm capacity for outward XY and Z"
+            ),
+        }
+    )
     corridor_correction_handoff_target = np.asarray(
         corridor_rebuffer_target, dtype=float
     ).copy()
@@ -14575,13 +14612,9 @@ def _seek_stable_plate_contact(
             vertical_corridor_control_target = np.asarray(
                 corridor_side_target, dtype=float
             ).copy()
-            vertical_corridor_pre_staging_reserve_active = bool(
-                current_eef[2] > overhead_staging_z
+            vertical_corridor_control_target[:2] = (
+                vertical_corridor_balanced_hold_target_xy
             )
-            if vertical_corridor_pre_staging_reserve_active:
-                vertical_corridor_control_target[:2] = (
-                    corridor_correction_hold_target_xy
-                )
             action, path_control = (
                 _constraint_prioritized_outside_descent_action(
                     current_eef=current_eef,
@@ -14607,16 +14640,13 @@ def _seek_stable_plate_contact(
                 "active_vertical_corridor_control_target": (
                     vertical_corridor_control_target.tolist()
                 ),
-                "pre_staging_outward_controller_reserve_active": (
-                    vertical_corridor_pre_staging_reserve_active
+                "balanced_outward_controller_hold_active": True,
+                "balanced_outward_controller_hold_world_step_m": (
+                    vertical_corridor_balanced_hold_world_step
                 ),
-                "pre_staging_outward_controller_reserve_m": (
-                    maximum_post_descent_lateral_world_step
-                    if vertical_corridor_pre_staging_reserve_active
-                    else 0.0
-                ),
-                "pre_staging_outward_controller_reserve_source": (
-                    "existing post-descent lateral maximum world step"
+                "balanced_outward_controller_hold_source": (
+                    "equal XY/Z norm allocation derived from the existing "
+                    "vertical-corridor translation-action bound"
                 ),
                 "formal_corridor_target_unchanged": True,
             }
