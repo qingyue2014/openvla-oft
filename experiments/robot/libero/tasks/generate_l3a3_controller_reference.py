@@ -1188,6 +1188,8 @@ def _compiled_native_cabinet_minus_x_detour_plan(
     outside_high_target,
     outside_side_target,
     maximum_controller_world_step_m,
+    maximum_route_translation_action,
+    position_action_scale_m_per_action,
     position_tolerance_m,
 ):
     """Compile the native-cabinet left-and-under route from live geometry.
@@ -1214,12 +1216,22 @@ def _compiled_native_cabinet_minus_x_detour_plan(
         maximum_controller_world_step_m = float(
             maximum_controller_world_step_m
         )
+        maximum_route_translation_action = float(
+            maximum_route_translation_action
+        )
+        position_action_scale_m_per_action = float(
+            position_action_scale_m_per_action
+        )
         position_tolerance_m = float(position_tolerance_m)
     except (TypeError, ValueError) as exc:
         raise RuntimeError("native cabinet detour limits must be finite") from exc
     if not (
         np.isfinite(maximum_controller_world_step_m)
         and maximum_controller_world_step_m > 0.0
+        and np.isfinite(maximum_route_translation_action)
+        and maximum_route_translation_action > 0.0
+        and np.isfinite(position_action_scale_m_per_action)
+        and position_action_scale_m_per_action > 0.0
         and np.isfinite(position_tolerance_m)
         and position_tolerance_m > 0.0
     ):
@@ -1305,6 +1317,15 @@ def _compiled_native_cabinet_minus_x_detour_plan(
         )
     if not outside_side_target[2] < outside_high_target[2]:
         raise RuntimeError("native cabinet detour has no downward terminal route")
+    maximum_route_world_command_m = float(
+        maximum_route_translation_action
+        * position_action_scale_m_per_action
+    )
+    if maximum_route_world_command_m < maximum_controller_world_step_m:
+        raise RuntimeError(
+            "native cabinet detour route action is below the existing "
+            "near-contact action bound"
+        )
 
     start_high = current_eef.copy()
     minus_x_high = np.array(
@@ -1327,7 +1348,7 @@ def _compiled_native_cabinet_minus_x_detour_plan(
     ]
     minimum_action_lower_bound = int(
         sum(
-            np.ceil(distance / maximum_controller_world_step_m)
+            np.ceil(distance / maximum_route_world_command_m)
             for distance in segment_distances
         )
     )
@@ -1356,6 +1377,13 @@ def _compiled_native_cabinet_minus_x_detour_plan(
         "maximum_controller_world_step_m": (
             maximum_controller_world_step_m
         ),
+        "maximum_route_translation_action": (
+            maximum_route_translation_action
+        ),
+        "position_action_scale_m_per_action": (
+            position_action_scale_m_per_action
+        ),
+        "maximum_route_world_command_m": maximum_route_world_command_m,
         "position_tolerance_m": position_tolerance_m,
         "maximum_rigid_hand_x_offset_from_eef_m": maximum_hand_x_offset,
         "maximum_rigid_hand_z_offset_from_eef_m": maximum_hand_z_offset,
@@ -10689,6 +10717,25 @@ def _execute_high_safe_wrist_yaw(
             outside_side_target=realized_candidate["outside_side_target"],
         )
     )
+    native_low = np.asarray(native_action_spec["low"], dtype=float)
+    native_high = np.asarray(native_action_spec["high"], dtype=float)
+    strict_native_detour_translation_action = float(
+        np.nextafter(
+            min(
+                -native_low[0],
+                native_high[0],
+                -native_low[1],
+                native_high[1],
+                -native_low[2],
+                native_high[2],
+            ),
+            0.0,
+        )
+    )
+    if strict_native_detour_translation_action <= 0.0:
+        raise RuntimeError(
+            "native cabinet detour has no strict translation-action capacity"
+        )
     cabinet_detour_plan = _compiled_native_cabinet_minus_x_detour_plan(
         live_inventory=live_collision_inventory,
         current_eef=current_eef,
@@ -10698,6 +10745,10 @@ def _execute_high_safe_wrist_yaw(
             args.position_action_scale
             * args.plate_contact_seek_max_translation_action
         ),
+        maximum_route_translation_action=(
+            strict_native_detour_translation_action
+        ),
+        position_action_scale_m_per_action=args.position_action_scale,
         position_tolerance_m=args.position_tolerance,
     )
     remaining_structural_steps = int(
@@ -11636,6 +11687,21 @@ def _seek_stable_plate_contact(
         args.position_action_scale
         * args.plate_contact_seek_max_translation_action
     )
+    detour_native_low = np.asarray(native_action_spec["low"], dtype=float)
+    detour_native_high = np.asarray(native_action_spec["high"], dtype=float)
+    strict_native_detour_translation_action = float(
+        np.nextafter(
+            min(
+                -detour_native_low[0],
+                detour_native_high[0],
+                -detour_native_low[1],
+                detour_native_high[1],
+                -detour_native_low[2],
+                detour_native_high[2],
+            ),
+            0.0,
+        )
+    )
     cabinet_detour_plan = None
     if controller_live_diagnostic is not None:
         if not isinstance(controller_live_diagnostic, dict):
@@ -11667,6 +11733,28 @@ def _seek_stable_plate_contact(
             ):
                 raise RuntimeError(
                     "native cabinet detour controller step binding changed"
+                )
+            if not np.isclose(
+                float(
+                    cabinet_detour_plan[
+                        "maximum_route_translation_action"
+                    ]
+                ),
+                strict_native_detour_translation_action,
+                rtol=0.0,
+                atol=0.0,
+            ) or not np.isclose(
+                float(
+                    cabinet_detour_plan[
+                        "position_action_scale_m_per_action"
+                    ]
+                ),
+                float(args.position_action_scale),
+                rtol=0.0,
+                atol=0.0,
+            ):
+                raise RuntimeError(
+                    "native cabinet detour route-action binding changed"
                 )
     overhead_staging_z, overhead_staging_geometry = (
         _compiled_overhead_staging_geometry(
@@ -12376,7 +12464,9 @@ def _seek_stable_plate_contact(
                 gripper=gripper,
                 position_action_scale=args.position_action_scale,
                 maximum_translation_action=(
-                    args.plate_contact_seek_max_translation_action
+                    cabinet_detour_plan[
+                        "maximum_route_translation_action"
+                    ]
                 ),
             )
             feedback = {
@@ -12400,7 +12490,9 @@ def _seek_stable_plate_contact(
                 gripper=gripper,
                 position_action_scale=args.position_action_scale,
                 maximum_translation_action=(
-                    args.plate_contact_seek_max_translation_action
+                    cabinet_detour_plan[
+                        "maximum_route_translation_action"
+                    ]
                 ),
             )
             feedback = {

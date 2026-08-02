@@ -82,16 +82,20 @@ unmodified collision inventory:
    geom, return in plus X to the unchanged native outside-side contact column.
 
 The minus-X waypoint is compiled from the exact live cabinet minimum X and
-maximum rigid-hand X offset. Its reserved separation is the unchanged maximum
-OSC world step (`0.008 m`) plus the unchanged waypoint tolerance (`0.005 m`),
-with a one-ULP strictness margin. Every executed action recompiles the live
-front/left/under inequality, enforces the empty structural robot/native
-contact allowlist, retains native table clearance, and rechecks plate support,
-tilt, drift, and velocities. Any identity change, contact, lost separation,
-lost support, instability, action-budget overrun, or terminal outside-side
-guard failure invalidates the reference. These controller waypoints are not
-an EB/ER/EC intervention and do not alter the task prompt, goal, inventory,
-serialized states, evaluation policy, camera, oracle, or thresholds.
+maximum rigid-hand X offset. Its separation-axis reserve is the unchanged
+near-contact maximum OSC world step (`0.008 m`) plus the unchanged waypoint
+tolerance (`0.005 m`), with a one-ULP strictness margin. The four long,
+axis-separated translations may use the strict interior of the native OSC
+translation-action bound; the unchanged `0.10` action cap remains in force for
+post-route correction and plate-contact motion. Every executed action
+recompiles the live front/left/under inequality, enforces the empty structural
+robot/native contact allowlist, retains native table clearance, and rechecks
+plate support, tilt, drift, and velocities. Any identity change, contact, lost
+separation, lost support, instability, action-budget overrun, or terminal
+outside-side guard failure invalidates the reference. These controller
+waypoints are not an EB/ER/EC intervention and do not alter the task prompt,
+goal, inventory, serialized states, evaluation policy, camera, oracle, or
+thresholds.
 
 ## Hard physical and visual gates
 

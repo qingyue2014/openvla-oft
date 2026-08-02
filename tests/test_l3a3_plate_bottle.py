@@ -7813,6 +7813,8 @@ def test_native_cabinet_detour_completion_is_hash_bound(tmp_path):
         outside_high_target=np.array([0.10, -0.14, 1.06]),
         outside_side_target=np.array([0.10, -0.14, 0.90]),
         maximum_controller_world_step_m=0.008,
+        maximum_route_translation_action=np.nextafter(1.0, 0.0),
+        position_action_scale_m_per_action=0.08,
         position_tolerance_m=0.005,
     )
     path = tmp_path / "controller_live_diagnostic.json"
@@ -7897,6 +7899,8 @@ def test_native_cabinet_minus_x_detour_compiles_from_live_geometry():
         outside_high_target=np.array([0.10, -0.14, 1.06]),
         outside_side_target=np.array([0.10, -0.14, 0.90]),
         maximum_controller_world_step_m=0.008,
+        maximum_route_translation_action=np.nextafter(1.0, 0.0),
+        position_action_scale_m_per_action=0.08,
         position_tolerance_m=0.005,
     )
 
@@ -7910,6 +7914,8 @@ def test_native_cabinet_minus_x_detour_compiles_from_live_geometry():
     ]
     assert plan["predicted_left_clearance_m"] > 0.013
     assert plan["predicted_under_clearance_at_terminal_m"] > 0.008
+    assert plan["maximum_route_translation_action"] > 0.99
+    assert plan["maximum_route_world_command_m"] == pytest.approx(0.08)
     assert plan["minimum_full_step_action_lower_bound"] < 180
     np.testing.assert_allclose(
         plan["waypoints"]["terminal_outside_side_low"],
@@ -7927,6 +7933,8 @@ def test_native_cabinet_detour_live_guard_fails_closed_then_accepts():
         outside_high_target=np.array([0.10, -0.14, 1.06]),
         outside_side_target=np.array([0.10, -0.14, 0.90]),
         maximum_controller_world_step_m=0.008,
+        maximum_route_translation_action=np.nextafter(1.0, 0.0),
+        position_action_scale_m_per_action=0.08,
         position_tolerance_m=0.005,
     )
 
