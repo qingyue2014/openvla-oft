@@ -699,13 +699,15 @@ def test_fixed_safe_z_lateral_hold_stops_job503459_redundant_inward_step():
         native_action_spec=native_spec,
     )
     strict_brake = np.nextafter(0.20, 0.0)
-    assert action[:3].tolist() == pytest.approx([0.0, 0.0, strict_brake])
+    assert action[:3].tolist() == pytest.approx(
+        [strict_brake, 0.0, strict_brake]
+    )
     assert evidence["lateral_error_m"] == pytest.approx(
         0.0012403642841947859
     )
     assert evidence["lateral_target_reached"] is True
     assert evidence["vertical_capture_active"] is True
-    assert evidence["outside_recovery_active"] is False
+    assert evidence["outside_recovery_active"] is True
     assert evidence["inward_suspended_for_vertical_capture"] is False
     assert evidence["proof"][
         "no_inward_xy_after_lateral_tolerance"
@@ -815,7 +817,7 @@ def test_fixed_safe_z_lateral_hold_brakes_job503463_only_at_low_reserve():
     assert evidence["outside_recovery_active"] is True
     assert evidence["measured_inward_response"] is True
     assert evidence["proof"][
-        "low_reserve_measured_inward_tail_uses_full_outward_brake"
+        "measured_inward_tail_uses_full_outward_brake"
     ] is True
 
 

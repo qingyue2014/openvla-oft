@@ -253,6 +253,15 @@ receives the full existing outward structural brake; otherwise the allocator
 requests only the exact nominal increment needed to refill the recovery
 threshold. This preserves the lateral-tolerance interlock without creating a
 new saturated outward tail.
+Job503466 showed that clearance-only activation was one frame late: with
+`1.537 mm` clearance the measured outward response was already
+`-0.729 mm/frame`, and the following neutral frame reduced the reserve to
+`0.423 mm`. The eventual brake recovered nearly all of the tail but finished
+`4 micrometres` below the strict `0.400 mm` threshold. A measured inward EEF
+response larger than the existing `0.05 mm` progress resolution now
+independently activates the full registered outward brake, regardless of
+current clearance. The brake releases as soon as measured response is no
+longer inward and the recovery envelope is healthy.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

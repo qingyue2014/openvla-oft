@@ -5286,12 +5286,13 @@ def _fixed_safe_z_lateral_hold_action(
         + position_action_scale
         * np.dot(commanded_xy_action, outward_direction_xy)
     )
-    outside_recovery_active = bool(
-        live_outside_clearance <= outside_recovery_clearance
-        or predicted_outside_after_lateral <= outside_recovery_clearance
-    )
     measured_inward_response = bool(
         measured_outward_step_progress_m < -progress_resolution_m
+    )
+    outside_recovery_active = bool(
+        measured_inward_response
+        or live_outside_clearance <= outside_recovery_clearance
+        or predicted_outside_after_lateral <= outside_recovery_clearance
     )
     if outside_recovery_active:
         required_outward_recovery_action = float(
@@ -5494,7 +5495,7 @@ def _fixed_safe_z_lateral_hold_action(
             "no_inward_xy_after_lateral_tolerance": True,
             "unstable_vertical_response_suspends_inward_return": True,
             "healthy_outside_reserve_avoids_outward_saturation": True,
-            "low_reserve_measured_inward_tail_uses_full_outward_brake": True,
+            "measured_inward_tail_uses_full_outward_brake": True,
             "below_height_band_retains_positive_z_floor": True,
             "inside_band_positive_response_unloads_without_negative_z": True,
             "downward_tail_uses_full_existing_positive_z_brake": True,
