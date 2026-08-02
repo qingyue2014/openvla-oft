@@ -3383,6 +3383,8 @@ def test_job503667_hazard_brake_requires_two_directional_reversals():
         trigger_evidence=hazard_trigger,
         previous_reversal_count=0,
         kinematic_brake_reversed=True,
+        live_outside_clearance_m=0.0031,
+        required_release_clearance_m=0.00305,
     )
     assert first["reversal_count"] == 1
     assert first["release_authorized"] is False
@@ -3391,6 +3393,8 @@ def test_job503667_hazard_brake_requires_two_directional_reversals():
         trigger_evidence=hazard_trigger,
         previous_reversal_count=first["reversal_count"],
         kinematic_brake_reversed=True,
+        live_outside_clearance_m=0.0031,
+        required_release_clearance_m=0.00305,
     )
     assert second["reversal_count"] == 2
     assert second["release_authorized"] is True
@@ -3399,6 +3403,8 @@ def test_job503667_hazard_brake_requires_two_directional_reversals():
         trigger_evidence=hazard_trigger,
         previous_reversal_count=1,
         kinematic_brake_reversed=False,
+        live_outside_clearance_m=0.0031,
+        required_release_clearance_m=0.00305,
     )
     assert reset["reversal_count"] == 0
     assert reset["count_reset_by_hazard_response"] is True
@@ -3408,9 +3414,24 @@ def test_job503667_hazard_brake_requires_two_directional_reversals():
         trigger_evidence={"hazard_response_triggered": False},
         previous_reversal_count=0,
         kinematic_brake_reversed=True,
+        live_outside_clearance_m=0.001,
+        required_release_clearance_m=0.00305,
     )
     assert geometric_only["reversal_count"] == 1
     assert geometric_only["release_authorized"] is True
+
+    insufficient_reserve = (
+        _vertical_corridor_hazard_brake_release_evidence(
+            trigger_evidence=hazard_trigger,
+            previous_reversal_count=1,
+            kinematic_brake_reversed=True,
+            live_outside_clearance_m=0.0028157765877227237,
+            required_release_clearance_m=0.00305,
+        )
+    )
+    assert insufficient_reserve["reversal_count"] == 2
+    assert insufficient_reserve["release_reserve_accepted"] is False
+    assert insufficient_reserve["release_authorized"] is False
 
 
 def test_500099_every_descent_requires_preventive_active_braking_settle():
@@ -10453,6 +10474,10 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert '"hazard_brake_reversal_count"' in settle_transition_logic
     assert 'hazard_brake_release_evidence[' in settle_transition_logic
     assert '"release_authorized"' in settle_transition_logic
+    assert "vertical_corridor_hazard_release_clearance" in (
+        settle_transition_logic
+    )
+    assert '"release_reserve_accepted"' in producer
     assert "settle_geometric_authority_release" in settle_transition_logic
     assert (
         "0.5 * previous_geometric_height_action"

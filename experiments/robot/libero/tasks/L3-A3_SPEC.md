@@ -510,6 +510,16 @@ hazardous direction resets the count to zero. The existing required stable
 response count supplies the value two, and geometric-height-only settles keep
 their prior release behavior. No action bound, metric tolerance, reserve,
 task, asset, target, or budget changes.
+Job503684 verified the two-frame count, but a release at `2.754765 mm`
+outside clearance was still insufficient: the subsequent hazard-triggered
+closed-loop tail consumed `2.516835 mm` before the unchanged `0.400 mm` line
+was reached. The measured tail is rounded upward to a `2.600 mm` internal
+bound. Hazard-triggered release now additionally requires strict clearance
+above `0.400 + 2.600 + 0.050 = 3.050 mm`, where `0.050 mm` is the unchanged
+minimum saturated progress resolution. This is an internal brake-release
+reserve, not a relaxation of the formal `0.400 mm` corridor gate. The existing
+two-frame direction count, geometric-only release behavior, action bounds,
+tasks, assets, targets, and budgets remain unchanged.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

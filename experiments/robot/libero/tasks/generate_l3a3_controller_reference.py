@@ -9717,6 +9717,8 @@ def _vertical_corridor_hazard_brake_release_evidence(
     trigger_evidence,
     previous_reversal_count,
     kinematic_brake_reversed,
+    live_outside_clearance_m,
+    required_release_clearance_m,
     required_reversal_count=2,
 ):
     """Require directional hysteresis after hazard-triggered descent."""
@@ -9728,6 +9730,9 @@ def _vertical_corridor_hazard_brake_release_evidence(
         or not isinstance(required_reversal_count, (int, np.integer))
         or required_reversal_count < 2
         or not isinstance(kinematic_brake_reversed, (bool, np.bool_))
+        or not np.isfinite(live_outside_clearance_m)
+        or not np.isfinite(required_release_clearance_m)
+        or required_release_clearance_m <= 0.0
     ):
         raise ValueError(
             "hazard-brake reversal evidence inputs are invalid"
@@ -9741,9 +9746,15 @@ def _vertical_corridor_hazard_brake_release_evidence(
         if kinematic_brake_reversed
         else 0
     )
+    release_reserve_accepted = bool(
+        live_outside_clearance_m > required_release_clearance_m
+    )
     release_authorized = bool(
         not hazard_response_triggered
-        or reversal_count >= int(required_reversal_count)
+        or (
+            reversal_count >= int(required_reversal_count)
+            and release_reserve_accepted
+        )
     )
     return {
         "hazard_response_triggered": hazard_response_triggered,
@@ -9751,6 +9762,11 @@ def _vertical_corridor_hazard_brake_release_evidence(
         "previous_reversal_count": int(previous_reversal_count),
         "reversal_count": reversal_count,
         "required_reversal_count": int(required_reversal_count),
+        "live_outside_clearance_m": float(live_outside_clearance_m),
+        "required_release_clearance_m": float(
+            required_release_clearance_m
+        ),
+        "release_reserve_accepted": release_reserve_accepted,
         "release_authorized": release_authorized,
         "count_reset_by_hazard_response": bool(
             not kinematic_brake_reversed
@@ -9760,7 +9776,8 @@ def _vertical_corridor_hazard_brake_release_evidence(
             "a geometric-height-only settle keeps its existing release; "
             "a descent hazard-response settle requires two consecutive "
             "full-brake frames with nonnegative vertical, EEF-outward, "
-            "and live-clearance directions before another descent"
+            "and live-clearance directions plus the preregistered strict "
+            "closed-loop tail reserve before another descent"
         ),
     }
 
@@ -16012,6 +16029,20 @@ def _seek_stable_plate_contact(
             np.inf,
         )
     )
+    vertical_corridor_hazard_observed_inward_tail = (
+        0.002516835286883276
+    )
+    vertical_corridor_hazard_inward_tail_bound = 0.0026
+    vertical_corridor_hazard_release_clearance = float(
+        np.nextafter(
+            vertical_staging_corridor[
+                "strict_corridor_entry_clearance_m"
+            ]
+            + vertical_corridor_hazard_inward_tail_bound
+            + args.minimum_saturated_waypoint_progress,
+            np.inf,
+        )
+    )
     if not (
         fixed_safe_z_closed_loop_hazard_response_bound
         > vertical_corridor_closed_loop_inward_response_bound
@@ -16023,6 +16054,13 @@ def _seek_stable_plate_contact(
         > fixed_safe_z_recovery_exit_clearance
         and fixed_safe_z_recovery_entry_clearance
         > fixed_safe_z_full_outward_brake_clearance
+        and vertical_corridor_hazard_inward_tail_bound
+        > vertical_corridor_hazard_observed_inward_tail
+        and vertical_corridor_hazard_release_clearance
+        > vertical_staging_corridor[
+            "strict_corridor_entry_clearance_m"
+        ]
+        + vertical_corridor_hazard_inward_tail_bound
     ):
         raise RuntimeError(
             "fixed-safe-Z recovery envelope is not strictly conservative"
@@ -16056,6 +16094,21 @@ def _seek_stable_plate_contact(
             ),
             "vertical_corridor_neutral_damping_release_action": (
                 vertical_corridor_neutral_damping_release_action
+            ),
+            "vertical_corridor_hazard_observed_inward_tail_m": (
+                vertical_corridor_hazard_observed_inward_tail
+            ),
+            "vertical_corridor_hazard_inward_tail_bound_m": (
+                vertical_corridor_hazard_inward_tail_bound
+            ),
+            "vertical_corridor_hazard_release_clearance_m": (
+                vertical_corridor_hazard_release_clearance
+            ),
+            "vertical_corridor_hazard_release_clearance_derivation": (
+                "unchanged 0.400 mm strict corridor plus a 2.600 mm "
+                "internal closed-loop tail bound rounded above the "
+                "2.516835 mm Job503684 observation plus the unchanged "
+                "0.050 mm minimum saturated progress resolution"
             ),
         }
     )
@@ -18429,6 +18482,14 @@ def _seek_stable_plate_contact(
                         lateral_settle_progress[
                             "required_stable_response_count"
                         ]
+                    ),
+                    live_outside_clearance_m=float(
+                        latest_outside_side_guard[
+                            "minimum_outside_clearance_m"
+                        ]
+                    ),
+                    required_release_clearance_m=(
+                        vertical_corridor_hazard_release_clearance
                     ),
                 )
             )
