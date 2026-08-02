@@ -3921,8 +3921,116 @@ def test_job503865_balance_predicts_and_brakes_confirmation_tail():
         ]
         is True
     )
-    assert evidence["confirmation_increment_action"] == pytest.approx(
-        0.025
+    assert evidence[
+        "vertical_confirmation_increment_action"
+    ] == pytest.approx(0.025)
+    assert evidence[
+        "full_confirmation_increment_action"
+    ] == pytest.approx(0.025)
+
+
+def test_job503869_balance_holds_before_predicted_tolerance_crossing():
+    native = {
+        "low": [-1.0] * 7,
+        "high": [1.0] * 7,
+        "source": "test_runtime",
+        "runtime_resolved": True,
+        "action_dimension": 7,
+    }
+    guard = {
+        "accepted": False,
+        "violations": [
+            "left_finger_does_not_cover_rim_center",
+            "right_finger_does_not_cover_rim_center",
+        ],
+        "outward_direction_xy": [1.0, 0.0],
+        "minimum_outside_clearance_m": 0.01,
+        "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+        "finger_table_vertical_clearance_m": 0.01,
+        "required_finger_table_clearance_m": np.nextafter(
+            0.0, np.inf
+        ),
+    }
+    action, evidence = _compiled_hazard_release_response_balance_action(
+        outside_side_guard=guard,
+        gripper=-1.0,
+        native_action_spec=native,
+        recovery_exit_clearance_m=0.00155,
+        previous_commanded_action_xyz=[0.375, 0.0, 0.3125],
+        previous_step_response={
+            "vertical_step_progress_m": 0.0000861404,
+            "eef_outward_step_progress_m": 0.0000842179,
+            "outside_clearance_step_progress_m": 0.0000717683,
+        },
+        preceding_step_response={
+            "vertical_step_progress_m": 0.0002194579,
+            "eef_outward_step_progress_m": 0.0000256422,
+            "outside_clearance_step_progress_m": 0.0000261729,
+        },
+        maximum_settled_step_response_m=0.00005,
+        maximum_axis_decrement_action=0.0125,
+    )
+    assert action[:3].tolist() == [0.3625, 0.0, 0.3125]
+    assert evidence["vertical_prediction_hold_requested"] is True
+    assert evidence["vertical_confirmation_increment_requested"] is False
+    assert (
+        evidence["proof"][
+            "prediction_hold_prevents_blind_tolerance_crossing"
+        ]
+        is True
+    )
+
+
+def test_job503869_balance_tiers_shallow_confirmation_increment():
+    native = {
+        "low": [-1.0] * 7,
+        "high": [1.0] * 7,
+        "source": "test_runtime",
+        "runtime_resolved": True,
+        "action_dimension": 7,
+    }
+    guard = {
+        "accepted": True,
+        "violations": [],
+        "outward_direction_xy": [1.0, 0.0],
+        "minimum_outside_clearance_m": 0.01,
+        "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+        "finger_table_vertical_clearance_m": 0.01,
+        "required_finger_table_clearance_m": np.nextafter(
+            0.0, np.inf
+        ),
+    }
+    action, evidence = _compiled_hazard_release_response_balance_action(
+        outside_side_guard=guard,
+        gripper=-1.0,
+        native_action_spec=native,
+        recovery_exit_clearance_m=0.00155,
+        previous_commanded_action_xyz=[0.35, 0.0, 0.325],
+        previous_step_response={
+            "vertical_step_progress_m": 0.0000941805,
+            "eef_outward_step_progress_m": 0.0000256422,
+            "outside_clearance_step_progress_m": 0.0000261729,
+        },
+        preceding_step_response={
+            "vertical_step_progress_m": 0.0002527751,
+            "eef_outward_step_progress_m": 0.0001262399,
+            "outside_clearance_step_progress_m": 0.0001068972,
+        },
+        maximum_settled_step_response_m=0.00005,
+        maximum_axis_decrement_action=0.0125,
+    )
+    assert action[:3].tolist() == [0.3625, 0.0, 0.3375]
+    assert evidence[
+        "outward_confirmation_increment_action"
+    ] == pytest.approx(0.0125)
+    assert evidence[
+        "vertical_confirmation_increment_action"
+    ] == pytest.approx(0.0125)
+    assert (
+        evidence["proof"][
+            "shallow_confirmation_uses_registered_half_decrement"
+        ]
+        is True
     )
 
 

@@ -9798,36 +9798,75 @@ def _compiled_hazard_release_response_balance_action(
     predicted_clearance_response = float(
         2.0 * clearance_response - preceding_clearance_response
     )
-    outward_confirmation_increment_requested = bool(
-        outward_axis_balanced
-        and min(
+    predicted_minimum_outward_response = float(
+        min(
             predicted_eef_outward_response,
             predicted_clearance_response,
         )
-        < -response_tolerance
     )
-    vertical_confirmation_increment_requested = bool(
-        vertical_axis_balanced
-        and predicted_vertical_response < -response_tolerance
+    predicted_maximum_outward_response = float(
+        max(
+            predicted_eef_outward_response,
+            predicted_clearance_response,
+        )
     )
-    confirmation_increment_action = float(
+    full_confirmation_increment_action = float(
         2.0 * maximum_axis_decrement_action
     )
+    outward_confirmation_increment_requested = bool(
+        predicted_minimum_outward_response < -response_tolerance
+    )
+    vertical_confirmation_increment_requested = bool(
+        predicted_vertical_response < -response_tolerance
+    )
+    outward_confirmation_increment_action = float(
+        full_confirmation_increment_action
+        if predicted_minimum_outward_response
+        < -2.0 * response_tolerance
+        else maximum_axis_decrement_action
+        if outward_confirmation_increment_requested
+        else 0.0
+    )
+    vertical_confirmation_increment_action = float(
+        full_confirmation_increment_action
+        if predicted_vertical_response < -2.0 * response_tolerance
+        else maximum_axis_decrement_action
+        if vertical_confirmation_increment_requested
+        else 0.0
+    )
+    outward_prediction_hold_requested = bool(
+        not outward_axis_balanced
+        and not outward_confirmation_increment_requested
+        and predicted_maximum_outward_response <= response_tolerance
+    )
+    vertical_prediction_hold_requested = bool(
+        not vertical_axis_balanced
+        and not vertical_confirmation_increment_requested
+        and predicted_vertical_response <= response_tolerance
+    )
     commanded_outward_action = float(
-        previous_outward_action + confirmation_increment_action
+        previous_outward_action
+        + outward_confirmation_increment_action
         if outward_confirmation_increment_requested
         else previous_outward_action
-        if outward_axis_balanced
+        if (
+            outward_axis_balanced
+            or outward_prediction_hold_requested
+        )
         else max(
             0.0,
             previous_outward_action - maximum_axis_decrement_action,
         )
     )
     commanded_positive_z_action = float(
-        previous_positive_z_action + confirmation_increment_action
+        previous_positive_z_action
+        + vertical_confirmation_increment_action
         if vertical_confirmation_increment_requested
         else previous_positive_z_action
-        if vertical_axis_balanced
+        if (
+            vertical_axis_balanced
+            or vertical_prediction_hold_requested
+        )
         else max(
             0.0,
             previous_positive_z_action - maximum_axis_decrement_action,
@@ -9846,12 +9885,13 @@ def _compiled_hazard_release_response_balance_action(
             "after dynamic hazard release, decrease each one-sided safe "
             "action axis by half the registered 0.025 damping decrement "
             "only while its measured response remains above the unchanged "
-            "settle tolerance; once an axis enters tolerance, linearly "
-            "predict its next response from the latest two measured frames "
-            "and add at most the registered full 0.025 decrement only if "
-            "the prediction would cross negative tolerance; hold an already "
-            "balanced axis for any positive prediction; restore the existing "
-            "brake for any measured response below negative tolerance"
+            "settle tolerance and its two-frame linear prediction remains "
+            "above that tolerance; hold before the predicted crossing, add "
+            "the existing 0.0125 half-decrement for a shallow prediction "
+            "below negative tolerance, or add the registered full 0.025 "
+            "decrement only when the deficit exceeds one further tolerance "
+            "width; restore the existing brake for any measured response "
+            "below negative tolerance"
         ),
         "native_action_spec_source": native_source,
         "commanded_xyz_action": action[:3].tolist(),
@@ -9884,7 +9924,15 @@ def _compiled_hazard_release_response_balance_action(
         "maximum_axis_decrement_action": (
             maximum_axis_decrement_action
         ),
-        "confirmation_increment_action": confirmation_increment_action,
+        "full_confirmation_increment_action": (
+            full_confirmation_increment_action
+        ),
+        "outward_confirmation_increment_action": (
+            outward_confirmation_increment_action
+        ),
+        "vertical_confirmation_increment_action": (
+            vertical_confirmation_increment_action
+        ),
         "previous_outward_action": previous_outward_action,
         "previous_positive_z_action": previous_positive_z_action,
         "commanded_outward_action": commanded_outward_action,
@@ -9897,6 +9945,12 @@ def _compiled_hazard_release_response_balance_action(
         "vertical_confirmation_increment_requested": (
             vertical_confirmation_increment_requested
         ),
+        "outward_prediction_hold_requested": (
+            outward_prediction_hold_requested
+        ),
+        "vertical_prediction_hold_requested": (
+            vertical_prediction_hold_requested
+        ),
         "reserve_evidence": reserve_evidence,
         "response_balance_guard": response_balance_guard,
         "proof": {
@@ -9905,7 +9959,9 @@ def _compiled_hazard_release_response_balance_action(
             "confirmation_increment_bounded_to_registered_full_decrement": (
                 True
             ),
-            "balanced_axis_not_decremented_for_positive_prediction": True,
+            "prediction_hold_prevents_blind_tolerance_crossing": True,
+            "shallow_confirmation_uses_registered_half_decrement": True,
+            "full_confirmation_requires_extra_tolerance_width": True,
             "confirmation_uses_two_frame_linear_response_prediction": True,
             "negative_beyond_tolerance_requires_brake": True,
             "two_frame_absolute_response_confirmation_required": True,

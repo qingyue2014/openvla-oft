@@ -705,6 +705,21 @@ one frame. This remains one-sided, zero-rotation, native-bounded, and subject
 to the same measured `-0.050 mm` brake restore and two-real-frame acceptance
 gates. The 240-step budget is unchanged.
 
+Job503869 passed two real stable frames at structural steps 233 and 234 and
+entered the full-guard fixed-safe-Z lateral approach, but the unchanged budget
+ended after only six lateral actions with `11.250 mm` still remaining. The
+earlier balance cycles showed two distinct prediction errors. First, an axis
+whose latest positive response was still just above `0.050 mm` was decremented
+even when its two-frame extrapolation was already at or below tolerance.
+Second, the full `0.025` confirmation overcorrected shallow predicted deficits
+such as `-0.075 mm`. Response balance now stops decrementing before a predicted
+tolerance crossing. A prediction between `-0.050` and `-0.100 mm` receives the
+existing `0.0125` half-decrement; only a prediction below `-0.100 mm` receives
+the registered full `0.025` confirmation. Any measured response below
+`-0.050 mm` still restores the full brake, and the two-real-frame gate, native
+action bounds, collision guards, task fields, and 240-step budget are
+unchanged.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
