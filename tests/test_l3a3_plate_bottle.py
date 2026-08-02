@@ -3562,6 +3562,47 @@ def test_500174_lateral_rebuffer_is_adaptive_and_skips_repeat_zero():
         "all_compiled_pairs_reach_strict_buffer16": True,
     }
 
+    # The exact post-rebuffer state from job 503001 already passes the
+    # unchanged formal corridor gate even though it has not reached the
+    # additional shifted controller target.  That formal state may hand off;
+    # the shifted target remains the fail-closed correction fallback.
+    formal_outside_guard = {
+        **outside_guard,
+        "minimum_outside_clearance_m": 0.0014019095805165027,
+    }
+    formal_entry = _overhead_corridor_entry_evidence(
+        current_eef=np.array(
+            [0.1329777566584359, -0.028413192405800588, 0.9403155435501364]
+        ),
+        corridor_high_target=np.array(
+            [0.13287106705090634, -0.02850777957668001, 0.9325011680386681]
+        ),
+        outside_side_guard=formal_outside_guard,
+        overhead_guard=recovered_guard,
+        overhead_lateral_buffer=recovered_buffer,
+        position_tolerance=0.01,
+        strict_corridor_entry_clearance_m=0.0009,
+    )
+    assert formal_entry["accepted"] is True
+    shifted_target_diagnostic = _overhead_corridor_entry_evidence(
+        current_eef=np.array(
+            [0.1329777566584359, -0.028413192405800588, 0.9403155435501364]
+        ),
+        corridor_high_target=np.array(
+            [0.14087106705090635, -0.02850777957668001, 0.9325011680386681]
+        ),
+        outside_side_guard=formal_outside_guard,
+        overhead_guard=recovered_guard,
+        overhead_lateral_buffer=recovered_buffer,
+        position_tolerance=0.004,
+        strict_corridor_entry_clearance_m=0.0009,
+        require_lateral_buffer=False,
+    )
+    assert shifted_target_diagnostic["accepted"] is False
+    assert shifted_target_diagnostic["violations"] == [
+        "corridor_xy_tolerance_not_met"
+    ]
+
     bounded_seek = CONTROLLER_REFERENCE.read_text().split(
         "def _seek_stable_plate_contact(", 1
     )[1].split("\ndef _calibrate_stable_plate_contact_depth", 1)[0]
@@ -3608,6 +3649,19 @@ def test_500174_lateral_rebuffer_is_adaptive_and_skips_repeat_zero():
     assert "vertical_tail_zero_confirmation" not in (
         lateral_rebuffer_transition
     )
+    assert "lateral_rebuffer_formal_corridor_entry" in (
+        lateral_rebuffer_transition
+    )
+    assert "corridor_rebuffer_target" in lateral_rebuffer_transition
+    assert "corridor_rebuffer_acceptance_clearance" in (
+        lateral_rebuffer_transition
+    )
+    assert '"overhead_corridor_descent"' in lateral_rebuffer_transition
+    assert '"vertical_corridor_descent"' in lateral_rebuffer_transition
+    assert "lateral_rebuffer_shifted_target_diagnostic" in (
+        lateral_rebuffer_transition
+    )
+    assert "lateral_resume_stage = None" in lateral_rebuffer_transition
     assert "compiled_overhead_one_step_vertical_reserve_lost" in bounded_seek
     assert (
         'parser.add_argument("--max_waypoint_steps", type=int, default=240)'

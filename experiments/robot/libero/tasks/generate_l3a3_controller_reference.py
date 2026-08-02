@@ -15229,14 +15229,66 @@ def _seek_stable_plate_contact(
                         "lateral rebuffer recovered without a proved post-"
                         "descent correction resume stage"
                     )
-                structural_stage = lateral_resume_stage
-                overhead_horizontal_z = float(after_eef[2])
+                lateral_rebuffer_formal_corridor_entry = (
+                    _overhead_corridor_entry_evidence(
+                        current_eef=after_eef,
+                        corridor_high_target=corridor_rebuffer_target,
+                        outside_side_guard=latest_outside_side_guard,
+                        overhead_guard=latest_overhead_guard,
+                        overhead_lateral_buffer=(
+                            latest_overhead_lateral_buffer
+                        ),
+                        position_tolerance=args.position_tolerance,
+                        strict_corridor_entry_clearance_m=(
+                            corridor_rebuffer_acceptance_clearance
+                        ),
+                    )
+                )
+                feedback["lateral_rebuffer_formal_corridor_entry"] = (
+                    lateral_rebuffer_formal_corridor_entry
+                )
+                lateral_rebuffer_controller_handoff = (
+                    _high_z_controller_handoff_evidence(
+                        current_eef=after_eef,
+                        outside_side_guard=latest_outside_side_guard,
+                        overhead_guard=latest_overhead_guard,
+                        overhead_lateral_buffer=(
+                            latest_overhead_lateral_buffer
+                        ),
+                    )
+                )
+                feedback["lateral_rebuffer_shifted_target_diagnostic"] = (
+                    lateral_rebuffer_controller_handoff
+                )
+                if lateral_rebuffer_formal_corridor_entry["accepted"]:
+                    above_staging_tolerance = bool(
+                        after_eef[2]
+                        > overhead_staging_z + args.position_tolerance
+                    )
+                    structural_stage = (
+                        "overhead_corridor_descent"
+                        if above_staging_tolerance
+                        else "vertical_corridor_descent"
+                    )
+                    recovered_event = (
+                        "lateral_rebuffer_formal_corridor_passed_to_bounded_"
+                        "overhead_descent"
+                        if above_staging_tolerance
+                        else "lateral_rebuffer_formal_corridor_passed_to_"
+                        "vertical_corridor"
+                    )
+                    lateral_resume_stage = None
+                else:
+                    structural_stage = lateral_resume_stage
+                    overhead_horizontal_z = float(after_eef[2])
+                    recovered_event = (
+                        "lateral_rebuffer_recovered_to_shifted_target_"
+                        "correction_fallback"
+                    )
                 vertical_tail_events.append(
                     {
                         "guard_step": int(guard_step),
-                        "event": (
-                            "lateral_rebuffer_recovered_directly_to_xy"
-                        ),
+                        "event": recovered_event,
                         "measured_vertical_step_progress_m": (
                             measured_vertical_step_progress_m
                         ),
@@ -15244,6 +15296,17 @@ def _seek_stable_plate_contact(
                             latest_overhead_lateral_buffer[
                                 "minimum_lateral_entry_buffer_surplus_m"
                             ]
+                        ),
+                        "formal_corridor_entry": (
+                            lateral_rebuffer_formal_corridor_entry
+                        ),
+                        "shifted_controller_target_required_for_next_stage": (
+                            not lateral_rebuffer_formal_corridor_entry[
+                                "accepted"
+                            ]
+                        ),
+                        "shifted_controller_target_diagnostic": (
+                            lateral_rebuffer_controller_handoff
                         ),
                     }
                 )
