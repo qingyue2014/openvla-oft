@@ -5332,7 +5332,7 @@ def _fixed_safe_z_lateral_hold_action(
         and measured_vertical_step_progress_m > progress_resolution_m
     )
     minimum_below_band_positive_z_action = float(
-        0.5 * strict_safety_brake_bound
+        strict_safety_brake_bound
     )
     if downward_tail_brake_active or table_recovery_active:
         commanded_z_action = strict_safety_brake_bound

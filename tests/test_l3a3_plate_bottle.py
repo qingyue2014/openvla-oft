@@ -752,12 +752,12 @@ def test_fixed_safe_z_lateral_hold_retains_job503461_below_band_z_floor():
     strict_brake = np.nextafter(0.20, 0.0)
     assert action[0] == pytest.approx(strict_brake)
     assert action[1] == 0.0
-    assert action[2] == pytest.approx(0.5 * strict_brake)
+    assert action[2] == pytest.approx(strict_brake)
     assert evidence["below_safe_z_band"] is True
     assert evidence["inside_safe_z_band"] is False
     assert evidence["positive_response_unload_active"] is False
     assert evidence["minimum_below_band_positive_z_action"] == (
-        pytest.approx(0.5 * strict_brake)
+        pytest.approx(strict_brake)
     )
     assert evidence["proof"][
         "below_height_band_retains_positive_z_floor"

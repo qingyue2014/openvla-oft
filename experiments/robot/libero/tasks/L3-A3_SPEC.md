@@ -234,12 +234,15 @@ frames produced one positive response, but immediately reducing Z to
 `0.01-0.06` while still several millimetres below the safe anchor restarted
 the descent. The fixed-safe-Z controller now uses the unchanged `0.400 mm`
 height tolerance as a hysteresis band. A negative response still receives the
-full `0.20` brake; while below the band, a positive response retains at least
-half of that existing authority. Inside the band, a positive response unloads
+full `0.20` brake; while below the band, a positive response retains that full
+existing authority. Inside the band, a positive response unloads
 to zero rather than immediately requesting negative Z. Negative Z remains
 available only for a genuine above-band correction and remains limited by half
 the live table reserve. This prevents a one-frame sign reversal from releasing
-the safety brake.
+the safety brake. Job503462 showed that a half-strength below-band floor still
+extended the saturated outward-hold window to thirty frames before the
+controller entered the band. Authority is therefore reduced only after the
+live EEF is inside the unchanged height band.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
