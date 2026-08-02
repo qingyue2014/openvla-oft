@@ -520,6 +520,17 @@ minimum saturated progress resolution. This is an internal brake-release
 reserve, not a relaxation of the formal `0.400 mm` corridor gate. The existing
 two-frame direction count, geometric-only release behavior, action bounds,
 tasks, assets, targets, and budgets remain unchanged.
+Job503685 verified the `3.050 mm` reserve, but the release-to-terminal tail
+grew to `3.068738 mm`. Inspection showed that the nominal full brake was still
+limited by a shrinking fixed target error: its first outward action was only
+`0.177576` under the `0.20` cap and reached `0.20` only after substantial
+inward motion. Hazard-triggered settle now uses a live target exactly one
+`0.40`-action world step outward on every frame, with `0.40` derived as twice
+the unchanged nominal `0.20` low-side cap. Positive Z remains `0.20`; the
+combined action norm is about `0.447214`, strictly inside the runtime-native
+`1.0` bound, and both directions statically increase plate/table separation.
+Geometric-only settle, damping, release reserve, task, asset, target, budget,
+and formal physical thresholds remain unchanged.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

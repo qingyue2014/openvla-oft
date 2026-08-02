@@ -3434,6 +3434,51 @@ def test_job503667_hazard_brake_requires_two_directional_reversals():
     assert insufficient_reserve["release_authorized"] is False
 
 
+def test_job503685_hazard_brake_uses_persistent_native_bounded_authority():
+    current = np.array([0.13175, -0.0260, 0.9280])
+    outward_action = 0.40
+    position_action_scale = 0.08
+    action, evidence = _compiled_low_side_settle_brake_action(
+        current_eef=current,
+        outside_side_guard={
+            "accepted": False,
+            "minimum_outside_clearance_m": 0.0031,
+            "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+            "finger_table_vertical_clearance_m": 0.015,
+            "required_finger_table_clearance_m": np.nextafter(0.0, np.inf),
+        },
+        gripper=-1.0,
+        position_action_scale=position_action_scale,
+        native_action_spec={
+            "low": [-1.0] * 7,
+            "high": [1.0] * 7,
+            "source": "test_runtime",
+            "runtime_resolved": True,
+            "action_dimension": 7,
+        },
+        lateral_target_xy=(
+            current[:2]
+            + np.array(
+                [position_action_scale * outward_action, 0.0]
+            )
+        ),
+        one_sided_outward_direction_xy=np.array([1.0, 0.0]),
+        maximum_lateral_translation_action=outward_action,
+        positive_z_action=0.20,
+        strict_corridor_clearance_m=0.0004,
+    )
+    assert np.nextafter(0.40, 0.0) <= action[0] < 0.40
+    assert action[1] == 0.0
+    assert action[2] == pytest.approx(0.20)
+    assert np.linalg.norm(action[:3]) == pytest.approx(
+        np.hypot(action[0], 0.20)
+    )
+    assert np.linalg.norm(action[:3]) < 1.0
+    assert evidence["proof"][
+        "strictly_inside_native_3d_action_norm_bound"
+    ] is True
+
+
 def test_500099_every_descent_requires_preventive_active_braking_settle():
     target = np.array(
         [0.13680639548403947, -0.02850777957668001, 0.917769758]
@@ -10431,6 +10476,13 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "compiled_low_side_settle_brake_envelope" in settle_action
     assert '"active_positive_z_brake_requested": bool(' in settle_action
     assert "neutral_damping_active_before_action" in settle_action
+    assert "hazard_outward_brake_active" in settle_action
+    assert "vertical_corridor_hazard_outward_brake_action" in (
+        settle_action
+    )
+    assert "settle_lateral_target_xy" in settle_action
+    assert "np.asarray(current_eef[:2], dtype=float)" in settle_action
+    assert '"hazard_positive_z_brake_action_unchanged"' in settle_action
     assert "vertical_corridor_settle_brake_trigger_buffer" in bounded_seek
     assert "maximum_vertical_corridor_outward_hold_world_step" in (
         bounded_seek.split(

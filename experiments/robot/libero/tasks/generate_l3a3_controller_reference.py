@@ -15996,6 +15996,9 @@ def _seek_stable_plate_contact(
     fixed_safe_z_previous_commanded_action_xyz = None
     fixed_safe_z_positive_safety_release_action = 0.05
     vertical_corridor_neutral_damping_release_action = 0.025
+    vertical_corridor_hazard_outward_brake_action = float(
+        2.0 * vertical_corridor_outward_hold_max_translation_action
+    )
     fixed_safe_z_stable_count = 0
     fixed_safe_z_required_stable_count = 2
     fixed_safe_z_position_tolerance = float(
@@ -16061,6 +16064,13 @@ def _seek_stable_plate_contact(
             "strict_corridor_entry_clearance_m"
         ]
         + vertical_corridor_hazard_inward_tail_bound
+        and vertical_corridor_hazard_outward_brake_action
+        > vertical_corridor_outward_hold_max_translation_action
+        and np.hypot(
+            vertical_corridor_hazard_outward_brake_action,
+            vertical_corridor_outward_hold_max_translation_action,
+        )
+        < 1.0
     ):
         raise RuntimeError(
             "fixed-safe-Z recovery envelope is not strictly conservative"
@@ -16109,6 +16119,14 @@ def _seek_stable_plate_contact(
                 "internal closed-loop tail bound rounded above the "
                 "2.516835 mm Job503684 observation plus the unchanged "
                 "0.050 mm minimum saturated progress resolution"
+            ),
+            "vertical_corridor_hazard_outward_brake_action": (
+                vertical_corridor_hazard_outward_brake_action
+            ),
+            "vertical_corridor_hazard_outward_brake_derivation": (
+                "twice the unchanged 0.20 low-side outward cap; retain "
+                "positive Z=0.20 so the combined 0.447214 action norm "
+                "remains strictly inside the runtime-native 1.0 bound"
             ),
         }
     )
@@ -17344,6 +17362,16 @@ def _seek_stable_plate_contact(
                 ),
                 dtype=float,
             )
+            settle_trigger_evidence = lateral_settle_state.get(
+                "trigger_evidence"
+            )
+            hazard_outward_brake_active = bool(
+                settle_trigger_evidence is not None
+                and settle_trigger_evidence.get(
+                    "hazard_response_triggered", False
+                )
+                and not neutral_damping_active_before_action
+            )
             if neutral_damping_active_before_action:
                 action, path_control = (
                     _compiled_low_side_neutral_damping_action(
@@ -17362,6 +17390,27 @@ def _seek_stable_plate_contact(
                     )
                 )
             else:
+                settle_lateral_target_xy = np.asarray(
+                    active_vertical_corridor_envelope[
+                        "balanced_hold_target_xy"
+                    ],
+                    dtype=float,
+                )
+                settle_maximum_lateral_translation_action = float(
+                    active_vertical_corridor_envelope[
+                        "fixed_outward_translation_action_bound"
+                    ]
+                )
+                if hazard_outward_brake_active:
+                    settle_lateral_target_xy = (
+                        np.asarray(current_eef[:2], dtype=float)
+                        + corridor_outward_direction
+                        * args.position_action_scale
+                        * vertical_corridor_hazard_outward_brake_action
+                    )
+                    settle_maximum_lateral_translation_action = (
+                        vertical_corridor_hazard_outward_brake_action
+                    )
                 action, path_control = (
                     _compiled_low_side_settle_brake_action(
                         current_eef=current_eef,
@@ -17370,17 +17419,13 @@ def _seek_stable_plate_contact(
                         position_action_scale=args.position_action_scale,
                         native_action_spec=native_action_spec,
                         lateral_target_xy=(
-                            active_vertical_corridor_envelope[
-                                "balanced_hold_target_xy"
-                            ]
+                            settle_lateral_target_xy
                         ),
                         one_sided_outward_direction_xy=(
                             corridor_outward_direction
                         ),
                         maximum_lateral_translation_action=(
-                            active_vertical_corridor_envelope[
-                                "fixed_outward_translation_action_bound"
-                            ]
+                            settle_maximum_lateral_translation_action
                         ),
                         positive_z_action=(
                             active_vertical_corridor_envelope[
@@ -17415,6 +17460,26 @@ def _seek_stable_plate_contact(
                 ),
                 "neutral_damping_ramp_action_before": (
                     neutral_damping_ramp_action_before.tolist()
+                ),
+                "hazard_outward_brake_active": (
+                    hazard_outward_brake_active
+                ),
+                "hazard_outward_brake_action": (
+                    vertical_corridor_hazard_outward_brake_action
+                    if hazard_outward_brake_active
+                    else None
+                ),
+                "hazard_outward_brake_live_target_xy": (
+                    settle_lateral_target_xy.tolist()
+                    if hazard_outward_brake_active
+                    else None
+                ),
+                "hazard_positive_z_brake_action_unchanged": bool(
+                    hazard_outward_brake_active
+                    and action[2]
+                    == active_vertical_corridor_envelope[
+                        "positive_z_settle_action"
+                    ]
                 ),
                 "previous_settle_vertical_step_progress_m": (
                     previous_vertical_step_progress
