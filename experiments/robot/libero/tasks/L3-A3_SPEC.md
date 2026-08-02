@@ -191,6 +191,18 @@ consecutive frames. The full outside-side and all physical/contact gates are
 recomputed after every frame. The loop reuses the existing 64-step contact-seek
 limit as a fail-closed bound; the following lateral contact search keeps its
 original independent 64-step limit.
+Job503441 showed that the fixed half-norm Z cap was still too large when the
+live outside clearance had already fallen to `0.086 mm`: the paired
+`X=0.0865, Z=0.05` action crossed the plate rim by about `0.49 mm`. The
+stabilizer therefore reserves the full outward action whenever live outside
+clearance is at or below the strict `0.400 mm` corridor-entry clearance plus
+the registered `0.500 mm` closed-loop inward-response bound. Above that
+`0.900 mm` recovery threshold, Z authority ramps continuously from zero to
+the existing half-norm cap across one unchanged maximum contact-seek world
+step (`8 mm`); all remaining strict 3-D norm stays on the registered outward
+axis. This is a controller-only recovery envelope: it does not relax the live
+outside-side acceptance threshold, table threshold, contact definition, task,
+or formal evaluation criteria.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

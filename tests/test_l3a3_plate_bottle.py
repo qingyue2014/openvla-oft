@@ -441,6 +441,10 @@ def test_contact_seek_vertical_stabilization_retains_table_reserve():
                 "required_finger_table_clearance_m": np.nextafter(
                     0.0, np.inf
                 ),
+                "minimum_outside_clearance_m": 0.010,
+                "required_outside_clearance_m": np.nextafter(
+                    0.0, np.inf
+                ),
             },
             outward_direction_xy=np.array([1.0, 0.0]),
             gripper=-1.0,
@@ -448,6 +452,8 @@ def test_contact_seek_vertical_stabilization_retains_table_reserve():
             maximum_translation_action=0.10,
             progress_resolution_m=0.00005,
             strict_post_action_table_clearance_m=0.0004,
+            strict_post_action_outside_clearance_m=0.0004,
+            closed_loop_inward_response_bound_m=0.0005,
             derivative_gain=2.0,
             native_action_spec=native_spec,
         )
@@ -468,8 +474,11 @@ def test_contact_seek_vertical_stabilization_retains_table_reserve():
         "position_plus_velocity_vertical_feedback": True,
         "inside_unchanged_contact_seek_translation_bound": True,
         "paired_outward_authority_retained_for_every_z_command": True,
+        "low_clearance_forces_pure_outward_recovery": True,
+        "vertical_authority_scales_with_live_outside_reserve": True,
         "negative_z_uses_at_most_half_live_table_reserve": True,
         "nominal_post_action_table_clearance_strict": True,
+        "nominal_post_action_outside_recovery_strict": True,
         "post_action_live_guards_required": True,
     }
     positive_action, positive_evidence = (
@@ -480,6 +489,8 @@ def test_contact_seek_vertical_stabilization_retains_table_reserve():
             outside_side_guard={
                 "finger_table_vertical_clearance_m": 0.006,
                 "required_finger_table_clearance_m": 0.0,
+                "minimum_outside_clearance_m": 0.010,
+                "required_outside_clearance_m": 0.0,
             },
             outward_direction_xy=np.array([1.0, 0.0]),
             gripper=-1.0,
@@ -487,6 +498,8 @@ def test_contact_seek_vertical_stabilization_retains_table_reserve():
             maximum_translation_action=0.10,
             progress_resolution_m=0.00005,
             strict_post_action_table_clearance_m=0.0004,
+            strict_post_action_outside_clearance_m=0.0004,
+            closed_loop_inward_response_bound_m=0.0005,
             derivative_gain=2.0,
             native_action_spec=native_spec,
         )
@@ -496,6 +509,57 @@ def test_contact_seek_vertical_stabilization_retains_table_reserve():
     assert positive_action[0] > 0.0
     assert np.linalg.norm(positive_action[:3]) < 0.10
     assert positive_evidence["commanded_world_delta_m"] > 0.0
+
+
+def test_contact_seek_vertical_stabilization_prioritizes_low_outside_reserve():
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": (-np.ones(7, dtype=float)).tolist(),
+        "high": np.ones(7, dtype=float).tolist(),
+        "runtime_resolved": True,
+    }
+    action, evidence = (
+        _bounded_contact_seek_vertical_stabilization_action(
+            current_eef_z_m=0.915306101053405,
+            target_eef_z_m=0.9178414056548501,
+            vertical_step_progress_m=-0.0008519092719723176,
+            outside_side_guard={
+                "finger_table_vertical_clearance_m": (
+                    0.0024863098964361674
+                ),
+                "required_finger_table_clearance_m": np.nextafter(
+                    0.0, np.inf
+                ),
+                "minimum_outside_clearance_m": (
+                    0.00008593313582247464
+                ),
+                "required_outside_clearance_m": np.nextafter(
+                    0.0, np.inf
+                ),
+            },
+            outward_direction_xy=np.array([1.0, 0.0]),
+            gripper=-1.0,
+            position_action_scale=0.08,
+            maximum_translation_action=0.10,
+            progress_resolution_m=0.00005,
+            strict_post_action_table_clearance_m=0.0004,
+            strict_post_action_outside_clearance_m=0.0004,
+            closed_loop_inward_response_bound_m=0.0005,
+            derivative_gain=2.0,
+            native_action_spec=native_spec,
+        )
+    )
+    assert action[:3].tolist() == pytest.approx([0.0999, 0.0, 0.0])
+    assert evidence["outside_recovery_clearance_m"] == pytest.approx(
+        0.0009
+    )
+    assert evidence["outside_authority_fraction"] == 0.0
+    assert evidence["vertical_action_cap"] == 0.0
+    assert evidence["commanded_world_delta_m"] == 0.0
+    assert evidence["predicted_outside_clearance_m"] == pytest.approx(
+        0.008077933135822474
+    )
 
 
 def test_native_geometry_side_contact_targets_descend_outside_plate():
@@ -9072,7 +9136,9 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "vertical_stabilization_derivative_gain = 2.0" in bounded_seek
     assert "vertical_stabilization_required_stable_count = 2" in bounded_seek
     assert "outward_direction_xy=corridor_outward_direction" in bounded_seek
-    assert "vertical_action_cap = float(0.5" in producer
+    assert "outside_authority_fraction = float(" in producer
+    assert "vertical_action_cap = float(" in producer
+    assert "low_clearance_forces_pure_outward_recovery" in producer
     assert "absolute_position_error" in bounded_seek
     assert "abs(measured_vertical_response)" in bounded_seek
     assert "post_stabilization_guard[\"accepted\"]" in bounded_seek

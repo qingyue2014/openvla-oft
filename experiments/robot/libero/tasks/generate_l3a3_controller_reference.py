@@ -92,6 +92,8 @@ def _bounded_contact_seek_vertical_stabilization_action(
     maximum_translation_action,
     progress_resolution_m,
     strict_post_action_table_clearance_m,
+    strict_post_action_outside_clearance_m,
+    closed_loop_inward_response_bound_m,
     derivative_gain,
     native_action_spec,
 ):
@@ -104,6 +106,12 @@ def _bounded_contact_seek_vertical_stabilization_action(
     progress_resolution_m = float(progress_resolution_m)
     strict_post_action_table_clearance_m = float(
         strict_post_action_table_clearance_m
+    )
+    strict_post_action_outside_clearance_m = float(
+        strict_post_action_outside_clearance_m
+    )
+    closed_loop_inward_response_bound_m = float(
+        closed_loop_inward_response_bound_m
     )
     derivative_gain = float(derivative_gain)
     native_low = np.asarray(native_action_spec.get("low", ()), dtype=float)
@@ -124,6 +132,10 @@ def _bounded_contact_seek_vertical_stabilization_action(
         and progress_resolution_m > 0.0
         and np.isfinite(strict_post_action_table_clearance_m)
         and strict_post_action_table_clearance_m > 0.0
+        and np.isfinite(strict_post_action_outside_clearance_m)
+        and strict_post_action_outside_clearance_m > 0.0
+        and np.isfinite(closed_loop_inward_response_bound_m)
+        and closed_loop_inward_response_bound_m > 0.0
         and np.isfinite(derivative_gain)
         and derivative_gain > 0.0
         and native_action_spec.get("runtime_resolved", False)
@@ -142,6 +154,12 @@ def _bounded_contact_seek_vertical_stabilization_action(
     compiled_required_clearance = float(
         outside_side_guard["required_finger_table_clearance_m"]
     )
+    live_outside_clearance = float(
+        outside_side_guard["minimum_outside_clearance_m"]
+    )
+    compiled_required_outside_clearance = float(
+        outside_side_guard["required_outside_clearance_m"]
+    )
     required_post_action_clearance = float(
         max(
             compiled_required_clearance,
@@ -154,6 +172,22 @@ def _bounded_contact_seek_vertical_stabilization_action(
     maximum_configured_world_step = float(
         position_action_scale * maximum_translation_action
     )
+    outside_recovery_clearance = float(
+        max(
+            compiled_required_outside_clearance,
+            strict_post_action_outside_clearance_m
+            + closed_loop_inward_response_bound_m,
+        )
+    )
+    if (
+        not np.isfinite(live_outside_clearance)
+        or not np.isfinite(compiled_required_outside_clearance)
+        or live_outside_clearance <= compiled_required_outside_clearance
+    ):
+        raise RuntimeError(
+            "contact-seek vertical stabilization lacks its live "
+            "outside-side reserve"
+        )
     if available_downward_world_step <= 0.0:
         raise RuntimeError(
             "contact-seek vertical stabilization lacks strict "
@@ -174,7 +208,22 @@ def _bounded_contact_seek_vertical_stabilization_action(
             maximum_translation_action,
         )
     )
-    vertical_action_cap = float(0.5 * maximum_translation_action)
+    outside_authority_fraction = float(
+        np.clip(
+            (
+                live_outside_clearance
+                - outside_recovery_clearance
+            )
+            / maximum_configured_world_step,
+            0.0,
+            1.0,
+        )
+    )
+    vertical_action_cap = float(
+        0.5
+        * maximum_translation_action
+        * outside_authority_fraction
+    )
     bounded_z_action = float(
         np.clip(
             bounded_z_action,
@@ -229,6 +278,15 @@ def _bounded_contact_seek_vertical_stabilization_action(
             "contact-seek vertical stabilization lost its nominal "
             "table proof"
         )
+    predicted_outside_clearance = float(
+        live_outside_clearance
+        + position_action_scale * outward_action
+    )
+    if not predicted_outside_clearance > outside_recovery_clearance:
+        raise RuntimeError(
+            "contact-seek vertical stabilization lost its nominal "
+            "outside-side recovery proof"
+        )
     return action, {
         "current_eef_z_m": current_eef_z_m,
         "target_eef_z_m": target_eef_z_m,
@@ -243,6 +301,18 @@ def _bounded_contact_seek_vertical_stabilization_action(
         "strict_post_action_table_clearance_m": (
             required_post_action_clearance
         ),
+        "live_outside_clearance_m": live_outside_clearance,
+        "compiled_required_outside_clearance_m": (
+            compiled_required_outside_clearance
+        ),
+        "strict_post_action_outside_clearance_m": (
+            strict_post_action_outside_clearance_m
+        ),
+        "closed_loop_inward_response_bound_m": (
+            closed_loop_inward_response_bound_m
+        ),
+        "outside_recovery_clearance_m": outside_recovery_clearance,
+        "outside_authority_fraction": outside_authority_fraction,
         "maximum_configured_world_step_m": (
             maximum_configured_world_step
         ),
@@ -267,13 +337,19 @@ def _bounded_contact_seek_vertical_stabilization_action(
         "predicted_finger_table_clearance_m": (
             predicted_table_clearance
         ),
+        "predicted_outside_clearance_m": (
+            predicted_outside_clearance
+        ),
         "proof": {
             "strictly_outward_xy_zero_rotation": True,
             "position_plus_velocity_vertical_feedback": True,
             "inside_unchanged_contact_seek_translation_bound": True,
             "paired_outward_authority_retained_for_every_z_command": True,
+            "low_clearance_forces_pure_outward_recovery": True,
+            "vertical_authority_scales_with_live_outside_reserve": True,
             "negative_z_uses_at_most_half_live_table_reserve": True,
             "nominal_post_action_table_clearance_strict": True,
+            "nominal_post_action_outside_recovery_strict": True,
             "post_action_live_guards_required": True,
         },
     }
@@ -17209,6 +17285,14 @@ def _seek_stable_plate_contact(
                 ),
                 strict_post_action_table_clearance_m=(
                     vertical_stabilization_position_tolerance
+                ),
+                strict_post_action_outside_clearance_m=(
+                    vertical_staging_corridor[
+                        "strict_corridor_entry_clearance_m"
+                    ]
+                ),
+                closed_loop_inward_response_bound_m=(
+                    vertical_corridor_closed_loop_inward_response_bound
                 ),
                 derivative_gain=vertical_stabilization_derivative_gain,
                 native_action_spec=native_action_spec,
