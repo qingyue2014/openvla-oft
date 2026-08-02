@@ -873,6 +873,20 @@ projected band exit, severe response, or table-reserve loss retains full Z
 braking. No threshold, route, budget, task, inventory, state, prompt, goal, or
 intervention changes.
 
+Job503900 preserved incremental Z tracking during full outward recovery and
+reduced the step-210 response magnitude to `0.073621 mm`, only `0.023621 mm`
+above the unchanged stability limit. The response had changed from downward
+to upward while height and its projection remained inside the existing band,
+but the recovery exception was response-sign-specific. The following positive-
+response path therefore released the captured Z baseline by the full existing
+`0.05` slew (`0.154842` to `0.104842`) and produced a `-0.298455 mm` reverse
+response. Captured-action incremental Z tracking during the existing full
+outward recovery is now response-sign-invariant whenever the EEF remains
+inside the unchanged position band and the same strict outside/table reserves
+pass. The projected-band, severe-response, exact post-action physical, neutral
+confirmation, threshold, route, budget, task, inventory, state, prompt, goal,
+and intervention gates remain unchanged.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

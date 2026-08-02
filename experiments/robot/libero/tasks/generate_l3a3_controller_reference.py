@@ -5593,7 +5593,10 @@ def _fixed_safe_z_lateral_hold_action(
         and not table_recovery_active
         and (
             live_outside_clearance > outside_recovery_exit_clearance
-            or shallow_inside_band_downward_tracking_requested
+            or (
+                inside_safe_z_band
+                and inside_band_tracking_outside_reserve_accepted
+            )
         )
         and live_table_clearance > table_recovery_clearance
         and previous_commanded_action_xyz[2] >= 0.0
@@ -5920,6 +5923,7 @@ def _fixed_safe_z_lateral_hold_action(
             "shallow_above_band_downward_tail_uses_incremental_pd": True,
             "shallow_inside_band_downward_tail_uses_incremental_pd": True,
             "full_outward_recovery_preserves_inside_band_z_tracking": True,
+            "recovery_coupled_z_tracking_is_response_sign_invariant": True,
             "strict_outside_loss_disables_inside_band_z_tracking": True,
             "projected_outside_band_downward_tail_retains_full_brake": True,
             "projected_below_band_downward_tail_retains_full_brake": True,
