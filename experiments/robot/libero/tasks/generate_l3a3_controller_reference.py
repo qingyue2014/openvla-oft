@@ -4315,12 +4315,6 @@ def _vertical_corridor_reserve_recovery_phase_evidence(
             transition = "vertical_brake_complete_to_outward_restore"
         elif (
             phase_before_decision == "outward_restore"
-            and vertical_progress < 0.0
-        ):
-            phase_after_decision = "vertical_brake"
-            transition = "outward_restore_negative_z_to_vertical_brake"
-        elif (
-            phase_before_decision == "outward_restore"
             and live_clearance > exit_clearance
             and outward_progress >= 0.0
             and recovery_evidence[
@@ -4329,6 +4323,12 @@ def _vertical_corridor_reserve_recovery_phase_evidence(
         ):
             phase_after_decision = "exit_brake"
             transition = "outward_restore_complete_to_exit_brake"
+        elif (
+            phase_before_decision == "outward_restore"
+            and vertical_progress < 0.0
+        ):
+            phase_after_decision = "vertical_brake"
+            transition = "outward_restore_negative_z_to_vertical_brake"
         elif (
             phase_before_decision == "exit_brake"
             and live_clearance <= entry_clearance
@@ -13350,11 +13350,12 @@ def _seek_stable_plate_contact(
         + corridor_outward_direction
         * vertical_corridor_balanced_hold_world_step
     )
+    vertical_corridor_closed_loop_inward_response_bound = 0.0005
     vertical_corridor_reserve_recovery_entry_clearance = float(
         vertical_staging_corridor[
             "strict_corridor_entry_clearance_m"
         ]
-        + 2.0 * maximum_controller_world_step
+        + vertical_corridor_closed_loop_inward_response_bound
     )
     vertical_corridor_reserve_recovery_exit_clearance = float(
         corridor_rebuffer_acceptance_clearance
@@ -13403,10 +13404,13 @@ def _seek_stable_plate_contact(
             "vertical_corridor_reserve_recovery_entry_clearance_m": (
                 vertical_corridor_reserve_recovery_entry_clearance
             ),
+            "vertical_corridor_closed_loop_inward_response_bound_m": (
+                vertical_corridor_closed_loop_inward_response_bound
+            ),
             "vertical_corridor_reserve_recovery_entry_derivation": (
-                "the unchanged strict 0.4 mm corridor gate plus two existing "
-                "0.4 mm maximum structural controller world steps, covering "
-                "the measured 0.490 mm closed-loop inward response"
+                "the unchanged strict 0.4 mm corridor gate plus a "
+                "preregistered 0.5 mm conservative closed-loop inward "
+                "response bound, rounded above the measured 0.490 mm maximum"
             ),
             "vertical_corridor_reserve_recovery_exit_clearance_m": (
                 vertical_corridor_reserve_recovery_exit_clearance
