@@ -330,6 +330,13 @@ Job503641's `1.7 micrometre` miss. The nominal refill target therefore uses
 two progress-resolution increments above the unchanged release line, yielding
 `1.650 mm`. This remains a small non-saturated allocation; the recovery entry,
 release condition, and formal thresholds do not change.
+Job503646 showed why the safe-Z position side must be included as well. A
+below-band frame with positive vertical response used full `+Z=0.20` but only
+nominal X refill, leaving `0.401 mm` and creating a `-0.763 mm` inward tail for
+the next frame. During active outside recovery, the unchanged below-safe-Z
+condition now independently selects the full outward brake in the same frame
+as its already-required full positive-Z action. Above/inside-band upward or
+stable frames remain eligible for nominal refill.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
