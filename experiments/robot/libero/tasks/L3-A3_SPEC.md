@@ -144,9 +144,9 @@ Once a settle frame above rim overlap measures nonnegative outward,
 outside-clearance, and Z response, the controller does not continue climbing.
 It halves the active geometric height action from `0.20` to `0.10` to a
 preregistered `0.05` floor and recomputes the pre-brake height before resuming
-bounded descent. Positive-Z settle authority is
-`max(active_height_action, 0.10)`. The already-proved `0.20` translation bound
-and `0.195` outward-priority component remain fixed across this height schedule.
+bounded descent. The already-proved `0.20` translation bound, `0.195`
+outward-priority component, and `Z=0.20` inertial brake remain fixed across this
+height schedule.
 Job503269 showed that the
 unreleased `0.20` brake had already reversed inertia on its second response but
 then climbed for the remaining 84 actions because full rim coverage correctly
@@ -156,9 +156,15 @@ two-frame settle gate.
 Job503282 showed why the outward component cannot share the height schedule:
 after the first `0.20` to `0.10` release, a `X=0.10, Z=0.10` settle frame
 reduced outside clearance from `0.587 mm` to `0.343 mm`, crossing the unchanged
-`0.400 mm` one-step corridor gate before reversing the real OSC tail. Only the
-height trigger and positive-Z schedule may be reduced; the outward safety
-authority is invariant.
+`0.400 mm` one-step corridor gate before reversing the real OSC tail. This
+requires the outward safety authority to remain invariant while reducing the
+height trigger.
+Job503290 then showed that the positive-Z brake cannot share the height schedule
+either. At the lowest stage, `X=0.194, Z=0.10` preserved the outside corridor
+and reached full rim coverage, but the finger-table clearance fell from
+`0.784 mm` to `-0.037 mm` because the real OSC tail was still descending by
+`0.824 mm` per frame. Thus only the pre-brake trigger height is geometrically
+reduced; both outward and positive-Z safety authority remain invariant.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

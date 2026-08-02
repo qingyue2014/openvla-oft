@@ -3244,6 +3244,43 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert low_side_brake[0] > 0.19
     assert low_side_brake[2] == pytest.approx(0.10)
 
+    job503290_full_brake, job503290_full_brake_evidence = (
+        _compiled_low_side_settle_brake_action(
+            current_eef=np.array(
+                [0.13297672521591802, -0.026982433526499924, 0.9135291743299837]
+            ),
+            outside_side_guard={
+                "accepted": True,
+                "minimum_outside_clearance_m": 0.00169949040442946,
+                "required_outside_clearance_m": strict_clearance,
+                "finger_table_vertical_clearance_m": 0.000784447244981501,
+                "required_finger_table_clearance_m": strict_clearance,
+            },
+            gripper=-1.0,
+            position_action_scale=0.08,
+            native_action_spec=native_spec,
+            lateral_target_xy=np.array([0.1485, -0.026982433526499924]),
+            one_sided_outward_direction_xy=np.array([1.0, 0.0]),
+            maximum_lateral_translation_action=0.20,
+            positive_z_action=0.20,
+            strict_corridor_clearance_m=0.0004,
+        )
+    )
+    assert job503290_full_brake[0] > 0.19
+    assert job503290_full_brake[2] == pytest.approx(0.20)
+    assert np.linalg.norm(job503290_full_brake[:3]) < 1.0
+    assert job503290_full_brake_evidence[
+        "full_outside_side_guard_accepted"
+    ] is True
+    job503290_pre_table_clearance = 0.000784447244981501
+    job503290_post_table_clearance = -0.0000371040818750723
+    assert job503290_pre_table_clearance > 0.0
+    assert job503290_post_table_clearance < 0.0
+    assert (
+        job503290_post_table_clearance
+        - job503290_pre_table_clearance
+    ) == pytest.approx(-0.0008215513268565733)
+
     # Job503168's recovered tail already passed the unchanged formal corridor
     # gate.  The former extra zero-Z frame then fell 0.239 mm and restarted the
     # brake loop, so the proved tail must hand off on this exact state instead.
@@ -3582,6 +3619,9 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     )[0]
     assert "vertical_corridor_outward_priority_action" in active_envelope
     assert "vertical_corridor_balanced_hold_target_xy" in active_envelope
+    assert "vertical_corridor_outward_hold_max_translation_action" in (
+        active_envelope.split('"positive_z_settle_action"', 1)[1]
+    )
     assert "geometric_height_action - structural_max_translation_action" not in (
         active_envelope
     )
@@ -8915,6 +8955,10 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "active_geometric_height_action" in bounded_seek
     assert (
         "outward_authority_invariant_across_height_schedule"
+        in bounded_seek
+    )
+    assert (
+        "positive_z_authority_invariant_across_height_schedule"
         in bounded_seek
     )
     assert '"fixed_safe_z_lateral_approach"' in bounded_seek

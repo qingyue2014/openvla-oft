@@ -13829,13 +13829,11 @@ def _seek_stable_plate_contact(
             "settle_brake_trigger_z_m": float(
                 corridor_side_target[2] + trigger_buffer
             ),
-            "positive_z_settle_action": float(
-                max(
-                    geometric_height_action,
-                    vertical_corridor_descent_max_translation_action,
-                )
+            "positive_z_settle_action": (
+                vertical_corridor_outward_hold_max_translation_action
             ),
             "outward_authority_invariant_across_height_schedule": True,
+            "positive_z_authority_invariant_across_height_schedule": True,
         }
     vertical_corridor_closed_loop_inward_response_bound = 0.0005
     vertical_corridor_reserve_recovery_entry_clearance = float(
@@ -13924,9 +13922,9 @@ def _seek_stable_plate_contact(
                 "after measured nonnegative outward, clearance, and Z "
                 "brake response above rim overlap, halve the geometric "
                 "height action from 0.20 to 0.10 to the preregistered "
-                "0.05 floor; recompute only the pre-brake Z trigger and "
-                "positive-Z schedule while retaining the proved 0.195 "
-                "outward-priority authority"
+                "0.05 floor; recompute only the pre-brake Z trigger while "
+                "retaining both the proved 0.195 outward-priority "
+                "authority and the measured Z=0.20 inertial brake"
             ),
             "vertical_corridor_reserve_recovery_entry_clearance_m": (
                 vertical_corridor_reserve_recovery_entry_clearance
@@ -16718,6 +16716,9 @@ def _seek_stable_plate_contact(
                     ),
                     "fixed_outward_priority_action": (
                         vertical_corridor_outward_priority_action
+                    ),
+                    "fixed_positive_z_settle_action": (
+                        vertical_corridor_outward_hold_max_translation_action
                     ),
                     "full_outside_side_guard_accepted": False,
                     "formal_corridor_target_unchanged": True,
