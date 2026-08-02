@@ -1916,6 +1916,90 @@ def test_fixed_safe_z_lateral_hold_tracks_job503898_inside_band_downward_tail():
     ] is True
 
 
+def test_fixed_safe_z_lateral_hold_tracks_job503899_during_outside_recovery():
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": (-np.ones(7, dtype=float)).tolist(),
+        "high": np.ones(7, dtype=float).tolist(),
+        "runtime_resolved": True,
+    }
+    kwargs = {
+        "current_eef": np.array(
+            [0.13268987418868103, -0.023808518366406673, 0.9206527439887954]
+        ),
+        "lateral_target_xy": np.array(
+            [0.13242106705090634, -0.02850777957668001]
+        ),
+        "lateral_position_tolerance_m": 0.005,
+        "fixed_safe_z_m": 0.920581288496378,
+        "vertical_position_tolerance_m": 0.0004,
+        "measured_vertical_step_progress_m": -0.00008304093832189885,
+        "measured_outward_step_progress_m": -0.00005836358539871337,
+        "outside_side_guard": {
+            "minimum_outside_clearance_m": 0.001433871496355682,
+            "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+            "finger_table_vertical_clearance_m": 0.008000135070822312,
+            "required_finger_table_clearance_m": np.nextafter(
+                0.0, np.inf
+            ),
+        },
+        "outward_direction_xy": np.array([1.0, 0.0]),
+        "gripper": -1.0,
+        "position_action_scale": 0.08,
+        "maximum_lateral_translation_action": 0.005,
+        "maximum_safety_brake_action": 0.20,
+        "strict_outside_clearance_m": 0.0004,
+        "strict_table_clearance_m": 0.0004,
+        "closed_loop_hazard_response_bound_m": 0.0011,
+        "full_outward_brake_clearance_m": 0.00095,
+        "progress_resolution_m": 0.00005,
+        "derivative_gain": 2.0,
+        "native_action_spec": native_spec,
+        "previous_commanded_action_xyz": np.array(
+            [0.15, 0.0, 0.1536587046206945]
+        ),
+        "maximum_positive_safety_release_action": 0.05,
+    }
+    action, evidence = _fixed_safe_z_lateral_hold_action(**kwargs)
+    assert action[:3] == pytest.approx(
+        [0.20, 0.0, 0.1548415344235247]
+    )
+    assert evidence["outside_recovery_active"] is True
+    assert evidence["full_outward_recovery_active"] is True
+    assert evidence[
+        "inside_band_tracking_outside_reserve_accepted"
+    ] is True
+    assert evidence[
+        "shallow_inside_band_downward_tracking_requested"
+    ] is True
+    assert evidence["downward_tail_brake_active"] is False
+    assert evidence["captured_safe_z_response_hold_requested"] is True
+    assert evidence["proof"][
+        "full_outward_recovery_preserves_inside_band_z_tracking"
+    ] is True
+
+    kwargs["outside_side_guard"] = {
+        **kwargs["outside_side_guard"],
+        "minimum_outside_clearance_m": 0.00039,
+    }
+    rejected_action, rejected_evidence = (
+        _fixed_safe_z_lateral_hold_action(**kwargs)
+    )
+    assert rejected_action[:3] == pytest.approx([0.20, 0.0, 0.20])
+    assert rejected_evidence["full_outward_recovery_active"] is True
+    assert rejected_evidence[
+        "inside_band_tracking_outside_reserve_accepted"
+    ] is False
+    assert rejected_evidence[
+        "shallow_inside_band_downward_tracking_requested"
+    ] is False
+    assert rejected_evidence["downward_tail_brake_active"] is True
+    assert rejected_evidence["proof"][
+        "strict_outside_loss_disables_inside_band_z_tracking"
+    ] is True
+
+
 def test_fixed_safe_z_lateral_hold_confirms_job503649_with_neutral_z():
     native_spec = {
         "source": "env.action_spec",

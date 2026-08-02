@@ -5477,13 +5477,25 @@ def _fixed_safe_z_lateral_hold_action(
         and downward_tail_projected_position_error_m
         <= vertical_position_tolerance_m
     )
+    full_outward_recovery_active = bool(
+        outside_recovery_active
+        and selected_outward_recovery_action
+        == strict_safety_brake_bound
+    )
+    inside_band_tracking_outside_reserve_accepted = bool(
+        live_outside_clearance > outside_recovery_exit_clearance
+        or (
+            full_outward_recovery_active
+            and live_outside_clearance > strict_outside_clearance_m
+        )
+    )
     shallow_inside_band_downward_tracking_requested = bool(
         release_slew_enabled
         and inside_safe_z_band
         and measured_downward_tail
         and not severe_vertical_response
         and not table_recovery_active
-        and live_outside_clearance > outside_recovery_exit_clearance
+        and inside_band_tracking_outside_reserve_accepted
         and live_table_clearance > table_recovery_clearance
         and previous_commanded_action_xyz[2] >= 0.0
         and abs(downward_tail_projected_position_error_m)
@@ -5579,7 +5591,10 @@ def _fixed_safe_z_lateral_hold_action(
         and not downward_tail_brake_active
         and not severe_vertical_response
         and not table_recovery_active
-        and live_outside_clearance > outside_recovery_exit_clearance
+        and (
+            live_outside_clearance > outside_recovery_exit_clearance
+            or shallow_inside_band_downward_tracking_requested
+        )
         and live_table_clearance > table_recovery_clearance
         and previous_commanded_action_xyz[2] >= 0.0
     )
@@ -5869,6 +5884,10 @@ def _fixed_safe_z_lateral_hold_action(
         "shallow_safe_band_downward_tracking_requested": (
             shallow_safe_band_downward_tracking_requested
         ),
+        "full_outward_recovery_active": full_outward_recovery_active,
+        "inside_band_tracking_outside_reserve_accepted": (
+            inside_band_tracking_outside_reserve_accepted
+        ),
         "below_safe_z_band": below_safe_z_band,
         "above_safe_z_band": above_safe_z_band,
         "inside_safe_z_band": inside_safe_z_band,
@@ -5900,6 +5919,8 @@ def _fixed_safe_z_lateral_hold_action(
             "downward_tail_retains_positive_release_slew": True,
             "shallow_above_band_downward_tail_uses_incremental_pd": True,
             "shallow_inside_band_downward_tail_uses_incremental_pd": True,
+            "full_outward_recovery_preserves_inside_band_z_tracking": True,
+            "strict_outside_loss_disables_inside_band_z_tracking": True,
             "projected_outside_band_downward_tail_retains_full_brake": True,
             "projected_below_band_downward_tail_retains_full_brake": True,
             "captured_safe_z_stable_response_retains_predecessor": True,

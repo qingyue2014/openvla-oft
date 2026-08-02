@@ -856,6 +856,23 @@ position band. A projection outside either edge retains the full positive
 brake. The neutral stability confirmation, thresholds, route, budget, task,
 inventory, states, prompt, goal, and intervention remain unchanged.
 
+Job503899 continued the same response tracking through step 209 and reduced
+the downward response from `0.174816 mm` to `0.083041 mm`. At step 210 the EEF
+was only `0.071455 mm` above safe Z and its one-response projection remained
+inside the existing position band, but controller-coupled inward drift reduced
+outside clearance to `1.433871 mm`, below the existing `1.55 mm` recovery exit
+line. The controller independently selected its full `+0.20` outward recovery
+action, yet the same exit-line check disabled incremental Z tracking and
+replaced `0.153659` with the full `+0.20` Z brake. Inside-band Z tracking may
+now continue during that recovery only when the existing full outward brake is
+active, current outside clearance remains above the unchanged `0.4 mm` strict
+physical threshold, table reserve passes, and the one-response Z projection
+remains inside the unchanged band. Every action still passes the exact live
+post-action outside/table/rim guard; a non-full recovery, strict-clearance loss,
+projected band exit, severe response, or table-reserve loss retains full Z
+braking. No threshold, route, budget, task, inventory, state, prompt, goal, or
+intervention changes.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
