@@ -5151,6 +5151,8 @@ def _fixed_safe_z_lateral_hold_action(
     progress_resolution_m,
     derivative_gain,
     native_action_spec,
+    previous_commanded_action_xyz=None,
+    maximum_positive_safety_release_action=None,
 ):
     """Hold the captured safe Z throughout the final lateral return."""
     current_eef = np.asarray(current_eef, dtype=float)
@@ -5209,6 +5211,34 @@ def _fixed_safe_z_lateral_hold_action(
     ):
         raise ValueError("fixed-safe-Z lateral-hold inputs are invalid")
     outward_direction_xy = outward_direction_xy / outward_norm
+    release_slew_arguments_partial = bool(
+        (previous_commanded_action_xyz is None)
+        != (maximum_positive_safety_release_action is None)
+    )
+    if release_slew_arguments_partial:
+        raise ValueError(
+            "fixed-safe-Z positive safety release inputs must be paired"
+        )
+    release_slew_enabled = bool(
+        previous_commanded_action_xyz is not None
+    )
+    if release_slew_enabled:
+        previous_commanded_action_xyz = np.asarray(
+            previous_commanded_action_xyz, dtype=float
+        )
+        maximum_positive_safety_release_action = float(
+            maximum_positive_safety_release_action
+        )
+        if (
+            previous_commanded_action_xyz.shape != (3,)
+            or not np.all(np.isfinite(previous_commanded_action_xyz))
+            or not np.isfinite(maximum_positive_safety_release_action)
+            or not 0.0 < maximum_positive_safety_release_action
+            < maximum_safety_brake_action
+        ):
+            raise ValueError(
+                "fixed-safe-Z positive safety release inputs are invalid"
+            )
     live_outside_clearance = float(
         outside_side_guard["minimum_outside_clearance_m"]
     )
@@ -5438,6 +5468,60 @@ def _fixed_safe_z_lateral_hold_action(
     if negative_z_suspended_for_outside_recovery:
         commanded_z_action = 0.0
 
+    pre_release_slew_xy_action = commanded_xy_action.copy()
+    pre_release_slew_z_action = float(commanded_z_action)
+    outward_release_slew_applied = False
+    positive_z_release_slew_applied = False
+    if release_slew_enabled:
+        previous_outward_action = float(
+            np.dot(
+                previous_commanded_action_xyz[:2],
+                outward_direction_xy,
+            )
+        )
+        requested_outward_action = float(
+            np.dot(commanded_xy_action, outward_direction_xy)
+        )
+        minimum_released_outward_action = float(
+            max(
+                0.0,
+                previous_outward_action
+                - maximum_positive_safety_release_action,
+            )
+        )
+        if (
+            previous_outward_action > 0.0
+            and requested_outward_action
+            < minimum_released_outward_action
+        ):
+            outward_release_slew_applied = True
+            tangential_xy_action = (
+                commanded_xy_action
+                - requested_outward_action * outward_direction_xy
+            )
+            commanded_xy_action = (
+                tangential_xy_action
+                + minimum_released_outward_action
+                * outward_direction_xy
+            )
+        minimum_released_positive_z_action = float(
+            max(
+                0.0,
+                previous_commanded_action_xyz[2]
+                - maximum_positive_safety_release_action,
+            )
+        )
+        if (
+            previous_commanded_action_xyz[2] > 0.0
+            and commanded_z_action < minimum_released_positive_z_action
+        ):
+            positive_z_release_slew_applied = True
+            commanded_z_action = minimum_released_positive_z_action
+    else:
+        previous_outward_action = None
+        minimum_released_outward_action = None
+        minimum_released_positive_z_action = None
+
     action = np.zeros(7, dtype=float)
     action[:2] = commanded_xy_action
     action[2] = commanded_z_action
@@ -5507,6 +5591,32 @@ def _fixed_safe_z_lateral_hold_action(
         "requested_z_action": requested_z_action,
         "commanded_xy_action": action[:2].tolist(),
         "commanded_z_action": float(action[2]),
+        "release_slew_enabled": release_slew_enabled,
+        "previous_commanded_action_xyz": (
+            previous_commanded_action_xyz.tolist()
+            if release_slew_enabled
+            else None
+        ),
+        "maximum_positive_safety_release_action": (
+            maximum_positive_safety_release_action
+            if release_slew_enabled
+            else None
+        ),
+        "pre_release_slew_xy_action": (
+            pre_release_slew_xy_action.tolist()
+        ),
+        "pre_release_slew_z_action": pre_release_slew_z_action,
+        "previous_outward_action": previous_outward_action,
+        "minimum_released_outward_action": (
+            minimum_released_outward_action
+        ),
+        "minimum_released_positive_z_action": (
+            minimum_released_positive_z_action
+        ),
+        "outward_release_slew_applied": outward_release_slew_applied,
+        "positive_z_release_slew_applied": (
+            positive_z_release_slew_applied
+        ),
         "commanded_translation_action_norm": translation_norm,
         "maximum_lateral_translation_action": float(
             maximum_lateral_translation_action
@@ -5582,6 +5692,8 @@ def _fixed_safe_z_lateral_hold_action(
             "severe_vertical_response_uses_full_outward_brake": True,
             "downward_vertical_response_uses_full_outward_brake": True,
             "below_safe_z_recovery_uses_full_outward_brake": True,
+            "positive_safety_brake_increase_remains_immediate": True,
+            "positive_safety_brake_release_is_rate_limited": True,
             "noninward_refill_band_uses_exact_nominal_action": True,
             "recovery_release_requires_exit_headroom": True,
             "outside_recovery_suspends_negative_z": True,
@@ -15251,6 +15363,8 @@ def _seek_stable_plate_contact(
     vertical_tail_events = []
     high_plane_workspace_saturation_observations = []
     fixed_safe_z = None
+    fixed_safe_z_previous_commanded_action_xyz = None
+    fixed_safe_z_positive_safety_release_action = 0.05
     fixed_safe_z_stable_count = 0
     fixed_safe_z_required_stable_count = 2
     fixed_safe_z_position_tolerance = float(
@@ -15322,6 +15436,9 @@ def _seek_stable_plate_contact(
                 "maximum 1.061 mm measured inward response tail; release "
                 "requires one additional 0.050 mm progress-resolution "
                 "increment"
+            ),
+            "fixed_safe_z_positive_safety_release_action": (
+                fixed_safe_z_positive_safety_release_action
             ),
         }
     )
@@ -16611,7 +16728,16 @@ def _seek_stable_plate_contact(
                 ),
                 derivative_gain=2.0,
                 native_action_spec=native_action_spec,
+                previous_commanded_action_xyz=(
+                    fixed_safe_z_previous_commanded_action_xyz
+                ),
+                maximum_positive_safety_release_action=(
+                    fixed_safe_z_positive_safety_release_action
+                ),
             )
+            fixed_safe_z_previous_commanded_action_xyz = np.asarray(
+                action[:3], dtype=float
+            ).copy()
             feedback = {
                 "mode": structural_stage,
                 "action": action.tolist(),
@@ -17563,6 +17689,9 @@ def _seek_stable_plate_contact(
                         rollout.obs["robot0_eef_pos"], dtype=float
                     )[2]
                 )
+                fixed_safe_z_previous_commanded_action_xyz = np.asarray(
+                    action[:3], dtype=float
+                ).copy()
             elif (
                 lateral_settle_progress["kinematic_brake_reversed"]
                 and not latest_outside_side_guard["accepted"]

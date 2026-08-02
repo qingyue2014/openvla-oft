@@ -337,6 +337,15 @@ the next frame. During active outside recovery, the unchanged below-safe-Z
 condition now independently selects the full outward brake in the same frame
 as its already-required full positive-Z action. Above/inside-band upward or
 stable frames remain eligible for nominal refill.
+Job503647 showed that adding more full-brake entry conditions alone recreated
+the original saturated reverse tail because the controller still switched
+positive X/Z authority abruptly between `0.20` and zero. The fixed-safe-Z
+stage now inherits the final translation command actually executed by the
+preceding corridor-settle stage. Increases to outward X or positive Z remain
+immediate, but each positive component may decrease by at most `0.050` action
+per frame. This four-frame maximum release ramp cannot introduce inward X or
+negative Z and does not delay any safety-brake engagement; it only prevents an
+instantaneous release from exciting the coupled controller.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

@@ -1218,6 +1218,89 @@ def test_fixed_safe_z_lateral_hold_brakes_job503646_below_band_refill():
     ] is True
 
 
+def test_fixed_safe_z_lateral_hold_slews_job503647_positive_release():
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": (-np.ones(7, dtype=float)).tolist(),
+        "high": np.ones(7, dtype=float).tolist(),
+        "runtime_resolved": True,
+    }
+    previous = np.array([0.20, 0.0, 0.20])
+    action, evidence = _fixed_safe_z_lateral_hold_action(
+        current_eef=np.array([0.1336, -0.0274, 0.91965]),
+        lateral_target_xy=np.array([0.1336, -0.0274]),
+        lateral_position_tolerance_m=0.005,
+        fixed_safe_z_m=0.91965,
+        vertical_position_tolerance_m=0.0004,
+        measured_vertical_step_progress_m=0.0,
+        measured_outward_step_progress_m=0.0,
+        outside_side_guard={
+            "minimum_outside_clearance_m": 0.00234,
+            "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+            "finger_table_vertical_clearance_m": 0.0065,
+            "required_finger_table_clearance_m": np.nextafter(
+                0.0, np.inf
+            ),
+        },
+        outward_direction_xy=np.array([1.0, 0.0]),
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_lateral_translation_action=0.005,
+        maximum_safety_brake_action=0.20,
+        strict_outside_clearance_m=0.0004,
+        strict_table_clearance_m=0.0004,
+        closed_loop_hazard_response_bound_m=0.0011,
+        full_outward_brake_clearance_m=0.00095,
+        progress_resolution_m=0.00005,
+        derivative_gain=2.0,
+        native_action_spec=native_spec,
+        previous_commanded_action_xyz=previous,
+        maximum_positive_safety_release_action=0.05,
+    )
+    assert action[:3].tolist() == pytest.approx([0.15, 0.0, 0.15])
+    assert evidence["release_slew_enabled"] is True
+    assert evidence["outward_release_slew_applied"] is True
+    assert evidence["positive_z_release_slew_applied"] is True
+    assert evidence["proof"][
+        "positive_safety_brake_release_is_rate_limited"
+    ] is True
+
+    released_action, released_evidence = _fixed_safe_z_lateral_hold_action(
+        current_eef=np.array([0.148, -0.0285, 0.91965]),
+        lateral_target_xy=np.array([0.132, -0.0285]),
+        lateral_position_tolerance_m=0.005,
+        fixed_safe_z_m=0.91965,
+        vertical_position_tolerance_m=0.0004,
+        measured_vertical_step_progress_m=0.0,
+        measured_outward_step_progress_m=0.0,
+        outside_side_guard={
+            "minimum_outside_clearance_m": 0.016,
+            "required_outside_clearance_m": 0.0,
+            "finger_table_vertical_clearance_m": 0.006,
+            "required_finger_table_clearance_m": 0.0,
+        },
+        outward_direction_xy=np.array([1.0, 0.0]),
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_lateral_translation_action=0.005,
+        maximum_safety_brake_action=0.20,
+        strict_outside_clearance_m=0.0004,
+        strict_table_clearance_m=0.0004,
+        closed_loop_hazard_response_bound_m=0.0011,
+        full_outward_brake_clearance_m=0.00095,
+        progress_resolution_m=0.00005,
+        derivative_gain=2.0,
+        native_action_spec=native_spec,
+        previous_commanded_action_xyz=np.zeros(3),
+        maximum_positive_safety_release_action=0.05,
+    )
+    assert released_action[0] == pytest.approx(
+        np.nextafter(-0.005, 0.0)
+    )
+    assert released_evidence["outward_release_slew_applied"] is False
+
+
 def test_fixed_safe_z_lateral_hold_uses_job503637_final_stage_envelope():
     native_spec = {
         "source": "env.action_spec",
@@ -9888,6 +9971,10 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "fixed_safe_z_recovery_entry_clearance" in bounded_seek
     assert "fixed_safe_z_recovery_exit_clearance" in bounded_seek
     assert "fixed_safe_z_refill_target_clearance" in bounded_seek
+    assert "fixed_safe_z_previous_commanded_action_xyz" in bounded_seek
+    assert "fixed_safe_z_positive_safety_release_action = 0.05" in (
+        bounded_seek
+    )
     assert (
         '"fixed_safe_z_recovery_exit_clearance_m"'
         in bounded_seek
