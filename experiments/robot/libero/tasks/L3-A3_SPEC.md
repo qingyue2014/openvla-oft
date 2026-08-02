@@ -499,6 +499,17 @@ at the unchanged geometric height line, whichever occurs first. The trigger
 source and both response scalars are recorded. This adds no tolerance: zero is
 the exact directional boundary, and all action bounds, physical reserves,
 tasks, assets, targets, and budgets remain unchanged.
+Job503667 verified the early hazard trigger but exposed a one-frame release.
+The trigger fired at step 192; after the first brake still carried a
+`-1.047060 mm` vertical tail, one frame crossed to only `+0.035937 mm`
+EEF-outward and `+0.038382 mm` clearance response and immediately authorized
+another descent. That descent reversed both signs again. A hazard-triggered
+settle now requires two consecutive full-brake frames with nonnegative Z,
+EEF-outward, and live-clearance directions before geometric release. Any
+hazardous direction resets the count to zero. The existing required stable
+response count supplies the value two, and geometric-height-only settles keep
+their prior release behavior. No action bound, metric tolerance, reserve,
+task, asset, target, or budget changes.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

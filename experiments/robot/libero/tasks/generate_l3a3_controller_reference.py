@@ -9712,6 +9712,59 @@ def _vertical_corridor_descent_settle_trigger_evidence(
     }
 
 
+def _vertical_corridor_hazard_brake_release_evidence(
+    *,
+    trigger_evidence,
+    previous_reversal_count,
+    kinematic_brake_reversed,
+    required_reversal_count=2,
+):
+    """Require directional hysteresis after hazard-triggered descent."""
+    if (
+        isinstance(previous_reversal_count, bool)
+        or not isinstance(previous_reversal_count, (int, np.integer))
+        or previous_reversal_count < 0
+        or isinstance(required_reversal_count, bool)
+        or not isinstance(required_reversal_count, (int, np.integer))
+        or required_reversal_count < 2
+        or not isinstance(kinematic_brake_reversed, (bool, np.bool_))
+    ):
+        raise ValueError(
+            "hazard-brake reversal evidence inputs are invalid"
+        )
+    hazard_response_triggered = bool(
+        trigger_evidence is not None
+        and trigger_evidence.get("hazard_response_triggered", False)
+    )
+    reversal_count = (
+        int(previous_reversal_count) + 1
+        if kinematic_brake_reversed
+        else 0
+    )
+    release_authorized = bool(
+        not hazard_response_triggered
+        or reversal_count >= int(required_reversal_count)
+    )
+    return {
+        "hazard_response_triggered": hazard_response_triggered,
+        "kinematic_brake_reversed": bool(kinematic_brake_reversed),
+        "previous_reversal_count": int(previous_reversal_count),
+        "reversal_count": reversal_count,
+        "required_reversal_count": int(required_reversal_count),
+        "release_authorized": release_authorized,
+        "count_reset_by_hazard_response": bool(
+            not kinematic_brake_reversed
+            and previous_reversal_count > 0
+        ),
+        "formula": (
+            "a geometric-height-only settle keeps its existing release; "
+            "a descent hazard-response settle requires two consecutive "
+            "full-brake frames with nonnegative vertical, EEF-outward, "
+            "and live-clearance directions before another descent"
+        ),
+    }
+
+
 def _outside_side_lateral_settle_evidence(
     *,
     before_guard,
@@ -18356,6 +18409,38 @@ def _seek_stable_plate_contact(
                     ),
                 )
             )
+            hazard_brake_trigger_evidence = lateral_settle_state.get(
+                "trigger_evidence"
+            )
+            hazard_brake_release_evidence = (
+                _vertical_corridor_hazard_brake_release_evidence(
+                    trigger_evidence=hazard_brake_trigger_evidence,
+                    previous_reversal_count=int(
+                        lateral_settle_state.get(
+                            "hazard_brake_reversal_count", 0
+                        )
+                    ),
+                    kinematic_brake_reversed=bool(
+                        lateral_settle_progress[
+                            "kinematic_brake_reversed"
+                        ]
+                    ),
+                    required_reversal_count=int(
+                        lateral_settle_progress[
+                            "required_stable_response_count"
+                        ]
+                    ),
+                )
+            )
+            lateral_settle_progress["trigger_evidence"] = (
+                hazard_brake_trigger_evidence
+            )
+            lateral_settle_progress[
+                "hazard_brake_reversal_count"
+            ] = hazard_brake_release_evidence["reversal_count"]
+            lateral_settle_progress[
+                "hazard_brake_release_evidence"
+            ] = hazard_brake_release_evidence
             neutral_damping_latch_transition = (
                 _outside_side_neutral_damping_latch_transition(
                     damping_guard=neutral_damping_guard,
@@ -18440,6 +18525,9 @@ def _seek_stable_plate_contact(
                 )
                 and active_vertical_corridor_geometric_height_action
                 >= vertical_corridor_geometric_height_action_floor
+                and hazard_brake_release_evidence[
+                    "release_authorized"
+                ]
             ):
                 previous_geometric_height_action = float(
                     active_vertical_corridor_geometric_height_action
@@ -18476,6 +18564,9 @@ def _seek_stable_plate_contact(
                         vertical_corridor_outward_hold_max_translation_action
                     ),
                     "full_outside_side_guard_accepted": False,
+                    "hazard_brake_release_evidence": (
+                        hazard_brake_release_evidence
+                    ),
                     "formal_corridor_target_unchanged": True,
                 }
                 vertical_tail_events.append(

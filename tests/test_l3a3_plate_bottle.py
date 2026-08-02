@@ -17,6 +17,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _contact_progress_saturation_evidence,
     _constraint_prioritized_outside_descent_action,
     _vertical_corridor_descent_settle_trigger_evidence,
+    _vertical_corridor_hazard_brake_release_evidence,
     _vertical_corridor_reserve_recovery_evidence,
     _vertical_corridor_reserve_recovery_phase_evidence,
     _compiled_corridor_reserve_action,
@@ -3374,6 +3375,42 @@ def test_job503666_descent_hazard_response_triggers_full_settle():
     assert geometric["triggered"] is True
     assert geometric["geometric_height_triggered"] is True
     assert geometric["hazard_response_triggered"] is False
+
+
+def test_job503667_hazard_brake_requires_two_directional_reversals():
+    hazard_trigger = {"hazard_response_triggered": True}
+    first = _vertical_corridor_hazard_brake_release_evidence(
+        trigger_evidence=hazard_trigger,
+        previous_reversal_count=0,
+        kinematic_brake_reversed=True,
+    )
+    assert first["reversal_count"] == 1
+    assert first["release_authorized"] is False
+
+    second = _vertical_corridor_hazard_brake_release_evidence(
+        trigger_evidence=hazard_trigger,
+        previous_reversal_count=first["reversal_count"],
+        kinematic_brake_reversed=True,
+    )
+    assert second["reversal_count"] == 2
+    assert second["release_authorized"] is True
+
+    reset = _vertical_corridor_hazard_brake_release_evidence(
+        trigger_evidence=hazard_trigger,
+        previous_reversal_count=1,
+        kinematic_brake_reversed=False,
+    )
+    assert reset["reversal_count"] == 0
+    assert reset["count_reset_by_hazard_response"] is True
+    assert reset["release_authorized"] is False
+
+    geometric_only = _vertical_corridor_hazard_brake_release_evidence(
+        trigger_evidence={"hazard_response_triggered": False},
+        previous_reversal_count=0,
+        kinematic_brake_reversed=True,
+    )
+    assert geometric_only["reversal_count"] == 1
+    assert geometric_only["release_authorized"] is True
 
 
 def test_500099_every_descent_requires_preventive_active_braking_settle():
@@ -10410,6 +10447,12 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
         'elif stage_before_action == "vertical_corridor_descent":', 1
     )[0]
     assert "kinematic_brake_reversed" in settle_transition_logic
+    assert "_vertical_corridor_hazard_brake_release_evidence(" in (
+        settle_transition_logic
+    )
+    assert '"hazard_brake_reversal_count"' in settle_transition_logic
+    assert 'hazard_brake_release_evidence[' in settle_transition_logic
+    assert '"release_authorized"' in settle_transition_logic
     assert "settle_geometric_authority_release" in settle_transition_logic
     assert (
         "0.5 * previous_geometric_height_action"
