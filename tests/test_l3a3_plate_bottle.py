@@ -25,6 +25,8 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _compiled_low_side_settle_brake_action,
     _compiled_hazard_release_descent_action,
     _compiled_hazard_release_zero_coast_action,
+    _hazard_release_zero_coast_reserve_evidence,
+    _hazard_release_zero_coast_transition_evidence,
     _compiled_low_side_neutral_damping_action,
     _outside_side_neutral_damping_guard_evidence,
     _outside_side_neutral_damping_latch_transition,
@@ -3692,6 +3694,63 @@ def test_job503690_hazard_release_zero_coast_requires_live_reserves():
             native_action_spec=native,
             recovery_exit_clearance_m=0.00155,
         )
+
+
+def test_job503691_zero_coast_reserve_evidence_is_strict_and_explicit():
+    guard = {
+        "minimum_outside_clearance_m": 0.0015501,
+        "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+        "finger_table_vertical_clearance_m": 0.00155,
+        "required_finger_table_clearance_m": np.nextafter(
+            0.0, np.inf
+        ),
+    }
+    evidence = _hazard_release_zero_coast_reserve_evidence(
+        outside_side_guard=guard,
+        recovery_exit_clearance_m=0.00155,
+    )
+    assert evidence["accepted"] is False
+    assert evidence["violations"] == [
+        "finger_table_above_recovery_exit"
+    ]
+    assert evidence["checks"]["outside_above_recovery_exit"] is True
+    assert (
+        evidence["checks"]["finger_table_above_recovery_exit"]
+        is False
+    )
+    assert evidence["live_finger_table_clearance_m"] == 0.00155
+
+
+def test_job503691_zero_coast_request_latches_during_reserve_recovery():
+    insufficient_reserve = {
+        "accepted": False,
+        "violations": ["finger_table_above_recovery_exit"],
+    }
+    recovery = _hazard_release_zero_coast_transition_evidence(
+        previously_requested=True,
+        neutral_damping_active=True,
+        full_guard_accepted=False,
+        previous_hazard_release_evidence={},
+        reserve_evidence=insufficient_reserve,
+    )
+    assert recovery["requested"] is True
+    assert recovery["active"] is False
+    assert recovery["reserve_recovery_active"] is True
+    assert (
+        recovery["proof"]["reserve_loss_selects_existing_full_brake"]
+        is True
+    )
+
+    restored = _hazard_release_zero_coast_transition_evidence(
+        previously_requested=recovery["requested"],
+        neutral_damping_active=False,
+        full_guard_accepted=False,
+        previous_hazard_release_evidence={},
+        reserve_evidence={"accepted": True, "violations": []},
+    )
+    assert restored["requested"] is True
+    assert restored["active"] is True
+    assert restored["reserve_recovery_active"] is False
 
 
 def test_500099_every_descent_requires_preventive_active_braking_settle():
@@ -10710,6 +10769,19 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "_compiled_hazard_release_descent_action(" in bounded_seek
     assert "hazard_release_descent_active_before_action" in bounded_seek
     assert "_compiled_hazard_release_zero_coast_action(" in bounded_seek
+    assert "_hazard_release_zero_coast_reserve_evidence(" in bounded_seek
+    assert "_hazard_release_zero_coast_transition_evidence(" in (
+        bounded_seek
+    )
+    assert "hazard_release_zero_coast_requested_before_action" in (
+        bounded_seek
+    )
+    assert "hazard_release_zero_coast_reserve_recovery_active" in (
+        bounded_seek
+    )
+    assert "hazard_zero_coast_reserve_recovery_uses_full_brake" in (
+        settle_action
+    )
     assert "hazard_release_zero_coast_stable_count" in bounded_seek
     assert "stable_zero_coast_above_rim_to_shielded_descent" in (
         bounded_seek

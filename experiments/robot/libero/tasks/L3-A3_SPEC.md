@@ -595,6 +595,18 @@ coast is stable and only above-rim coverage predicates remain false, it returns
 to the already compiled shielded descent. Strict outside/table guards, post-
 action collision checks, the waypoint budget, and all formal thresholds remain
 unchanged.
+Job503691 reached that zero-coast path but later found that at least one live
+outside/table reserve was no longer strictly above the unchanged `1.550 mm`
+recovery-exit line. The compiled zero action correctly failed before simulator
+advancement, but the state machine had no registered recovery branch for this
+expected inertial-tail case. The zero-coast request is now latched separately
+from zero-coast execution. If either live reserve is not accepted, zero coast
+is suspended and the already compiled full `+X=0.40, +Z=0.40` outward/table
+recovery brake is selected; the confirmation schedule cannot weaken that
+recovery frame. The exact rejected reserve checks and transition decision are
+serialized. Zero coast resumes only after both reserves again pass the same
+strict line. No task, state, inventory, target, action bound, physical gate,
+waypoint budget, or threshold changes.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
