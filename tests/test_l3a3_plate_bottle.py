@@ -18,6 +18,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _vertical_corridor_reserve_recovery_evidence,
     _vertical_corridor_reserve_recovery_phase_evidence,
     _compiled_corridor_reserve_action,
+    _compiled_low_side_settle_brake_action,
     _compiled_adaptive_lateral_rebuffer_action,
     _compiled_adaptive_high_lateral_action,
     _compiled_adaptive_high_plane_action,
@@ -3182,6 +3183,41 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         "strictly_inside_native_3d_action_norm_bound": True,
         "outside_clearance_statically_improves": True,
         "all_compiled_pairs_retain_strict_base_reserve": True,
+        "post_action_live_guards_required": True,
+    }
+    low_side_brake, low_side_brake_evidence = (
+        _compiled_low_side_settle_brake_action(
+            current_eef=np.array([0.1340, -0.0285, 0.9150]),
+            outside_side_guard={
+                "accepted": True,
+                "minimum_outside_clearance_m": 0.0019,
+                "required_outside_clearance_m": strict_clearance,
+                "finger_table_vertical_clearance_m": 0.0020,
+                "required_finger_table_clearance_m": strict_clearance,
+            },
+            gripper=-1.0,
+            position_action_scale=0.08,
+            native_action_spec=native_spec,
+            lateral_target_xy=np.array([0.1496, -0.0285]),
+            one_sided_outward_direction_xy=np.array([1.0, 0.0]),
+            maximum_lateral_translation_action=0.20,
+            positive_z_action=0.10,
+            strict_corridor_clearance_m=0.0004,
+        )
+    )
+    assert 0.194 < low_side_brake[0] < 0.196
+    assert low_side_brake[1] == 0.0
+    assert low_side_brake[2] == pytest.approx(0.10)
+    assert np.linalg.norm(low_side_brake[:3]) < 1.0
+    assert low_side_brake_evidence[
+        "overhead_vertical_pair_guard_applicable"
+    ] is False
+    assert low_side_brake_evidence["proof"] == {
+        "strictly_outward_xy_zero_rotation": True,
+        "strictly_positive_z": True,
+        "strictly_inside_native_3d_action_norm_bound": True,
+        "outside_clearance_statically_improves": True,
+        "finger_table_clearance_statically_improves": True,
         "post_action_live_guards_required": True,
     }
 
@@ -8788,6 +8824,20 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert '"overhead_post_descent_corridor_lateral"' in bounded_seek
     assert '"vertical_corridor_descent"' in bounded_seek
     assert '"vertical_corridor_settle"' in bounded_seek
+    settle_action = bounded_seek.split(
+        'elif structural_stage == "vertical_corridor_settle":', 1
+    )[1].split(
+        'elif structural_stage == "fixed_safe_z_lateral_approach":', 1
+    )[0]
+    assert "_compiled_low_side_settle_brake_action(" in settle_action
+    assert "vertical_corridor_outward_hold_max_translation_action" in (
+        settle_action
+    )
+    assert "vertical_corridor_descent_max_translation_action" in (
+        settle_action
+    )
+    assert "compiled_low_side_settle_brake_envelope" in settle_action
+    assert '"active_positive_z_brake_requested": True' in settle_action
     assert '"fixed_safe_z_lateral_approach"' in bounded_seek
     assert (
         "for guard_step in range(1, structural_waypoint_budget + 1)"

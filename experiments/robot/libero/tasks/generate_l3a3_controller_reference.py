@@ -7491,6 +7491,189 @@ def _compiled_corridor_reserve_action(
     }
 
 
+def _compiled_low_side_settle_brake_action(
+    *,
+    current_eef,
+    outside_side_guard,
+    gripper,
+    position_action_scale,
+    native_action_spec,
+    lateral_target_xy,
+    one_sided_outward_direction_xy,
+    maximum_lateral_translation_action,
+    positive_z_action,
+    strict_corridor_clearance_m,
+):
+    """Brake low-side inertia using monotonic rim/table separation."""
+    current_eef = np.asarray(current_eef, dtype=float)
+    lateral_target_xy = np.asarray(lateral_target_xy, dtype=float)
+    outward_direction = np.asarray(
+        one_sided_outward_direction_xy, dtype=float
+    )
+    outward_norm = float(np.linalg.norm(outward_direction))
+    scalars = (
+        position_action_scale,
+        maximum_lateral_translation_action,
+        positive_z_action,
+        strict_corridor_clearance_m,
+    )
+    if (
+        current_eef.shape != (3,)
+        or lateral_target_xy.shape != (2,)
+        or outward_direction.shape != (2,)
+        or not np.all(np.isfinite(current_eef))
+        or not np.all(np.isfinite(lateral_target_xy))
+        or not np.all(np.isfinite(outward_direction))
+        or not np.isclose(outward_norm, 1.0, rtol=0.0, atol=1e-12)
+        or not all(np.isfinite(value) and value > 0.0 for value in scalars)
+        or not outside_side_guard.get("accepted", False)
+    ):
+        raise ValueError("compiled low-side settle-brake inputs are invalid")
+    try:
+        native_low = np.asarray(native_action_spec["low"], dtype=float)
+        native_high = np.asarray(native_action_spec["high"], dtype=float)
+        native_source = str(native_action_spec["source"])
+        live_outside_clearance = float(
+            outside_side_guard["minimum_outside_clearance_m"]
+        )
+        required_outside_clearance = float(
+            outside_side_guard["required_outside_clearance_m"]
+        )
+        live_finger_table_clearance = float(
+            outside_side_guard["finger_table_vertical_clearance_m"]
+        )
+        required_finger_table_clearance = float(
+            outside_side_guard["required_finger_table_clearance_m"]
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            "low-side settle native/guard evidence is incomplete"
+        ) from exc
+    if (
+        not native_action_spec.get("runtime_resolved", False)
+        or native_action_spec.get("action_dimension") != 7
+        or native_low.shape != (7,)
+        or native_high.shape != (7,)
+        or not np.all(np.isfinite(native_low))
+        or not np.all(np.isfinite(native_high))
+        or not np.all(native_low < native_high)
+        or not (native_low[6] <= gripper <= native_high[6])
+        or not (native_low[2] < positive_z_action < native_high[2])
+    ):
+        raise RuntimeError(
+            "native OSC action bounds do not prove low-side settle braking"
+        )
+    native_translation_norm_bound = float(
+        min(
+            -native_low[0],
+            native_high[0],
+            -native_low[1],
+            native_high[1],
+            -native_low[2],
+            native_high[2],
+        )
+    )
+    strict_native_translation_norm_bound = float(
+        np.nextafter(native_translation_norm_bound, 0.0)
+    )
+    lateral_cap = float(
+        min(
+            np.nextafter(
+                float(maximum_lateral_translation_action), 0.0
+            ),
+            np.sqrt(
+                max(
+                    0.0,
+                    strict_native_translation_norm_bound**2
+                    - float(positive_z_action) ** 2,
+                )
+            ),
+        )
+    )
+    outward_remaining_m = float(
+        np.dot(lateral_target_xy - current_eef[:2], outward_direction)
+    )
+    outward_action = float(
+        min(lateral_cap, outward_remaining_m / position_action_scale)
+    )
+    if not (outward_action > 0.0 and lateral_cap > 0.0):
+        raise RuntimeError(
+            "compiled low-side settle brake has no outward capacity"
+        )
+    action = np.zeros(7, dtype=float)
+    action[:2] = outward_direction * outward_action
+    action[2] = float(positive_z_action)
+    action[-1] = float(gripper)
+    translation_norm = float(np.linalg.norm(action[:3]))
+    commanded_outward_world_delta = float(
+        position_action_scale * outward_action
+    )
+    commanded_positive_z_world_delta = float(
+        position_action_scale * positive_z_action
+    )
+    predicted_outside_clearance = float(
+        live_outside_clearance + commanded_outward_world_delta
+    )
+    predicted_finger_table_clearance = float(
+        live_finger_table_clearance + commanded_positive_z_world_delta
+    )
+    if not (
+        np.isfinite(live_outside_clearance)
+        and np.isfinite(required_outside_clearance)
+        and live_outside_clearance > strict_corridor_clearance_m
+        and live_outside_clearance >= required_outside_clearance
+        and predicted_outside_clearance > live_outside_clearance
+        and np.isfinite(live_finger_table_clearance)
+        and np.isfinite(required_finger_table_clearance)
+        and live_finger_table_clearance
+        >= required_finger_table_clearance
+        and predicted_finger_table_clearance
+        > live_finger_table_clearance
+        and translation_norm < native_translation_norm_bound
+        and np.all(action[:3] > native_low[:3])
+        and np.all(action[:3] < native_high[:3])
+    ):
+        raise RuntimeError(
+            "compiled low-side settle brake violates its live guard proof"
+        )
+    return action, {
+        "formula": (
+            "command only the registered outward axis plus strictly positive "
+            "Z; prove monotonic outside-rim and finger-table clearance while "
+            "remaining strictly inside the runtime-native 3-D action norm"
+        ),
+        "current_eef": current_eef.tolist(),
+        "native_action_spec_source": native_source,
+        "commanded_xy_action": action[:2].tolist(),
+        "commanded_z_action": float(action[2]),
+        "commanded_translation_action_norm": translation_norm,
+        "commanded_outward_world_delta_m": commanded_outward_world_delta,
+        "commanded_positive_z_world_delta_m": (
+            commanded_positive_z_world_delta
+        ),
+        "live_outside_clearance_m": live_outside_clearance,
+        "required_outside_clearance_m": required_outside_clearance,
+        "strict_corridor_clearance_m": float(strict_corridor_clearance_m),
+        "predicted_outside_clearance_m": predicted_outside_clearance,
+        "live_finger_table_clearance_m": live_finger_table_clearance,
+        "required_finger_table_clearance_m": (
+            required_finger_table_clearance
+        ),
+        "predicted_finger_table_clearance_m": (
+            predicted_finger_table_clearance
+        ),
+        "overhead_vertical_pair_guard_applicable": False,
+        "proof": {
+            "strictly_outward_xy_zero_rotation": True,
+            "strictly_positive_z": True,
+            "strictly_inside_native_3d_action_norm_bound": True,
+            "outside_clearance_statically_improves": True,
+            "finger_table_clearance_statically_improves": True,
+            "post_action_live_guards_required": True,
+        },
+    }
+
+
 def _compiled_adaptive_lateral_rebuffer_action(
     *,
     current_eef,
@@ -8264,12 +8447,11 @@ def _outside_side_lateral_settle_evidence(
         ),
         "violations": violations,
         "formula": (
-            "after every descent step, preserve compiled outside XY and "
-            "actively brake in positive Z whenever the previous measured "
-            "Z response is negative; require at least two consecutive "
-            "settle frames where measured Z, EEF-outward, and live-clearance "
-            "step progress are all nonnegative and compiled clearance is "
-            "satisfied before permitting another descent"
+            "after every descent step, retain the compiled strictly outward "
+            "plus positive-Z low-side inertial brake; require at least two "
+            "consecutive settle frames where measured Z, EEF-outward, and "
+            "live-clearance step progress are all nonnegative and compiled "
+            "clearance is satisfied before permitting lateral approach"
         ),
         "vertical_step_progress_m": vertical_step_progress,
         "step_response": step_response,
@@ -15368,31 +15550,40 @@ def _seek_stable_plate_contact(
                         "vertical_step_progress_m"
                     ]
                 )
-            active_brake = previous_vertical_step_progress < 0.0
             action, path_control = (
-                _constraint_prioritized_outside_descent_action(
+                _compiled_low_side_settle_brake_action(
                     current_eef=current_eef,
-                    outside_side_target=corridor_side_target,
-                    outward_direction_xy=geometry[
-                        "outward_direction_xy"
-                    ],
-                    maximum_descent_m=0.0,
+                    outside_side_guard=pre_action_guard,
                     gripper=gripper,
                     position_action_scale=args.position_action_scale,
-                    maximum_translation_action=(
+                    native_action_spec=native_action_spec,
+                    lateral_target_xy=(
+                        vertical_corridor_balanced_hold_target_xy
+                    ),
+                    one_sided_outward_direction_xy=(
+                        corridor_outward_direction
+                    ),
+                    maximum_lateral_translation_action=(
+                        vertical_corridor_outward_hold_max_translation_action
+                    ),
+                    positive_z_action=(
                         vertical_corridor_descent_max_translation_action
                     ),
-                    active_positive_z_brake=active_brake,
+                    strict_corridor_clearance_m=float(
+                        vertical_staging_corridor[
+                            "strict_corridor_entry_clearance_m"
+                        ]
+                    ),
                 )
             )
             feedback = {
                 "mode": structural_stage,
                 "action": action.tolist(),
-                "descent_path_control": path_control,
+                "compiled_low_side_settle_brake_envelope": path_control,
                 "previous_settle_vertical_step_progress_m": (
                     previous_vertical_step_progress
                 ),
-                "active_positive_z_brake_requested": active_brake,
+                "active_positive_z_brake_requested": True,
                 "active_positive_z_brake_commanded": bool(
                     action[2] > 0.0
                 ),

@@ -112,6 +112,18 @@ measured Z response in Job503245. Release requires clearance strictly above
 resolution), measured nonnegative outward and vertical progress, a refreshed
 accepted all-pair base guard, and an explicit exit-brake phase. The unchanged
 `0.0004 m` strict physical gate remains enforced before and after every action.
+At the registered side height, the settle phase retains the existing `0.20`
+outward authority together with the existing `0.10` positive-Z brake until two
+consecutive frames measure nonnegative outward, clearance, and vertical
+progress. This low-side brake is proved against the live horizontal rim
+clearance and finger-table clearance, both of which its exact outward/positive-Z
+command monotonically improves, plus the runtime-native 3-D norm. It does not
+claim the overhead vertical-separation proof after the gripper has entered the
+rim-height overlap interval. Job503260 showed that dropping outward authority
+to zero on the old settle transition allowed residual descent-controller
+inertia to cross the strict corridor gate; every low-side brake action therefore
+retains the same pre/post outside, table, unexpected-contact, support, and
+stability hard stops.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
