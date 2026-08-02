@@ -8668,8 +8668,16 @@ def _outside_side_neutral_damping_latch_transition(
         damping_active_before
         and np.all(commanded_action_xyz == 0.0)
     )
+    paused_zero_ramp_predecessor = bool(
+        damping_latched_before
+        and not damping_active_before
+        and np.all(previous_ramp_action_xyz == 0.0)
+    )
     coverage_gap_zero_release_required = bool(
-        damping_ramp_reached_zero
+        (
+            damping_ramp_reached_zero
+            or paused_zero_ramp_predecessor
+        )
         and transient_gap_authorized
         and not full_guard_accepted
     )
@@ -8717,6 +8725,9 @@ def _outside_side_neutral_damping_latch_transition(
             damping_resumed_after_reserve_recovery
         ),
         "damping_ramp_reached_zero": damping_ramp_reached_zero,
+        "paused_zero_ramp_predecessor": (
+            paused_zero_ramp_predecessor
+        ),
         "paused_ramp_reversal_confirmed": (
             paused_ramp_reversal_confirmed
         ),
@@ -8839,6 +8850,23 @@ def _compiled_low_side_neutral_damping_action(
             - maximum_positive_release_action,
         )
     )
+    numeric_zero_tolerance = float(
+        8.0
+        * np.finfo(float).eps
+        * max(
+            1.0,
+            abs(previous_outward_action),
+            abs(previous_positive_z_action),
+            abs(maximum_positive_release_action),
+        )
+    )
+    numeric_zero_snapped_components = []
+    if 0.0 < commanded_outward_action <= numeric_zero_tolerance:
+        commanded_outward_action = 0.0
+        numeric_zero_snapped_components.append("outward")
+    if 0.0 < commanded_positive_z_action <= numeric_zero_tolerance:
+        commanded_positive_z_action = 0.0
+        numeric_zero_snapped_components.append("positive_z")
     action = np.zeros(7, dtype=float)
     action[:2] = outward_direction * commanded_outward_action
     action[2] = commanded_positive_z_action
@@ -8869,6 +8897,10 @@ def _compiled_low_side_neutral_damping_action(
         "commanded_outward_action": commanded_outward_action,
         "commanded_positive_z_action": commanded_positive_z_action,
         "damping_ramp_reached_zero": damping_ramp_reached_zero,
+        "numeric_zero_tolerance": numeric_zero_tolerance,
+        "numeric_zero_snapped_components": (
+            numeric_zero_snapped_components
+        ),
         "damping_guard": damping_guard,
         "live_outside_clearance_m": live_outside_clearance,
         "live_finger_table_clearance_m": live_finger_table_clearance,
@@ -18296,7 +18328,7 @@ def _seek_stable_plate_contact(
                     ]
                 )
                 and active_vertical_corridor_geometric_height_action
-                > vertical_corridor_geometric_height_action_floor
+                >= vertical_corridor_geometric_height_action_floor
             ):
                 previous_geometric_height_action = float(
                     active_vertical_corridor_geometric_height_action

@@ -412,6 +412,26 @@ reduced geometric descent instead of holding above the rim. Full guard
 acceptance remains mandatory for neutral stability counting and handoff, and
 no physical, controller-authority, inventory, task, target, or budget
 threshold changes.
+Job503659 verified the reserve-recovery latch but exposed two terminal-state
+edge cases. The first resumed ramp produced nominal zero with a positive-Z
+floating residual of `1.39e-17`; exact comparison therefore preserved a
+near-zero predecessor. After the full brake restored reserve to `1.743605 mm`
+with only the registered coverage gaps, the controller executed one redundant
+zero frame and reserve fell to `1.124275 mm`. The zero-gap release then became
+eligible, but the geometric height action already equalled its unchanged
+`0.050` floor and the transition incorrectly required it to be strictly
+greater than that floor. Repeated full brakes again excited lateral motion and
+step 216 reduced outside clearance from `0.552224 mm` to a prohibited
+`-0.112514 mm`. Damping compilation now snaps only positive residuals no
+larger than eight floating-point epsilons at normalized unit scale to exact
+zero and records the tolerance and affected axes. A paused zero predecessor
+ends its coverage-only authorization on the first guard-and-reserve recovery
+frame, without executing another zero action. The existing geometric-release
+transition now accepts equality at the unchanged action floor; its existing
+`max(floor, 0.5 * action)` expression therefore continues at exactly `0.050`
+and cannot lower or bypass the preregistered floor. All physical reserves,
+formal guards, task fields, inventories, targets, budgets, and action
+authorities remain unchanged.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

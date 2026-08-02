@@ -3814,6 +3814,27 @@ def test_job503651_corridor_settle_requires_neutral_absolute_stop():
     assert zero_action[:6].tolist() == pytest.approx([0.0] * 6)
     assert zero_damping["damping_ramp_reached_zero"] is True
 
+    representational_zero_action, representational_zero_damping = (
+        _compiled_low_side_neutral_damping_action(
+            outside_side_guard=after_guard,
+            gripper=-1.0,
+            native_action_spec=native_spec,
+            recovery_exit_clearance_m=0.00155,
+            previous_commanded_action_xyz=np.array(
+                [0.0368638973539234, 0.0, 0.05000000000000002]
+            ),
+            maximum_positive_release_action=0.05,
+        )
+    )
+    assert representational_zero_action[:3].tolist() == [0.0, 0.0, 0.0]
+    assert representational_zero_damping[
+        "damping_ramp_reached_zero"
+    ] is True
+    assert representational_zero_damping[
+        "numeric_zero_snapped_components"
+    ] == ["positive_z"]
+    assert representational_zero_damping["numeric_zero_tolerance"] < 1e-12
+
     transient_gap_guard = {
         **after_guard,
         "accepted": False,
@@ -3927,6 +3948,22 @@ def test_job503657_damping_latch_survives_reserve_recovery_brake():
     assert zero_gap["coverage_gap_zero_release_required"] is True
     assert zero_gap["neutral_damping_latched"] is False
     assert zero_gap["neutral_damping_active"] is False
+
+    paused_zero_gap = _outside_side_neutral_damping_latch_transition(
+        damping_guard=transient_guard,
+        damping_latched_before=True,
+        damping_active_before=False,
+        kinematic_brake_reversed=True,
+        reserves_accepted=True,
+        commanded_action_xyz=np.array([0.1966, 0.0, 0.20]),
+        previous_ramp_action_xyz=np.zeros(3, dtype=float),
+    )
+    assert paused_zero_gap["paused_zero_ramp_predecessor"] is True
+    assert paused_zero_gap[
+        "coverage_gap_zero_release_required"
+    ] is True
+    assert paused_zero_gap["neutral_damping_latched"] is False
+    assert paused_zero_gap["neutral_damping_active"] is False
 
     overlap_missing_guard = {
         "full_guard_accepted": False,
@@ -10249,6 +10286,10 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     )
     assert "vertical_corridor_geometric_height_action_floor" in (
         settle_transition_logic
+    )
+    assert (
+        ">= vertical_corridor_geometric_height_action_floor"
+        in settle_transition_logic
     )
     assert "fixed_outward_translation_action_bound" in settle_action
     assert "active_geometric_height_action" in bounded_seek
