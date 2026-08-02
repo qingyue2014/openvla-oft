@@ -1828,6 +1828,195 @@ def _overhead_outside_high_entry_evidence(
     }
 
 
+def _high_plane_native_boundary_crossing_evidence(
+    *,
+    observation,
+    high_lateral_target,
+    native_outside_high_target,
+    outward_direction_xy,
+    expected_pair_count,
+):
+    """Prove one high-plane action strictly crossed the native outside target."""
+    high_lateral_target = np.asarray(high_lateral_target, dtype=float)
+    native_outside_high_target = np.asarray(
+        native_outside_high_target, dtype=float
+    )
+    outward = np.asarray(outward_direction_xy, dtype=float)
+    if (
+        high_lateral_target.shape != (3,)
+        or native_outside_high_target.shape != (3,)
+        or outward.shape != (2,)
+        or not np.all(np.isfinite(high_lateral_target))
+        or not np.all(np.isfinite(native_outside_high_target))
+        or not np.all(np.isfinite(outward))
+        or not isinstance(expected_pair_count, (int, np.integer))
+        or expected_pair_count < 1
+    ):
+        raise ValueError("high-plane native-boundary inputs are invalid")
+    outward_norm = float(np.linalg.norm(outward))
+    if not np.isfinite(outward_norm) or outward_norm <= 0.0:
+        raise ValueError("high-plane native-boundary outward direction is invalid")
+    outward /= outward_norm
+
+    before_eef = np.asarray(observation["before_eef"], dtype=float)
+    after_eef = np.asarray(observation["after_eef"], dtype=float)
+    action = np.asarray(observation["action"], dtype=float)
+    envelope = observation["high_plane_envelope"]
+    pre_overhead_guard = observation["pre_overhead_guard"]
+    post_overhead_guard = observation["post_overhead_guard"]
+    after_outside_guard = observation["after_outside_guard"]
+    if (
+        before_eef.shape != (3,)
+        or after_eef.shape != (3,)
+        or action.shape != (7,)
+        or not np.all(np.isfinite(before_eef))
+        or not np.all(np.isfinite(after_eef))
+        or not np.all(np.isfinite(action))
+    ):
+        raise ValueError("high-plane native-boundary observation is invalid")
+
+    commanded_outward_action = float(np.dot(action[:2], outward))
+    before_remaining_outward_error = float(
+        np.dot(high_lateral_target[:2] - before_eef[:2], outward)
+    )
+    after_remaining_outward_error = float(
+        np.dot(high_lateral_target[:2] - after_eef[:2], outward)
+    )
+    target_outward_of_native = float(
+        np.dot(
+            high_lateral_target[:2] - native_outside_high_target[:2],
+            outward,
+        )
+    )
+    actual_outward_beyond_native = float(
+        np.dot(
+            after_eef[:2] - native_outside_high_target[:2],
+            outward,
+        )
+    )
+    live_outside_clearance = float(
+        after_outside_guard["minimum_outside_clearance_m"]
+    )
+    required_outside_clearance = float(
+        after_outside_guard["required_outside_clearance_m"]
+    )
+    scalars = (
+        commanded_outward_action,
+        before_remaining_outward_error,
+        after_remaining_outward_error,
+        target_outward_of_native,
+        actual_outward_beyond_native,
+        live_outside_clearance,
+        required_outside_clearance,
+    )
+    if not all(np.isfinite(value) for value in scalars):
+        raise RuntimeError("high-plane native-boundary evidence is non-finite")
+
+    pre_pairs = list(pre_overhead_guard.get("pairs", ()))
+    post_pairs = list(post_overhead_guard.get("pairs", ()))
+    envelope_pairs = list(envelope.get("pair_envelopes", ()))
+    pre_identities = [_overhead_pair_identity(pair) for pair in pre_pairs]
+    post_identities = [_overhead_pair_identity(pair) for pair in post_pairs]
+    envelope_identities = [
+        tuple(identity) for identity in envelope.get("pair_identity_keys", ())
+    ]
+    pair_inventory_exact = bool(
+        envelope.get("compiled_pair_count") == int(expected_pair_count)
+        and len(pre_pairs) == int(expected_pair_count)
+        and len(post_pairs) == int(expected_pair_count)
+        and len(envelope_pairs) == int(expected_pair_count)
+        and len(set(pre_identities)) == int(expected_pair_count)
+        and pre_identities == post_identities == envelope_identities
+    )
+    all_pair_base8_strict = bool(
+        pair_inventory_exact
+        and pre_overhead_guard.get("accepted", False)
+        and post_overhead_guard.get("accepted", False)
+        and envelope.get("accepted", False)
+        and all(pair.get("accepted", False) for pair in pre_pairs)
+        and all(pair.get("accepted", False) for pair in post_pairs)
+        and all(
+            np.isfinite(
+                float(
+                    pair[
+                        "predicted_post_worst_case_base_reserve_surplus_m"
+                    ]
+                )
+            )
+            and float(
+                pair["predicted_post_worst_case_base_reserve_surplus_m"]
+            )
+            > 0.0
+            for pair in envelope_pairs
+        )
+    )
+    target_request_persistent = bool(
+        commanded_outward_action > 0.0
+        and before_remaining_outward_error > 0.0
+        and after_remaining_outward_error > 0.0
+        and target_outward_of_native > 0.0
+        and np.array_equal(
+            np.asarray(envelope["lateral_target_xy"], dtype=float),
+            high_lateral_target[:2],
+        )
+    )
+    action_high_plane_safe = bool(
+        action[2] >= 0.0 and np.all(action[3:6] == 0.0)
+    )
+    violations = []
+    if not target_request_persistent:
+        violations.append("registered_corridor_outward_request_not_persistent")
+    if not action_high_plane_safe:
+        violations.append("high_plane_action_direction_or_rotation_invalid")
+    if actual_outward_beyond_native <= 0.0:
+        violations.append("actual_eef_not_strictly_beyond_native_outside_target")
+    if live_outside_clearance <= required_outside_clearance:
+        violations.append("live_outside_clearance_not_strict")
+    if not all_pair_base8_strict:
+        violations.append("all_55_pair_high_plane_base8_not_strict")
+    return {
+        "accepted": not violations,
+        "violations": violations,
+        "decision": (
+            "strict_native_outside_boundary_crossed"
+            if not violations
+            else "continue_fail_closed_registered_corridor_request"
+        ),
+        "formula": (
+            "without using waypoint tolerance, require the actual post-action "
+            "EEF projection to lie strictly outward of the unchanged native "
+            "outside-high target while the registered corridor target remains "
+            "strictly farther outward; require a positive outward command, "
+            "nonnegative Z, zero rotation, live outside clearance strictly "
+            "above its compiled no-contact requirement, and the identical 55 "
+            "compiled pairs to pass pre-action, high-envelope predicted-post, "
+            "and live post-action base8"
+        ),
+        "uses_position_tolerance": False,
+        "native_outside_high_target": native_outside_high_target.tolist(),
+        "registered_high_lateral_target": high_lateral_target.tolist(),
+        "before_eef": before_eef.tolist(),
+        "after_eef": after_eef.tolist(),
+        "outward_direction_xy": outward.tolist(),
+        "commanded_outward_action": commanded_outward_action,
+        "before_remaining_outward_error_m": before_remaining_outward_error,
+        "after_remaining_outward_error_m": after_remaining_outward_error,
+        "registered_target_outward_of_native_target_m": (
+            target_outward_of_native
+        ),
+        "actual_eef_outward_of_native_outside_target_m": (
+            actual_outward_beyond_native
+        ),
+        "actual_minimum_outside_clearance_m": live_outside_clearance,
+        "required_outside_clearance_m": required_outside_clearance,
+        "target_request_persistent": target_request_persistent,
+        "action_nonnegative_z_zero_rotation": action_high_plane_safe,
+        "compiled_pair_count": int(expected_pair_count),
+        "pair_inventory_exact": pair_inventory_exact,
+        "all_55_pair_high_plane_base8_strict": all_pair_base8_strict,
+    }
+
+
 def _high_plane_native_workspace_saturation_evidence(
     *,
     observations,
@@ -6546,6 +6735,21 @@ def _seek_stable_plate_contact(
                 "strict required clearance, and the existing maximum "
                 "controller world step"
             ),
+            "native_high_boundary_crossing_gate": {
+                "uses_position_tolerance": False,
+                "required_compiled_pair_count": (
+                    expected_overhead_pair_count
+                ),
+                "requires_persistent_registered_corridor_request": True,
+                "requires_strict_actual_native_target_crossing": True,
+                "requires_strict_live_outside_clearance": True,
+                "requires_pre_envelope_post_high_plane_base8": True,
+                "requires_nonnegative_z_zero_rotation": True,
+                "fallback_order": (
+                    "after ordinary registered-corridor waypoint gate and "
+                    "before native workspace saturation"
+                ),
+            },
             "native_high_workspace_saturation_gate": {
                 "progress_epsilon_m": float(
                     args.minimum_saturated_waypoint_progress
@@ -6592,7 +6796,12 @@ def _seek_stable_plate_contact(
                 "responses within the existing saturated-waypoint progress "
                 "epsilon, the actual EEF lies strictly beyond the unchanged "
                 "native outside-high target, and all 55 high-plane pre/post "
-                "base8 checks remain strict; "
+                "base8 checks remain strict; before that saturation fallback, "
+                "permit the same release as soon as an actual high-plane EEF "
+                "step strictly crosses the unchanged native outside-high "
+                "target under a continuing registered-corridor request, "
+                "strict live outside clearance, nonnegative Z, zero rotation, "
+                "and the same all-55-pair pre/envelope/post base8 proof; "
                 "if the latest negative-dz inertia exhausts diagonal downward "
                 "capacity, prohibit negative Z and issue a 55-pair-proved pure "
                 "+Z recovery before recomputing the diagonal; "
@@ -7346,20 +7555,21 @@ def _seek_stable_plate_contact(
             feedback["outside_high_entry_after_high_lateral"] = (
                 outside_high_entry
             )
+            current_high_plane_observation = {
+                "before_eef": current_eef.copy(),
+                "after_eef": after_eef.copy(),
+                "action": action.copy(),
+                "high_plane_envelope": path_control,
+                "pre_overhead_guard": feedback[
+                    "pre_action_overhead_guard"
+                ],
+                "post_overhead_guard": latest_overhead_guard,
+                "before_outside_guard": pre_action_guard,
+                "after_outside_guard": latest_outside_side_guard,
+                "step_response": current_step_response,
+            }
             high_plane_workspace_saturation_observations.append(
-                {
-                    "before_eef": current_eef.copy(),
-                    "after_eef": after_eef.copy(),
-                    "action": action.copy(),
-                    "high_plane_envelope": path_control,
-                    "pre_overhead_guard": feedback[
-                        "pre_action_overhead_guard"
-                    ],
-                    "post_overhead_guard": latest_overhead_guard,
-                    "before_outside_guard": pre_action_guard,
-                    "after_outside_guard": latest_outside_side_guard,
-                    "step_response": current_step_response,
-                }
+                current_high_plane_observation
             )
             high_plane_workspace_saturation_observations[:] = (
                 high_plane_workspace_saturation_observations[
@@ -7392,6 +7602,22 @@ def _seek_stable_plate_contact(
             feedback["high_plane_native_workspace_saturation"] = (
                 workspace_saturation
             )
+            native_boundary_crossing = (
+                _high_plane_native_boundary_crossing_evidence(
+                    observation=current_high_plane_observation,
+                    high_lateral_target=high_lateral_prebuffer_target,
+                    native_outside_high_target=(
+                        overhead_outside_high_target
+                    ),
+                    outward_direction_xy=geometry[
+                        "outward_direction_xy"
+                    ],
+                    expected_pair_count=expected_overhead_pair_count,
+                )
+            )
+            feedback["high_plane_native_boundary_crossing"] = (
+                native_boundary_crossing
+            )
             if outside_high_entry["accepted"]:
                 structural_stage = "workspace_release_diagonal"
                 vertical_tail_events.append(
@@ -7402,6 +7628,21 @@ def _seek_stable_plate_contact(
                             "workspace_release_diagonal"
                         ),
                         **outside_high_entry,
+                    }
+                )
+            elif native_boundary_crossing["accepted"]:
+                structural_stage = "workspace_release_diagonal"
+                structural_seek_context[
+                    "accepted_native_high_boundary_crossing"
+                ] = native_boundary_crossing
+                vertical_tail_events.append(
+                    {
+                        "guard_step": int(guard_step),
+                        "event": (
+                            "strict_native_high_boundary_crossing_to_"
+                            "adaptive_workspace_release"
+                        ),
+                        **native_boundary_crossing,
                     }
                 )
             elif workspace_saturation["accepted"]:

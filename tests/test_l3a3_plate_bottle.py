@@ -32,6 +32,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _fixed_z_lateral_approach_action,
     _fixed_xy_vertical_approach_action,
     _gate_live_contact_offset_xy,
+    _high_plane_native_boundary_crossing_evidence,
     _high_plane_native_workspace_saturation_evidence,
     _horizon_budget,
     _live_plate_tracking_target,
@@ -4338,6 +4339,125 @@ def test_500261_saturation_fallback_reuses_existing_constants_and_exact_gates():
     )
     assert 'parser.add_argument("--push_tracking_steps", type=int, default=10)' in (
         controller
+    )
+    assert "pre_action_buffer16_surplus_after_inertia_m" in release
+    assert (
+        'required_clearance_key = "required_clearance_with_base_reserve_m"'
+        in release
+    )
+    assert "clearance > record[required_clearance_key]" in release
+    assert "clearance >= record[required_clearance_key]" not in release
+
+
+def test_502095_strict_native_boundary_crossing_accepts_without_tolerance():
+    observations, kwargs = _job500261_saturation_fixture()
+    observation = copy.deepcopy(observations[0])
+    outside_high = np.asarray(kwargs["native_outside_high_target"], dtype=float)
+    observation["before_eef"][0] = outside_high[0]
+    observation["after_eef"][0] = np.nextafter(outside_high[0], np.inf)
+    evidence = _high_plane_native_boundary_crossing_evidence(
+        observation=observation,
+        high_lateral_target=kwargs["high_lateral_target"],
+        native_outside_high_target=outside_high,
+        outward_direction_xy=kwargs["outward_direction_xy"],
+        expected_pair_count=55,
+    )
+    assert evidence["accepted"] is True
+    assert evidence["violations"] == []
+    assert evidence["uses_position_tolerance"] is False
+    assert evidence[
+        "actual_eef_outward_of_native_outside_target_m"
+    ] > 0.0
+    assert evidence["target_request_persistent"] is True
+    assert evidence["action_nonnegative_z_zero_rotation"] is True
+    assert evidence["pair_inventory_exact"] is True
+    assert evidence["all_55_pair_high_plane_base8_strict"] is True
+
+
+def test_502095_native_boundary_crossing_rejects_each_missing_strict_gate():
+    observations, kwargs = _job500261_saturation_fixture()
+    valid = copy.deepcopy(observations[0])
+    outside_high = np.asarray(kwargs["native_outside_high_target"], dtype=float)
+    valid["after_eef"][0] = np.nextafter(outside_high[0], np.inf)
+
+    def evaluate(observation):
+        return _high_plane_native_boundary_crossing_evidence(
+            observation=observation,
+            high_lateral_target=kwargs["high_lateral_target"],
+            native_outside_high_target=outside_high,
+            outward_direction_xy=kwargs["outward_direction_xy"],
+            expected_pair_count=55,
+        )
+
+    at_boundary = copy.deepcopy(valid)
+    at_boundary["after_eef"][0] = outside_high[0]
+    assert (
+        "actual_eef_not_strictly_beyond_native_outside_target"
+        in evaluate(at_boundary)["violations"]
+    )
+
+    no_request = copy.deepcopy(valid)
+    no_request["action"][0] = 0.0
+    assert "registered_corridor_outward_request_not_persistent" in evaluate(
+        no_request
+    )["violations"]
+
+    negative_z = copy.deepcopy(valid)
+    negative_z["action"][2] = -np.nextafter(0.0, np.inf)
+    assert "high_plane_action_direction_or_rotation_invalid" in evaluate(
+        negative_z
+    )["violations"]
+
+    touching_clearance = copy.deepcopy(valid)
+    touching_clearance["after_outside_guard"][
+        "minimum_outside_clearance_m"
+    ] = touching_clearance["after_outside_guard"][
+        "required_outside_clearance_m"
+    ]
+    assert "live_outside_clearance_not_strict" in evaluate(
+        touching_clearance
+    )["violations"]
+
+    unsafe_pair = copy.deepcopy(valid)
+    unsafe_pair["post_overhead_guard"]["accepted"] = False
+    assert "all_55_pair_high_plane_base8_not_strict" in evaluate(
+        unsafe_pair
+    )["violations"]
+
+
+def test_502095_boundary_gate_precedes_saturation_and_preserves_exact_descent():
+    controller = CONTROLLER_REFERENCE.read_text()
+    bounded_seek = controller.split(
+        "def _seek_stable_plate_contact(", 1
+    )[1].split("\ndef _calibrate_stable_plate_contact_depth", 1)[0]
+    high_transition = bounded_seek.split(
+        'feedback["outside_high_entry_after_high_lateral"]', 1
+    )[1].split('elif stage_before_action == "workspace_release_diagonal":', 1)[0]
+    release = controller.split(
+        "def _compiled_adaptive_workspace_release_action(", 1
+    )[1].split("\ndef _compiled_adaptive_lateral_rebuffer_action", 1)[0]
+    ordinary_gate = high_transition.index('if outside_high_entry["accepted"]')
+    boundary_gate = high_transition.index(
+        'elif native_boundary_crossing["accepted"]'
+    )
+    saturation_gate = high_transition.index(
+        'elif workspace_saturation["accepted"]'
+    )
+    assert ordinary_gate < boundary_gate < saturation_gate
+    assert "_high_plane_native_boundary_crossing_evidence(" in high_transition
+    assert '"accepted_native_high_boundary_crossing"' in high_transition
+    assert '"native_high_boundary_crossing_gate"' in bounded_seek
+    assert '"uses_position_tolerance": False' in bounded_seek
+    assert (
+        "_high_plane_native_workspace_saturation_evidence(" in high_transition
+    )
+    assert (
+        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        in controller
+    )
+    assert (
+        'parser.add_argument("--position_tolerance", type=float, default=0.005)'
+        in controller
     )
     assert "pre_action_buffer16_surplus_after_inertia_m" in release
     assert (
