@@ -720,6 +720,19 @@ the registered full `0.025` confirmation. Any measured response below
 action bounds, collision guards, task fields, and 240-step budget are
 unchanged.
 
+Job503870 advanced the first valid two-frame above-rim handoff from step 234
+to step 174, and every subsequent shielded descent reached a fully accepted
+outside-side guard. The first post-descent stable frame occurred at step 184.
+Its next vertical prediction was `-0.078991 mm`; the fixed `0.0125` shallow
+confirmation then measured `+0.050559 mm`, only `0.000559 mm` beyond the
+unchanged tolerance, resetting stability and causing repeated settle/descent
+cycles. Shallow confirmation is now linearly interpolated from zero at
+`-0.050 mm` to the existing `0.0125` half-decrement at `-0.100 mm`. Predictions
+below `-0.100 mm` retain the registered full `0.025` confirmation. This changes
+only an action amount inside the previously registered bound; measured
+negative-response recovery, two-frame acceptance, native action limits,
+collision guards, task fields, and the 240-step budget remain unchanged.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

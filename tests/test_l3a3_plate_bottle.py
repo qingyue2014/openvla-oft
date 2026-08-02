@@ -3981,7 +3981,7 @@ def test_job503869_balance_holds_before_predicted_tolerance_crossing():
     )
 
 
-def test_job503869_balance_tiers_shallow_confirmation_increment():
+def test_job503870_balance_interpolates_shallow_confirmation_increment():
     native = {
         "low": [-1.0] * 7,
         "high": [1.0] * 7,
@@ -4005,30 +4005,45 @@ def test_job503869_balance_tiers_shallow_confirmation_increment():
         gripper=-1.0,
         native_action_spec=native,
         recovery_exit_clearance_m=0.00155,
-        previous_commanded_action_xyz=[0.35, 0.0, 0.325],
+        previous_commanded_action_xyz=[0.3875, 0.0, 0.3375],
         previous_step_response={
-            "vertical_step_progress_m": 0.0000941805,
-            "eef_outward_step_progress_m": 0.0000256422,
-            "outside_clearance_step_progress_m": 0.0000261729,
+            "vertical_step_progress_m": -0.0000075509260349937435,
+            "eef_outward_step_progress_m": 0.000024223529483724526,
+            "outside_clearance_step_progress_m": 0.000031114980376958923,
         },
         preceding_step_response={
-            "vertical_step_progress_m": 0.0002527751,
-            "eef_outward_step_progress_m": 0.0001262399,
-            "outside_clearance_step_progress_m": 0.0001068972,
+            "vertical_step_progress_m": 0.00006388944595958623,
+            "eef_outward_step_progress_m": 0.000033900285751314874,
+            "outside_clearance_step_progress_m": 0.0000377161577797408,
         },
         maximum_settled_step_response_m=0.00005,
         maximum_axis_decrement_action=0.0125,
     )
-    assert action[:3].tolist() == [0.3625, 0.0, 0.3375]
+    expected_fraction = (
+        0.00007899129802957372 - 0.00005
+    ) / 0.00005
+    expected_increment = 0.0125 * expected_fraction
+    assert action[:3] == pytest.approx(
+        [0.3875, 0.0, 0.3375 + expected_increment]
+    )
     assert evidence[
         "outward_confirmation_increment_action"
-    ] == pytest.approx(0.0125)
+    ] == pytest.approx(0.0)
     assert evidence[
         "vertical_confirmation_increment_action"
-    ] == pytest.approx(0.0125)
+    ] == pytest.approx(expected_increment)
+    assert evidence[
+        "vertical_shallow_confirmation_fraction"
+    ] == pytest.approx(expected_fraction)
     assert (
         evidence["proof"][
-            "shallow_confirmation_uses_registered_half_decrement"
+            "shallow_confirmation_bounded_by_registered_half_decrement"
+        ]
+        is True
+    )
+    assert (
+        evidence["proof"][
+            "shallow_confirmation_scales_with_prediction_deficit"
         ]
         is True
     )

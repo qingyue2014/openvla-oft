@@ -9819,18 +9819,50 @@ def _compiled_hazard_release_response_balance_action(
     vertical_confirmation_increment_requested = bool(
         predicted_vertical_response < -response_tolerance
     )
+    outward_shallow_confirmation_fraction = float(
+        min(
+            1.0,
+            max(
+                0.0,
+                (
+                    -predicted_minimum_outward_response
+                    - response_tolerance
+                )
+                / response_tolerance,
+            ),
+        )
+    )
+    vertical_shallow_confirmation_fraction = float(
+        min(
+            1.0,
+            max(
+                0.0,
+                (
+                    -predicted_vertical_response
+                    - response_tolerance
+                )
+                / response_tolerance,
+            ),
+        )
+    )
     outward_confirmation_increment_action = float(
         full_confirmation_increment_action
         if predicted_minimum_outward_response
         < -2.0 * response_tolerance
-        else maximum_axis_decrement_action
+        else (
+            maximum_axis_decrement_action
+            * outward_shallow_confirmation_fraction
+        )
         if outward_confirmation_increment_requested
         else 0.0
     )
     vertical_confirmation_increment_action = float(
         full_confirmation_increment_action
         if predicted_vertical_response < -2.0 * response_tolerance
-        else maximum_axis_decrement_action
+        else (
+            maximum_axis_decrement_action
+            * vertical_shallow_confirmation_fraction
+        )
         if vertical_confirmation_increment_requested
         else 0.0
     )
@@ -9887,11 +9919,12 @@ def _compiled_hazard_release_response_balance_action(
             "only while its measured response remains above the unchanged "
             "settle tolerance and its two-frame linear prediction remains "
             "above that tolerance; hold before the predicted crossing, add "
-            "the existing 0.0125 half-decrement for a shallow prediction "
-            "below negative tolerance, or add the registered full 0.025 "
-            "decrement only when the deficit exceeds one further tolerance "
-            "width; restore the existing brake for any measured response "
-            "below negative tolerance"
+            "an amount linearly interpolated from zero to the existing "
+            "0.0125 half-decrement for a shallow prediction below negative "
+            "tolerance, or add the registered full 0.025 decrement only "
+            "when the deficit exceeds one further tolerance width; restore "
+            "the existing brake for any measured response below negative "
+            "tolerance"
         ),
         "native_action_spec_source": native_source,
         "commanded_xyz_action": action[:3].tolist(),
@@ -9933,6 +9966,12 @@ def _compiled_hazard_release_response_balance_action(
         "vertical_confirmation_increment_action": (
             vertical_confirmation_increment_action
         ),
+        "outward_shallow_confirmation_fraction": (
+            outward_shallow_confirmation_fraction
+        ),
+        "vertical_shallow_confirmation_fraction": (
+            vertical_shallow_confirmation_fraction
+        ),
         "previous_outward_action": previous_outward_action,
         "previous_positive_z_action": previous_positive_z_action,
         "commanded_outward_action": commanded_outward_action,
@@ -9960,7 +9999,10 @@ def _compiled_hazard_release_response_balance_action(
                 True
             ),
             "prediction_hold_prevents_blind_tolerance_crossing": True,
-            "shallow_confirmation_uses_registered_half_decrement": True,
+            "shallow_confirmation_bounded_by_registered_half_decrement": (
+                True
+            ),
+            "shallow_confirmation_scales_with_prediction_deficit": True,
             "full_confirmation_requires_extra_tolerance_width": True,
             "confirmation_uses_two_frame_linear_response_prediction": True,
             "negative_beyond_tolerance_requires_brake": True,
