@@ -3726,15 +3726,22 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
     )[1].split('elif stage_before_action == "vertical_tail_brake":', 1)[0]
     assert 'structural_stage = "vertical_tail_brake"' in descent_transition
     assert (
-        "descent_corridor_lateral_error > args.position_tolerance"
+        "descent_corridor_entry_after_action = ("
         in descent_transition
     )
+    assert "_overhead_corridor_entry_evidence(" in descent_transition
+    assert '"corridor_xy_tolerance_not_met"' in descent_transition
+    assert (
+        '"outside_corridor_entry_clearance_not_met"'
+        in descent_transition
+    )
+    assert "if descent_corridor_lateral_violations:" in descent_transition
     assert (
         'vertical_tail_brake_reason = "lateral_drift"'
         in descent_transition
     )
     assert (
-        "corridor_xy_drift_exceeded_tolerance_to_"
+        "corridor_entry_lateral_guard_failed_to_high_"
         in descent_transition
     )
     brake_transition = bounded_seek.split(
@@ -3788,7 +3795,7 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         '"corridor_xy_adaptive_pure_z_descent_with_position_"'
         in bounded_seek
     )
-    assert '"tolerance_drift_brake"' in bounded_seek
+    assert '"tolerance_or_outside_clearance_drift_brake"' in bounded_seek
     controller = CONTROLLER_REFERENCE.read_text()
     assert "after the monotone pure-Z sweep, command pure XY" not in controller
     assert "internal controller substeps" in controller

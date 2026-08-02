@@ -12611,6 +12611,14 @@ def _seek_stable_plate_contact(
             "descent_lateral_drift_brake_threshold_source": (
                 "unchanged position_tolerance"
             ),
+            "descent_outside_clearance_brake_threshold_m": float(
+                vertical_staging_corridor[
+                    "strict_corridor_entry_clearance_m"
+                ]
+            ),
+            "descent_outside_clearance_brake_threshold_source": (
+                "compiled strict corridor-entry clearance"
+            ),
             "structural_route_order": [
                 (
                     "native_center_high_to_registered_corridor_high_"
@@ -12622,7 +12630,7 @@ def _seek_stable_plate_contact(
                 ),
                 (
                     "corridor_xy_adaptive_pure_z_descent_with_position_"
-                    "tolerance_drift_brake"
+                    "tolerance_or_outside_clearance_drift_brake"
                 ),
                 "vertical_tail_brake_and_zero_confirmation",
                 "live_corridor_entry_or_xy_drift_correction",
@@ -13868,35 +13876,54 @@ def _seek_stable_plate_contact(
                     }
                 )
         elif stage_before_action == "overhead_corridor_descent":
-            descent_corridor_lateral_error = float(
-                np.linalg.norm(
-                    after_eef[:2] - corridor_high_target[:2]
+            descent_corridor_entry_after_action = (
+                _overhead_corridor_entry_evidence(
+                    current_eef=after_eef,
+                    corridor_high_target=corridor_high_target,
+                    outside_side_guard=latest_outside_side_guard,
+                    overhead_guard=latest_overhead_guard,
+                    overhead_lateral_buffer=(
+                        latest_overhead_lateral_buffer
+                    ),
+                    position_tolerance=args.position_tolerance,
+                    strict_corridor_entry_clearance_m=(
+                        vertical_staging_corridor[
+                            "strict_corridor_entry_clearance_m"
+                        ]
+                    ),
+                    require_lateral_buffer=False,
+                    minimum_eef_z=None,
                 )
             )
-            feedback["descent_corridor_lateral_error_m"] = (
-                descent_corridor_lateral_error
+            feedback["descent_corridor_entry_after_action"] = (
+                descent_corridor_entry_after_action
             )
-            feedback["descent_lateral_drift_brake_threshold_m"] = float(
-                args.position_tolerance
+            descent_corridor_lateral_violations = {
+                "corridor_xy_tolerance_not_met",
+                "outside_corridor_entry_clearance_not_met",
+            }.intersection(
+                descent_corridor_entry_after_action["violations"]
             )
-            if descent_corridor_lateral_error > args.position_tolerance:
+            if descent_corridor_lateral_violations:
                 vertical_tail_brake_reason = "lateral_drift"
                 structural_stage = "vertical_tail_brake"
                 vertical_tail_events.append(
                     {
                         "guard_step": int(guard_step),
                         "event": (
-                            "corridor_xy_drift_exceeded_tolerance_to_"
-                            "high_brake_and_correction"
+                            "corridor_entry_lateral_guard_failed_to_high_"
+                            "brake_and_correction"
                         ),
                         "measured_vertical_step_progress_m": (
                             measured_vertical_step_progress_m
                         ),
                         "corridor_lateral_error_m": (
-                            descent_corridor_lateral_error
+                            descent_corridor_entry_after_action[
+                                "corridor_lateral_error_m"
+                            ]
                         ),
-                        "position_tolerance_m": float(
-                            args.position_tolerance
+                        "lateral_guard_violations": sorted(
+                            descent_corridor_lateral_violations
                         ),
                         "overhead_staging_z_m": overhead_staging_z,
                         "remaining_z_above_staging_m": float(
@@ -13906,6 +13933,9 @@ def _seek_stable_plate_contact(
                             latest_overhead_lateral_buffer[
                                 "minimum_lateral_entry_buffer_surplus_m"
                             ]
+                        ),
+                        "corridor_entry_after_descent": (
+                            descent_corridor_entry_after_action
                         ),
                     }
                 )

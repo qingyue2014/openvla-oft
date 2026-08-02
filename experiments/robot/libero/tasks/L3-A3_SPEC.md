@@ -105,9 +105,11 @@ bound. This geometric schedule prevents a symmetric descent/brake limit cycle;
 the controller proceeds to zero confirmation only after stopping at the staging
 height. Every action still retains all 55 compiled pair guards and is rechecked
 after execution.
-After every far-field descent action, the controller also recomputes the live
-XY error to the unchanged compiled corridor target. If that error exceeds the
-existing `position_tolerance` (`0.005 m`), the same positive-Z brake starts
+After every far-field descent action, the controller also recomputes the full
+live lateral corridor-entry evidence: XY error to the unchanged compiled target
+must remain within the existing `position_tolerance` (`0.005 m`), and the live
+outside clearance must remain strictly above the compiled corridor-entry
+clearance. If either lateral predicate fails, the same positive-Z brake starts
 immediately, even above the staging-height brake buffer. Once measured vertical
 progress is nonnegative, a zero-translation confirmation is required and the
 XY correction runs at that higher stopped Z under the same all-55-pair
