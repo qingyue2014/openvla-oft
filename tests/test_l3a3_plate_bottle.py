@@ -2271,6 +2271,7 @@ def test_500099_every_descent_requires_preventive_active_braking_settle():
     )
     required_clearance = np.nextafter(0.0, np.inf)
     before_guard = {
+        "accepted": True,
         "outward_direction_xy": [1.0, 0.0],
         "required_outside_clearance_m": required_clearance,
         "minimum_outside_clearance_m": 0.002748690,
@@ -2409,6 +2410,7 @@ def test_500104_first_settle_step_actively_brakes_exact_negative_z_response():
     )
     required_clearance = np.nextafter(0.0, np.inf)
     before_guard = {
+        "accepted": True,
         "outward_direction_xy": [1.0, 0.0],
         "required_outside_clearance_m": required_clearance,
         "minimum_outside_clearance_m": 0.0008573639623264129,
@@ -2542,6 +2544,7 @@ def test_500111_one_positive_brake_response_cannot_release_settle_state():
         ]
     )
     before_guard = {
+        "accepted": True,
         "outward_direction_xy": [1.0, 0.0],
         "required_outside_clearance_m": strict_clearance,
         "minimum_outside_clearance_m": 0.0016664744783980584,
@@ -3189,7 +3192,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         _compiled_low_side_settle_brake_action(
             current_eef=np.array([0.1340, -0.0285, 0.9150]),
             outside_side_guard={
-                "accepted": True,
+                "accepted": False,
                 "minimum_outside_clearance_m": 0.0019,
                 "required_outside_clearance_m": strict_clearance,
                 "finger_table_vertical_clearance_m": 0.0020,
@@ -3211,6 +3214,9 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert np.linalg.norm(low_side_brake[:3]) < 1.0
     assert low_side_brake_evidence[
         "overhead_vertical_pair_guard_applicable"
+    ] is False
+    assert low_side_brake_evidence[
+        "full_outside_side_guard_accepted"
     ] is False
     assert low_side_brake_evidence["proof"] == {
         "strictly_outward_xy_zero_rotation": True,
@@ -8830,12 +8836,9 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
         'elif structural_stage == "fixed_safe_z_lateral_approach":', 1
     )[0]
     assert "_compiled_low_side_settle_brake_action(" in settle_action
-    assert "vertical_corridor_outward_hold_max_translation_action" in (
-        settle_action
-    )
-    assert "vertical_corridor_descent_max_translation_action" in (
-        settle_action
-    )
+    assert settle_action.count(
+        "vertical_corridor_outward_hold_max_translation_action"
+    ) >= 2
     assert "compiled_low_side_settle_brake_envelope" in settle_action
     assert '"active_positive_z_brake_requested": True' in settle_action
     assert "vertical_corridor_settle_brake_trigger_buffer" in bounded_seek
@@ -8850,6 +8853,17 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert (
         "after_eef[2] <= vertical_corridor_settle_brake_trigger_z"
         in settle_transition
+    )
+    trigger_condition = settle_transition.split(
+        "if (", 1
+    )[1].split("):", 1)[0]
+    assert "latest_outside_side_guard" not in trigger_condition
+    assert (
+        'stage_before_action == "fixed_safe_z_lateral_approach"'
+        in bounded_seek
+    )
+    assert "full_outside_side_guard_not_accepted_during_settle" in (
+        CONTROLLER_REFERENCE.read_text()
     )
     assert '"fixed_safe_z_lateral_approach"' in bounded_seek
     assert (

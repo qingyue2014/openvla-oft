@@ -113,9 +113,9 @@ resolution), measured nonnegative outward and vertical progress, a refreshed
 accepted all-pair base guard, and an explicit exit-brake phase. The unchanged
 `0.0004 m` strict physical gate remains enforced before and after every action.
 At the registered side height, the settle phase retains the existing `0.20`
-outward authority together with the existing `0.10` positive-Z brake until two
-consecutive frames measure nonnegative outward, clearance, and vertical
-progress. This low-side brake is proved against the live horizontal rim
+outward authority together with matching existing `0.20` positive-Z authority
+until two consecutive frames measure nonnegative outward, clearance, and
+vertical progress. This low-side brake is proved against the live horizontal rim
 clearance and finger-table clearance, both of which its exact outward/positive-Z
 command monotonically improves, plus the runtime-native 3-D norm. It does not
 claim the overhead vertical-separation proof after the gripper has entered the
@@ -131,6 +131,15 @@ clearance and the still-negative response exhausted it before the positive-Z
 brake could reverse inertia. The earlier trigger changes only when the same
 brake starts; it does not change the compiled side target, feasible contact
 height, table threshold, action limits, or two-frame measured release gate.
+Above the rim-overlap interval, full rim-coverage acceptance is intentionally
+not an entry prerequisite: strict horizontal outside clearance and
+finger-table clearance authorize the exact outward/positive-Z brake there.
+Full outside-side acceptance becomes mandatory for each of the two measured
+settle-release frames and for the subsequent fixed-Z lateral approach.
+Job503265 showed both that the old full-coverage entry prerequisite delayed the
+configured early trigger and that `Z=0.10` could not reverse the tail while
+`X≈0.195`; matching `Z=0.20` remains strictly inside the native 3-D norm and
+does not alter the contact-seek action limit.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

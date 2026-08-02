@@ -7526,7 +7526,6 @@ def _compiled_low_side_settle_brake_action(
         or not np.all(np.isfinite(outward_direction))
         or not np.isclose(outward_norm, 1.0, rtol=0.0, atol=1e-12)
         or not all(np.isfinite(value) and value > 0.0 for value in scalars)
-        or not outside_side_guard.get("accepted", False)
     ):
         raise ValueError("compiled low-side settle-brake inputs are invalid")
     try:
@@ -7661,6 +7660,9 @@ def _compiled_low_side_settle_brake_action(
         ),
         "predicted_finger_table_clearance_m": (
             predicted_finger_table_clearance
+        ),
+        "full_outside_side_guard_accepted": bool(
+            outside_side_guard.get("accepted", False)
         ),
         "overhead_vertical_pair_guard_applicable": False,
         "proof": {
@@ -8425,6 +8427,10 @@ def _outside_side_lateral_settle_evidence(
         violations.append(
             "outside_clearance_below_compiled_requirement_during_settle"
         )
+    if not after_guard.get("accepted", False):
+        violations.append(
+            "full_outside_side_guard_not_accepted_during_settle"
+        )
     instantaneous_stable_response = not violations
     stable_response_count = (
         int(previous_stable_response_count) + 1
@@ -8451,7 +8457,8 @@ def _outside_side_lateral_settle_evidence(
             "plus positive-Z low-side inertial brake; require at least two "
             "consecutive settle frames where measured Z, EEF-outward, and "
             "live-clearance step progress are all nonnegative and compiled "
-            "clearance is satisfied before permitting lateral approach"
+            "clearance plus the full outside-side guard are accepted before "
+            "permitting lateral approach"
         ),
         "vertical_step_progress_m": vertical_step_progress,
         "step_response": step_response,
@@ -15593,7 +15600,7 @@ def _seek_stable_plate_contact(
                         vertical_corridor_outward_hold_max_translation_action
                     ),
                     positive_z_action=(
-                        vertical_corridor_descent_max_translation_action
+                        vertical_corridor_outward_hold_max_translation_action
                     ),
                     strict_corridor_clearance_m=float(
                         vertical_staging_corridor[
@@ -16580,7 +16587,6 @@ def _seek_stable_plate_contact(
             )
             if (
                 after_eef[2] <= vertical_corridor_settle_brake_trigger_z
-                and latest_outside_side_guard["accepted"]
             ):
                 lateral_settle_state = (
                     _outside_side_staircase_settle_trigger(
@@ -16714,10 +16720,10 @@ def _seek_stable_plate_contact(
             structural_violations.append(
                 "one_controller_step_corridor_reserve_lost"
             )
-        if stage_before_action in {
-            "vertical_corridor_settle",
-            "fixed_safe_z_lateral_approach",
-        } and not latest_outside_side_guard["accepted"]:
+        if (
+            stage_before_action == "fixed_safe_z_lateral_approach"
+            and not latest_outside_side_guard["accepted"]
+        ):
             structural_violations.append(
                 "compiled_safe_z_rim_coverage_not_sustained"
             )
