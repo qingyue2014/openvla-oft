@@ -3728,10 +3728,12 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         'elif structural_stage == "overhead_post_descent_corridor_lateral":',
         1,
     )[1].split('elif structural_stage == "vertical_corridor_descent":', 1)[0]
+    assert "prepared_high_lateral_action" in post_descent_lateral_action
     assert (
-        "post_descent_lateral_max_translation_action"
+        "compiled_adaptive_post_descent_plane_hold_envelope"
         in post_descent_lateral_action
     )
+    assert "post_descent_lateral_max_translation_action" in bounded_seek
     assert "maximum_post_descent_lateral_world_step" in bounded_seek
     descent_transition = bounded_seek.rsplit(
         'elif stage_before_action == "overhead_corridor_descent":', 1
@@ -4130,18 +4132,36 @@ def test_500193_high_lateral_uses_compiled_dynamic_action_envelope():
     )[1].split(
         'elif structural_stage == "vertical_corridor_descent":', 1
     )[0]
+    post_descent_compilation = bounded_seek.split(
+        'elif (\n            stage_before_action\n'
+        '            == "overhead_post_descent_corridor_lateral"\n'
+        '        ):',
+        1,
+    )[1].split("adaptive_negative_z_action_requires_buffer16", 1)[0]
     assert "_compiled_adaptive_high_plane_action(" in bounded_seek
     assert "prepared_high_lateral_action" in high_action_branch
     assert "_fixed_z_lateral_approach_action(" not in high_action_branch
     assert "plate_contact_seek_max_translation_action" not in (
         high_action_branch
     )
-    assert "_fixed_z_lateral_approach_action(" in (
+    assert "_fixed_z_lateral_approach_action(" not in (
         post_descent_correction_branch
+    )
+    assert "prepared_high_lateral_action" in post_descent_correction_branch
+    assert (
+        "compiled_adaptive_post_descent_plane_hold_envelope"
+        in post_descent_correction_branch
+    )
+    assert "_compiled_adaptive_high_plane_action(" in (
+        post_descent_compilation
     )
     assert "post_descent_lateral_max_translation_action" in (
-        post_descent_correction_branch
+        post_descent_compilation
     )
+    assert "overhead_horizontal_z=overhead_horizontal_z" in (
+        post_descent_compilation
+    )
+    assert "maximum_translation_action=(" in post_descent_compilation
     assert "expected_overhead_pair_count" in bounded_seek
 
 
@@ -4242,11 +4262,37 @@ def test_500195_high_plane_hold_reserves_measured_negative_dz_tail():
     assert evidence["proof"] == {
         "xy_plus_nonnegative_z_zero_rotation": True,
         "strictly_inside_native_3d_action_norm_bound": True,
+        "inside_configured_translation_action_norm_bound": True,
         "does_not_cross_lateral_target_xy": True,
         "positive_z_static_geometry_does_not_reduce_clearance": True,
         "latest_measured_negative_dz_reserved_as_inertial_tail": True,
         "all_compiled_pairs_retain_strict_base8_after_worst_case_tail": True,
     }
+
+    capped_action, capped = _compiled_adaptive_high_plane_action(
+        current_eef=step20,
+        lateral_target_xy=target_xy,
+        overhead_horizontal_z=hold_z,
+        measured_vertical_step_progress_m=previous_negative_dz,
+        overhead_guard=guard,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        native_action_spec=native,
+        expected_pair_count=55,
+        maximum_translation_action=0.10,
+    )
+    assert capped_action[0] > 0.0
+    assert capped_action[2] > 0.0
+    assert np.linalg.norm(capped_action[:3]) < 0.10
+    assert capped["selected_envelope_source"] == (
+        "configured_translation_action_norm_bound"
+    )
+    assert capped["configured_strict_translation_action_norm_bound"] == (
+        np.nextafter(0.10, 0.0)
+    )
+    assert capped["proof"][
+        "inside_configured_translation_action_norm_bound"
+    ] is True
 
     tight_pairs = [
         {
@@ -6462,8 +6508,16 @@ def test_high_first_route_fails_closed_and_rechecks_post_descent_drift():
     )[1].split(
         'elif structural_stage == "vertical_corridor_descent":', 1
     )[0]
-    assert '"post_descent_xy_drift_correction"' in correction_action
-    assert "_fixed_z_lateral_approach_action(" in correction_action
+    assert (
+        '"post_descent_xy_plus_nonnegative_z_plane_hold_"'
+        in correction_action
+    )
+    assert "_fixed_z_lateral_approach_action(" not in correction_action
+    assert "prepared_high_lateral_action" in correction_action
+    assert (
+        "compiled_adaptive_post_descent_plane_hold_envelope"
+        in correction_action
+    )
     assert 'latest_overhead_lateral_buffer["accepted"]' in bounded_seek
 
 

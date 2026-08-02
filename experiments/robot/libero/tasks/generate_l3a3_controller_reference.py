@@ -5655,6 +5655,7 @@ def _compiled_adaptive_high_plane_action(
     position_action_scale,
     native_action_spec,
     expected_pair_count,
+    maximum_translation_action=None,
 ):
     """Hold the initial high plane with XY/+Z under live pair reserves."""
     current_eef = np.asarray(current_eef, dtype=float)
@@ -5726,7 +5727,33 @@ def _compiled_adaptive_high_plane_action(
     strict_native_norm_bound = float(
         np.nextafter(native_norm_bound, 0.0)
     )
-    if strict_native_norm_bound <= 0.0:
+    configured_strict_norm_bound = None
+    if maximum_translation_action is not None:
+        maximum_translation_action = float(maximum_translation_action)
+        if (
+            not np.isfinite(maximum_translation_action)
+            or maximum_translation_action <= 0.0
+            or maximum_translation_action > strict_native_norm_bound
+        ):
+            raise ValueError(
+                "adaptive high-plane translation-action bound must be "
+                "finite, positive, and strictly inside the runtime native "
+                "3-D translation-action capacity"
+            )
+        configured_strict_norm_bound = float(
+            np.nextafter(maximum_translation_action, 0.0)
+        )
+    route_strict_norm_bound = float(
+        min(
+            strict_native_norm_bound,
+            (
+                configured_strict_norm_bound
+                if configured_strict_norm_bound is not None
+                else strict_native_norm_bound
+            ),
+        )
+    )
+    if route_strict_norm_bound <= 0.0:
         raise RuntimeError("native strict 3-D action norm is unavailable")
     base_reserve = float(overhead_guard["one_step_vertical_reserve_m"])
     if not np.isfinite(base_reserve) or base_reserve <= 0.0:
@@ -5828,13 +5855,17 @@ def _compiled_adaptive_high_plane_action(
             strict_native_norm_bound
         ),
     }
+    if configured_strict_norm_bound is not None:
+        capacities["configured_translation_action_norm_bound"] = (
+            configured_strict_norm_bound
+        )
     selected_source = min(capacities, key=capacities.get)
     selected_norm = float(capacities[selected_source])
     recovery_required = bool(
         selected_source
         == "compiled_pair_base8_nominal_tail_after_inertia"
         and selected_norm
-        < min(requested_norm, strict_native_norm_bound)
+        < min(requested_norm, route_strict_norm_bound)
     )
     minimum_current_surplus = min(
         record["current_base8_surplus_m"] for record in pair_envelopes
@@ -5842,7 +5873,7 @@ def _compiled_adaptive_high_plane_action(
     if recovery_required:
         requested_nominal_tail = float(
             position_action_scale
-            * min(requested_norm, strict_native_norm_bound)
+            * min(requested_norm, route_strict_norm_bound)
         )
         recovery_world_delta = float(
             max(
@@ -5855,7 +5886,7 @@ def _compiled_adaptive_high_plane_action(
         )
         recovery_z_action = float(
             min(
-                strict_native_norm_bound,
+                route_strict_norm_bound,
                 recovery_world_delta / position_action_scale,
             )
         )
@@ -5885,6 +5916,10 @@ def _compiled_adaptive_high_plane_action(
         ]
         if (
             0.0 < literal_norm < native_norm_bound
+            and (
+                configured_strict_norm_bound is None
+                or literal_norm <= configured_strict_norm_bound
+            )
             and literal_xy_world_delta <= lateral_remaining
             and translation[2] >= 0.0
             and all(
@@ -5966,6 +6001,9 @@ def _compiled_adaptive_high_plane_action(
         "strict_native_3d_translation_action_norm_bound": (
             strict_native_norm_bound
         ),
+        "configured_strict_translation_action_norm_bound": (
+            configured_strict_norm_bound
+        ),
         "compiled_pair_count": len(pair_envelopes),
         "pair_identity_keys": [list(identity) for identity in identities],
         "pair_envelopes": pair_envelopes,
@@ -5984,6 +6022,10 @@ def _compiled_adaptive_high_plane_action(
         "proof": {
             "xy_plus_nonnegative_z_zero_rotation": True,
             "strictly_inside_native_3d_action_norm_bound": True,
+            "inside_configured_translation_action_norm_bound": bool(
+                configured_strict_norm_bound is None
+                or literal_norm <= configured_strict_norm_bound
+            ),
             "does_not_cross_lateral_target_xy": bool(
                 literal_xy_world_delta <= lateral_remaining
             ),
@@ -12896,7 +12938,8 @@ def _seek_stable_plate_contact(
                     "brake"
                 ),
                 "vertical_tail_brake_and_zero_confirmation",
-                "live_corridor_entry_or_xy_drift_correction",
+                "live_corridor_entry_or_xy_nonnegative_z_plane_hold_"
+                "correction",
                 "vertical_side_corridor_and_contact",
             ],
             "horizontal_sweep_formula": (
@@ -12946,9 +12989,8 @@ def _seek_stable_plate_contact(
                 "geometric cap-halving schedule also shrinks this deterministic "
                 "inertia reserve; it does not change formal corridor "
                 "acceptance. The unchanged 0.10 "
-                "bound "
-                "remains exclusive to post-descent correction and contact "
-                "motion"
+                "bound remains exclusive to the post-descent XY/nonnegative-Z "
+                "plane-hold correction and contact motion"
             ),
             "measurement_scope": (
                 "live pre/post world-AABB and contact observations with the "
@@ -13436,6 +13478,29 @@ def _seek_stable_plate_contact(
                     corridor_outward_direction
                 ),
             )
+        elif (
+            stage_before_action
+            == "overhead_post_descent_corridor_lateral"
+        ):
+            (
+                prepared_high_lateral_action,
+                prepared_high_lateral_envelope,
+            ) = _compiled_adaptive_high_plane_action(
+                current_eef=current_eef,
+                lateral_target_xy=corridor_rebuffer_target[:2],
+                overhead_horizontal_z=overhead_horizontal_z,
+                measured_vertical_step_progress_m=(
+                    latest_vertical_step_progress_m
+                ),
+                overhead_guard=latest_overhead_guard,
+                gripper=gripper,
+                position_action_scale=args.position_action_scale,
+                native_action_spec=native_action_spec,
+                expected_pair_count=expected_overhead_pair_count,
+                maximum_translation_action=(
+                    post_descent_lateral_max_translation_action
+                ),
+            )
         adaptive_negative_z_action_requires_buffer16 = bool(
             stage_before_action in {
                 "workspace_release_diagonal",
@@ -13462,7 +13527,10 @@ def _seek_stable_plate_contact(
                         or adaptive_negative_z_action_requires_buffer16
                     ),
                     adaptive_high_lateral_envelope=(
-                        prepared_high_lateral_envelope
+                        None
+                        if stage_before_action
+                        in fixed_buffer_lateral_stages
+                        else prepared_high_lateral_envelope
                     ),
                 )
             )
@@ -13749,20 +13817,26 @@ def _seek_stable_plate_contact(
                 "pre_action_overhead_guard": latest_overhead_guard,
             }
         elif structural_stage == "overhead_post_descent_corridor_lateral":
-            action, path_control = _fixed_z_lateral_approach_action(
-                current_eef=current_eef,
-                lateral_target_xy=corridor_rebuffer_target[:2],
-                gripper=gripper,
-                position_action_scale=args.position_action_scale,
-                maximum_translation_action=(
-                    post_descent_lateral_max_translation_action
-                ),
-            )
+            if (
+                prepared_high_lateral_action is None
+                or prepared_high_lateral_envelope is None
+            ):
+                raise RuntimeError(
+                    "post-descent correction lacks its live compiled "
+                    "XY/nonnegative-Z plane-hold envelope"
+                )
+            action = prepared_high_lateral_action
+            path_control = prepared_high_lateral_envelope
             feedback = {
                 "mode": structural_stage,
                 "action": action.tolist(),
-                "fixed_z_lateral_path_control": path_control,
-                "lateral_route_phase": "post_descent_xy_drift_correction",
+                "compiled_adaptive_post_descent_plane_hold_envelope": (
+                    path_control
+                ),
+                "lateral_route_phase": (
+                    "post_descent_xy_plus_nonnegative_z_plane_hold_"
+                    "correction"
+                ),
                 "corridor_rebuffer_target": (
                     corridor_rebuffer_target.tolist()
                 ),

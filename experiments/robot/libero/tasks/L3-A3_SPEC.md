@@ -90,10 +90,14 @@ side-height descent and positive-Z settle brake use a separate `0.10` action
 cap; this changes no lateral reserve and every step remains subject to the live
 outside/table/plate guards before and after execution.
 If that descent creates controller-coupled XY drift, the still-overhead return
-to the corridor uses a separate `0.10` lateral cap only after the all-pair
-buffer is recomputed for its `0.008 m` nominal world step. A failed buffer
-routes through the existing compiled positive-Z rebuffer and cannot authorize
-the lateral action until the larger live reserve is observed.
+to the corridor uses a separate `0.10` three-dimensional action-norm cap only
+after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
+The correction jointly requests corridor XY and nonnegative Z back to the
+recorded stopped plane; every command additionally intersects that `0.10` cap
+with the runtime native bound and all 55 pairs' base8 capacity after reserving
+the latest measured negative-Z tail. A failed buffer routes through the
+existing compiled positive-Z rebuffer and cannot authorize the coupled
+correction until the larger live reserve is observed.
 The preceding far-field descent is separately capped at `0.20`, or `0.016 m`
 nominal world displacement. Every command jointly holds the registered
 outward corridor XY target while requesting negative Z: the XY error and the
