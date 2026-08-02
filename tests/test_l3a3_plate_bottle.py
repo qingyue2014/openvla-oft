@@ -28,6 +28,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _compiled_hazard_release_response_balance_action,
     _hazard_release_zero_coast_reserve_evidence,
     _hazard_release_zero_coast_transition_evidence,
+    _hazard_release_response_balance_guard_evidence,
     _compiled_low_side_neutral_damping_action,
     _outside_side_neutral_damping_guard_evidence,
     _outside_side_neutral_damping_latch_transition,
@@ -3868,6 +3869,44 @@ def test_job503694_tolerance_balanced_response_continues_damping():
     assert continued["active"] is True
     assert continued["release_recovery_active"] is False
     assert continued["dynamic_release_interlock_accepted"] is True
+
+
+def test_job503696_response_balance_uses_above_rim_handoff_allowlist():
+    coverage_only = {
+        "accepted": False,
+        "violations": [
+            "left_finger_rim_vertical_overlap_missing",
+            "left_finger_does_not_cover_rim_center",
+            "right_finger_does_not_cover_rim_center",
+        ],
+    }
+    active = _hazard_release_response_balance_guard_evidence(
+        coverage_only, balance_active_before=True
+    )
+    assert active["balance_guard_authorized"] is True
+    assert (
+        active["transient_above_rim_coverage_gap_authorized"] is True
+    )
+    assert (
+        active["proof"][
+            "allowlist_shared_with_stable_above_rim_handoff"
+        ]
+        is True
+    )
+
+    inactive = _hazard_release_response_balance_guard_evidence(
+        coverage_only, balance_active_before=False
+    )
+    assert inactive["balance_guard_authorized"] is False
+
+    wrong_violation = copy.deepcopy(coverage_only)
+    wrong_violation["violations"].append(
+        "one_controller_step_corridor_reserve_lost"
+    )
+    rejected = _hazard_release_response_balance_guard_evidence(
+        wrong_violation, balance_active_before=True
+    )
+    assert rejected["balance_guard_authorized"] is False
 
 
 def test_500099_every_descent_requires_preventive_active_braking_settle():

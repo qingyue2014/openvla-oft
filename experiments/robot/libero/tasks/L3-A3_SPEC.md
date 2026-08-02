@@ -647,6 +647,16 @@ input reconstructs successfully, so no threshold or action is changed for the
 diagnostic rerun. Every validation predicate and its exact runtime scalar is
 now serialized on rejection; this is diagnostic evidence only and cannot
 authorize or relax a failed gate.
+Job503696 identified the single rejected predicate: the first balance frame
+retained positive responses and `11.844/18.917 mm` outside/table reserves, but
+lifted the left finger just beyond rim overlap while both fingers no longer
+covered rim center. The response-balance compiler had inherited the older
+neutral-damping allowlist, whereas its already-preregistered stable above-rim
+handoff accepts exactly four left/right rim-overlap or center-coverage
+predicates. Response balance now shares that exact allowlist. It may continue
+only when already active, every violation belongs to that four-predicate set,
+and all unchanged live reserves pass. Full guard remains mandatory for normal
+stability completion, and any noncoverage violation still fails closed.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

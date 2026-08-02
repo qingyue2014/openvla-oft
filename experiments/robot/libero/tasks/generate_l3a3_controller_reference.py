@@ -8788,6 +8788,65 @@ def _outside_side_neutral_damping_guard_evidence(
     }
 
 
+_HAZARD_RELEASE_ABOVE_RIM_COVERAGE_VIOLATIONS = frozenset(
+    {
+        "left_finger_rim_vertical_overlap_missing",
+        "left_finger_does_not_cover_rim_center",
+        "right_finger_rim_vertical_overlap_missing",
+        "right_finger_does_not_cover_rim_center",
+    }
+)
+
+
+def _hazard_release_response_balance_guard_evidence(
+    outside_side_guard, *, balance_active_before
+):
+    """Authorize only the registered above-rim balance transient."""
+    if not isinstance(balance_active_before, (bool, np.bool_)):
+        raise ValueError(
+            "hazard-release response-balance active state must be boolean"
+        )
+    violations = outside_side_guard.get("violations", ())
+    if not isinstance(violations, (list, tuple)) or not all(
+        isinstance(value, str) for value in violations
+    ):
+        raise ValueError(
+            "response-balance guard violations must be strings"
+        )
+    full_guard_accepted = bool(
+        outside_side_guard.get("accepted", False)
+    )
+    transient_above_rim_coverage_gap_authorized = bool(
+        balance_active_before
+        and not full_guard_accepted
+        and bool(violations)
+        and set(violations).issubset(
+            _HAZARD_RELEASE_ABOVE_RIM_COVERAGE_VIOLATIONS
+        )
+    )
+    return {
+        "full_guard_accepted": full_guard_accepted,
+        "balance_active_before": bool(balance_active_before),
+        "guard_violations": list(violations),
+        "allowed_transient_violations": sorted(
+            _HAZARD_RELEASE_ABOVE_RIM_COVERAGE_VIOLATIONS
+        ),
+        "transient_above_rim_coverage_gap_authorized": (
+            transient_above_rim_coverage_gap_authorized
+        ),
+        "balance_guard_authorized": bool(
+            full_guard_accepted
+            or transient_above_rim_coverage_gap_authorized
+        ),
+        "proof": {
+            "balance_cannot_start_from_rejected_guard": True,
+            "allowlist_shared_with_stable_above_rim_handoff": True,
+            "full_guard_required_for_stability_completion": True,
+            "all_noncoverage_violations_fail_closed": True,
+        },
+    }
+
+
 def _outside_side_neutral_damping_latch_transition(
     *,
     damping_guard,
@@ -9445,8 +9504,10 @@ def _compiled_hazard_release_response_balance_action(
         outside_side_guard=outside_side_guard,
         recovery_exit_clearance_m=recovery_exit_clearance_m,
     )
-    damping_guard = _outside_side_neutral_damping_guard_evidence(
-        outside_side_guard, damping_active_before=True
+    response_balance_guard = (
+        _hazard_release_response_balance_guard_evidence(
+            outside_side_guard, balance_active_before=True
+        )
     )
     validation_checks = {
         "native_runtime_resolved": bool(
@@ -9488,8 +9549,8 @@ def _compiled_hazard_release_response_balance_action(
             and native_low[6] <= gripper <= native_high[6]
         ),
         "live_reserves_accepted": bool(reserve_evidence["accepted"]),
-        "damping_guard_authorized": bool(
-            damping_guard["damping_guard_authorized"]
+        "response_balance_guard_authorized": bool(
+            response_balance_guard["balance_guard_authorized"]
         ),
         "vertical_response_finite": bool(
             np.isfinite(vertical_response)
@@ -9542,7 +9603,7 @@ def _compiled_hazard_release_response_balance_action(
                         maximum_axis_decrement_action
                     ),
                     "reserve_evidence": reserve_evidence,
-                    "damping_guard": damping_guard,
+                    "response_balance_guard": response_balance_guard,
                 },
                 sort_keys=True,
             )
@@ -9648,7 +9709,7 @@ def _compiled_hazard_release_response_balance_action(
         "outward_axis_balanced_before_action": outward_axis_balanced,
         "vertical_axis_balanced_before_action": vertical_axis_balanced,
         "reserve_evidence": reserve_evidence,
-        "damping_guard": damping_guard,
+        "response_balance_guard": response_balance_guard,
         "proof": {
             "one_sided_outward_and_positive_z_only": True,
             "per_axis_decrement_bounded": True,
@@ -19795,12 +19856,9 @@ def _seek_stable_plate_contact(
                 and zero_coast_stable_count >= 2
                 and not latest_outside_side_guard["accepted"]
             ):
-                zero_coast_allowed_coverage_violations = {
-                    "left_finger_rim_vertical_overlap_missing",
-                    "left_finger_does_not_cover_rim_center",
-                    "right_finger_rim_vertical_overlap_missing",
-                    "right_finger_does_not_cover_rim_center",
-                }
+                zero_coast_allowed_coverage_violations = set(
+                    _HAZARD_RELEASE_ABOVE_RIM_COVERAGE_VIOLATIONS
+                )
                 zero_coast_observed_violations = set(
                     latest_outside_side_guard.get("violations", ())
                 )
