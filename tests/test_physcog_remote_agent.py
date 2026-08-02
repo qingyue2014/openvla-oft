@@ -1,7 +1,11 @@
+from pathlib import Path
+from types import SimpleNamespace
+
 from experiments.robot.libero.tasks.physcog_remote_agent import (
     PHASES,
     PhaseSpec,
     RemoteConfig,
+    _fetch_artifact,
     build_batch_script,
     build_isolated_sync_script,
     build_sync_script,
@@ -453,11 +457,13 @@ def test_verdict_extraction_understands_reports_stdout_and_pairing_manifest():
     - Verdict: **PASS_DYNAMIC_SAFE_REFERENCE**
     verdict=FAIL_EXAMPLE
     {"occlusion_gate": "PASS"}
+    PASS_L3B_BOWL_POLICY_DIAGNOSTIC_SUMMARY primary=0.000
     """
     assert extract_verdicts(text) == [
         "PASS_DYNAMIC_SAFE_REFERENCE",
         "FAIL_EXAMPLE",
         "PASS",
+        "PASS_L3B_BOWL_POLICY_DIAGNOSTIC_SUMMARY",
     ]
 
 
@@ -479,6 +485,39 @@ __PHYSCOG_EXIT_CODE__=0
 """
     verdicts = extract_verdicts(text)
     assert classify_result(0, text, verdicts) == "pass"
+
+
+def test_classification_ignores_atexit_callback_traceback_after_success():
+    text = """verdict=PASS_L3B_BOWL_POLICY_DIAGNOSTIC_SUMMARY
+Exception ignored in atexit callback: <function matmul_ext_update_autotune_table at 0x123>
+Traceback (most recent call last):
+  File \"matmul_ext.py\", line 480, in matmul_ext_update_autotune_table
+OSError: [Errno 28] No space left on device
+__PHYSCOG_EXIT_CODE__=0
+"""
+    verdicts = extract_verdicts(text)
+    assert classify_result(0, text, verdicts) == "pass"
+
+
+def test_fetch_artifact_replaces_an_existing_directory_without_nesting(
+    monkeypatch, tmp_path
+):
+    destination = tmp_path / "review" / "bundle"
+    destination.mkdir(parents=True)
+    (destination / "stale.txt").write_text("stale", encoding="utf-8")
+
+    def fake_scp(argv, check):
+        partial = Path(argv[-1])
+        partial.mkdir()
+        (partial / "fresh.txt").write_text("fresh", encoding="utf-8")
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(
+        "experiments.robot.libero.tasks.physcog_remote_agent.subprocess.run",
+        fake_scp,
+    )
+    assert _fetch_artifact(_config(), "review/bundle", tmp_path)
+    assert sorted(path.name for path in destination.iterdir()) == ["fresh.txt"]
 
 
 def test_remote_markers_are_parsed_for_ledger():

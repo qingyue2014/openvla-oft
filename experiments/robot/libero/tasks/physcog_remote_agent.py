@@ -14,6 +14,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from dataclasses import asdict, dataclass, replace
@@ -1931,8 +1932,10 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
 
 VERDICT_RE = re.compile(
     r"(?:Verdict:\s*(?:\*\*)?|verdict=|\"occlusion_gate\"\s*:\s*\")"
-    r"([A-Z][A-Z0-9_-]+)",
-    re.IGNORECASE,
+    r"([A-Z][A-Z0-9_-]+)"
+    r"|^\s*(PASS_[A-Z0-9_-]+|FAIL_[A-Z0-9_-]+|NEEDS_[A-Z0-9_-]+|"
+    r"BENCHMARK_(?:READY|INCOMPLETE)[A-Z0-9_-]*)\b",
+    re.IGNORECASE | re.MULTILINE,
 )
 MARKER_RE = re.compile(r"^__PHYSCOG_([A-Z_]+)__=(.*)$", re.MULTILINE)
 
@@ -2011,7 +2014,14 @@ def build_batch_script(
             "export MPLCONFIGDIR="
             f"{shlex.quote(cfg.remote_repo.rstrip('/') + '/.physcog-agent/cache/matplotlib')}"
         ),
-        'mkdir -p "$NUMBA_CACHE_DIR" "$XDG_CACHE_HOME" "$MPLCONFIGDIR"',
+        (
+            "export TRITON_CACHE_DIR="
+            f"{shlex.quote(cfg.remote_repo.rstrip('/') + '/.physcog-agent/cache/triton')}"
+        ),
+        (
+            'mkdir -p "$NUMBA_CACHE_DIR" "$XDG_CACHE_HOME" '
+            '"$MPLCONFIGDIR" "$TRITON_CACHE_DIR"'
+        ),
         *(
             [
                 f"export LIBERO_ROOT={shlex.quote(cfg.libero_root)}",
@@ -2101,7 +2111,7 @@ def ssh_argv(cfg: RemoteConfig, remote_script: str) -> list[str]:
 def extract_verdicts(text: str) -> list[str]:
     verdicts: list[str] = []
     for match in VERDICT_RE.finditer(text):
-        token = match.group(1).upper()
+        token = (match.group(1) or match.group(2)).upper()
         if token not in verdicts:
             verdicts.append(token)
     return verdicts
@@ -2111,7 +2121,10 @@ def classify_result(returncode: int, text: str, verdicts: Sequence[str]) -> str:
     lines = text.splitlines()
     fatal_traceback = any(
         line.strip().startswith("Traceback (most recent call last)")
-        and (index == 0 or not lines[index - 1].startswith("Exception ignored in:"))
+        and (
+            index == 0
+            or not lines[index - 1].strip().startswith("Exception ignored in")
+        )
         for index, line in enumerate(lines)
     )
     validator_signatures = (
@@ -2189,6 +2202,8 @@ def _run_dir(root: Path, scenario: str, phase: str) -> Path:
 def _fetch_artifact(cfg: RemoteConfig, remote_path: str, output_root: Path) -> bool:
     destination = output_root / remote_path
     destination.parent.mkdir(parents=True, exist_ok=True)
+    partial = destination.with_name(f".{destination.name}.physcog-download")
+    _remove_local_path(partial)
     source = f"{cfg.target}:{cfg.remote_repo.rstrip('/')}/{remote_path}"
     argv = [
         "scp",
@@ -2197,9 +2212,21 @@ def _fetch_artifact(cfg: RemoteConfig, remote_path: str, output_root: Path) -> b
         "-o",
         f"ControlPath={cfg.control_socket}",
         source,
-        str(destination),
+        str(partial),
     ]
-    return subprocess.run(argv, check=False).returncode == 0
+    if subprocess.run(argv, check=False).returncode != 0:
+        _remove_local_path(partial)
+        return False
+    _remove_local_path(destination)
+    partial.replace(destination)
+    return True
+
+
+def _remove_local_path(path: Path) -> None:
+    if path.is_dir() and not path.is_symlink():
+        shutil.rmtree(path)
+    elif path.exists() or path.is_symlink():
+        path.unlink()
 
 
 def _transfer_file(cfg: RemoteConfig, source: Path, remote_path: str) -> bool:
