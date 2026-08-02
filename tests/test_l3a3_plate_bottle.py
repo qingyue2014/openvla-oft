@@ -3198,6 +3198,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         strict_corridor_entry_clearance_m=0.0004,
         latest_outward_step_progress_m=1.3378271275732434e-05,
         latest_vertical_step_progress_m=-0.0006499833005025879,
+        compiled_tail_brake_buffer_accepted=True,
         recovery_active_before_decision=False,
     )
     assert before_trigger["recovery_active_after_decision"] is False
@@ -3208,6 +3209,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         strict_corridor_entry_clearance_m=0.0004,
         latest_outward_step_progress_m=-0.00019280978843902452,
         latest_vertical_step_progress_m=-0.0018199586431316694,
+        compiled_tail_brake_buffer_accepted=True,
         recovery_active_before_decision=False,
     )
     assert job503193_entry["entered_recovery"] is True
@@ -3219,6 +3221,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         strict_corridor_entry_clearance_m=0.0004,
         latest_outward_step_progress_m=-1e-6,
         latest_vertical_step_progress_m=1e-6,
+        compiled_tail_brake_buffer_accepted=True,
         recovery_active_before_decision=True,
     )
     assert recovery_hold["exit_accepted"] is False
@@ -3229,10 +3232,28 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         strict_corridor_entry_clearance_m=0.0004,
         latest_outward_step_progress_m=1e-6,
         latest_vertical_step_progress_m=1e-6,
+        compiled_tail_brake_buffer_accepted=True,
         recovery_active_before_decision=True,
     )
     assert recovery_exit["exit_accepted"] is True
     assert recovery_exit["recovery_active_after_decision"] is False
+    recovery_exit_without_buffer = (
+        _vertical_corridor_reserve_recovery_evidence(
+            live_clearance_m=0.001,
+            recovery_entry_clearance_m=recovery_entry_clearance,
+            recovery_exit_clearance_m=recovery_exit_clearance,
+            strict_corridor_entry_clearance_m=0.0004,
+            latest_outward_step_progress_m=1e-6,
+            latest_vertical_step_progress_m=1e-6,
+            compiled_tail_brake_buffer_accepted=False,
+            recovery_active_before_decision=True,
+        )
+    )
+    assert recovery_exit_without_buffer["exit_accepted"] is False
+    assert (
+        recovery_exit_without_buffer["recovery_active_after_decision"]
+        is True
+    )
     recovery_action, recovery_path = (
         _constraint_prioritized_outside_descent_action(
             current_eef=np.array(

@@ -4167,6 +4167,7 @@ def _vertical_corridor_reserve_recovery_evidence(
     strict_corridor_entry_clearance_m,
     latest_outward_step_progress_m,
     latest_vertical_step_progress_m,
+    compiled_tail_brake_buffer_accepted,
     recovery_active_before_decision,
 ):
     """Latch a positive-Z/outward brake before corridor reserve is lost."""
@@ -4199,6 +4200,7 @@ def _vertical_corridor_reserve_recovery_evidence(
         and live_clearance_m > recovery_exit_clearance_m
         and latest_outward_step_progress_m >= 0.0
         and latest_vertical_step_progress_m >= 0.0
+        and compiled_tail_brake_buffer_accepted
     )
     recovery_active_after_decision = bool(
         (recovery_active_before_decision or entered) and not exit_accepted
@@ -4240,9 +4242,13 @@ def _vertical_corridor_reserve_recovery_evidence(
         "latest_vertical_step_progress_m": float(
             latest_vertical_step_progress_m
         ),
+        "compiled_tail_brake_buffer_accepted": bool(
+            compiled_tail_brake_buffer_accepted
+        ),
         "exit_requirements": (
             "live clearance strictly above the recovery exit gate plus "
-            "measured nonnegative outward and vertical progress"
+            "measured nonnegative outward and vertical progress plus the "
+            "refreshed accepted compiled lateral buffer"
         ),
     }
 
@@ -14825,6 +14831,9 @@ def _seek_stable_plate_contact(
                     latest_vertical_step_progress_m=(
                         latest_vertical_step_progress_m
                     ),
+                    compiled_tail_brake_buffer_accepted=bool(
+                        latest_overhead_lateral_buffer["accepted"]
+                    ),
                     recovery_active_before_decision=(
                         vertical_corridor_reserve_recovery_active
                     ),
@@ -14909,13 +14918,10 @@ def _seek_stable_plate_contact(
                         ),
                     )
                 )
-                if not (
-                    latest_overhead_guard["accepted"]
-                    and latest_overhead_lateral_buffer["accepted"]
-                ):
+                if not latest_overhead_guard["accepted"]:
                     raise RuntimeError(
                         "vertical-corridor reserve recovery lacks its live "
-                        "compiled overhead tail-brake proof: "
+                        "compiled base-overhead tail-brake proof: "
                         f"guard_step={guard_step} overhead_guard="
                         f"{json.dumps(latest_overhead_guard, sort_keys=True)} "
                         f"lateral_buffer="
