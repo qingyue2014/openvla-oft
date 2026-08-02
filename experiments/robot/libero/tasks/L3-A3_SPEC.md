@@ -476,6 +476,17 @@ unchanged `0.10` vertical-corridor descent bound, yielding `0.025`. This
 reduces only the descent impulse that enters settle; the `0.20` outward/+Z
 settle brake, runtime action bounds, `0.025` damping decrement, all physical
 reserves, tasks, assets, targets, and budgets remain unchanged.
+Job503665 reached the new `0.025` schedule floor, but reproduced the same
+`-0.061771` final Z command and the same `-1.467453 mm` first-brake vertical
+tail. The schedule had reduced only the settle-trigger height; the descent
+allocator still received the full remaining height and could therefore spend
+all Euclidean action norm left after the outward hold. The active geometric
+height action now also caps the allocator's per-step negative-Z world request:
+at the `0.025` floor the cap is `0.025 * 0.08 = 0.002 m`, so the literal Z
+action cannot exceed `0.025` before norm allocation. The same cap remains the
+settle trigger, while the unchanged `0.20` total action bound and full
+outward/positive-Z settle brake retain their prior authority. No task, asset,
+target, reserve, physical threshold, or budget changes.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

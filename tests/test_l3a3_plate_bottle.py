@@ -3305,6 +3305,34 @@ def test_500088_descent_norm_is_strictly_inside_bound_without_inward_action():
     assert evidence["commanded_outward_error_m"] == 0.0
 
 
+def test_job503665_geometric_floor_caps_literal_descent_action():
+    current = np.array(
+        [0.13337208581669557, -0.027032251852672353, 0.9197834939139998]
+    )
+    target = np.array(
+        [0.14847106705090635, -0.02850777957668001, 0.9178414056548501]
+    )
+    floor_action = 0.025
+    action, evidence = _constraint_prioritized_outside_descent_action(
+        current_eef=current,
+        outside_side_target=target,
+        outward_direction_xy=np.array([1.0, 0.0]),
+        maximum_descent_m=0.08 * floor_action,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_translation_action=0.20,
+    )
+    assert action[2] == pytest.approx(-floor_action)
+    assert evidence["maximum_descent_m"] == pytest.approx(0.002)
+    assert evidence["requested_vertical_action"] == pytest.approx(
+        floor_action
+    )
+    assert evidence["commanded_vertical_action"] == pytest.approx(
+        floor_action
+    )
+    assert np.linalg.norm(action[:3]) < 0.20
+
+
 def test_500099_every_descent_requires_preventive_active_braking_settle():
     target = np.array(
         [0.13680639548403947, -0.02850777957668001, 0.917769758]
@@ -10340,6 +10368,20 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert (
         "0.25 * vertical_corridor_descent_max_translation_action"
         in bounded_seek
+    )
+    vertical_corridor_action = bounded_seek.split(
+        'elif structural_stage == "vertical_corridor_descent":', 1
+    )[1].split(
+        'elif structural_stage == "vertical_corridor_settle":', 1
+    )[0]
+    assert "geometric_descent_world_cap" in vertical_corridor_action
+    assert (
+        "min(maximum_descent, geometric_descent_world_cap)"
+        in vertical_corridor_action
+    )
+    assert "else bounded_maximum_descent" in vertical_corridor_action
+    assert '"geometric_height_caps_descent_command": True' in (
+        vertical_corridor_action
     )
     assert (
         ">= vertical_corridor_geometric_height_action_floor"

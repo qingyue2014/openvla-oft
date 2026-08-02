@@ -15266,9 +15266,10 @@ def _seek_stable_plate_contact(
                 "after measured nonnegative outward, clearance, and Z "
                 "brake response above rim overlap, halve the geometric "
                 "height action from 0.20 to 0.10 to the preregistered "
-                "0.05 floor; recompute only the pre-brake Z trigger while "
-                "retaining both the proved 0.195 outward-priority "
-                "authority and the measured Z=0.20 inertial brake"
+                "0.025 floor; use it both as the pre-brake Z trigger and "
+                "the per-step negative-Z action cap while retaining the "
+                "proved 0.195 outward-priority authority and measured "
+                "Z=0.20 inertial brake"
             ),
             "vertical_corridor_reserve_recovery_entry_clearance_m": (
                 vertical_corridor_reserve_recovery_entry_clearance
@@ -16953,6 +16954,14 @@ def _seek_stable_plate_contact(
                 0.0,
                 float(current_eef[2] - corridor_side_target[2]),
             )
+            geometric_descent_world_cap = float(
+                active_vertical_corridor_envelope[
+                    "settle_brake_trigger_buffer_m"
+                ]
+            )
+            bounded_maximum_descent = float(
+                min(maximum_descent, geometric_descent_world_cap)
+            )
             if maximum_descent <= 0.0 and not pre_action_guard["accepted"]:
                 raise RuntimeError(
                     "vertical staging reached or crossed its compiled safe "
@@ -17025,7 +17034,7 @@ def _seek_stable_plate_contact(
                         maximum_descent_m=(
                             0.0
                             if vertical_corridor_reserve_recovery_active
-                            else maximum_descent
+                            else bounded_maximum_descent
                         ),
                         gripper=gripper,
                         position_action_scale=args.position_action_scale,
@@ -17107,6 +17116,12 @@ def _seek_stable_plate_contact(
                         "settle_brake_trigger_z_m"
                     ]
                 ),
+                "remaining_vertical_descent_m": maximum_descent,
+                "geometric_descent_world_cap_m": (
+                    geometric_descent_world_cap
+                ),
+                "bounded_maximum_descent_m": bounded_maximum_descent,
+                "geometric_height_caps_descent_command": True,
                 "active_vertical_corridor_control_envelope": (
                     {
                         **active_vertical_corridor_envelope,
