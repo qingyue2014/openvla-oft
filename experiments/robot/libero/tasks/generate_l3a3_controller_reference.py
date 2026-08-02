@@ -13789,51 +13789,53 @@ def _seek_stable_plate_contact(
         corridor_side_target[2]
         + vertical_corridor_settle_brake_trigger_buffer
     )
-    vertical_corridor_outward_hold_action_floor = float(
+    vertical_corridor_geometric_height_action_floor = float(
         0.5 * vertical_corridor_descent_max_translation_action
     )
 
-    def _active_vertical_corridor_control_envelope(action_bound):
-        action_bound = float(action_bound)
+    def _active_vertical_corridor_control_envelope(
+        geometric_height_action,
+    ):
+        geometric_height_action = float(geometric_height_action)
         if not (
-            np.isfinite(action_bound)
-            and vertical_corridor_outward_hold_action_floor
-            <= action_bound
+            np.isfinite(geometric_height_action)
+            and vertical_corridor_geometric_height_action_floor
+            <= geometric_height_action
             <= vertical_corridor_outward_hold_max_translation_action
-            and action_bound > structural_max_translation_action
+            and geometric_height_action > structural_max_translation_action
         ):
             raise RuntimeError(
-                "active vertical-corridor authority is outside its "
-                "preregistered geometric schedule"
+                "active vertical-corridor height action is outside its "
+                "preregistered schedule"
             )
-        outward_priority_action = float(
-            action_bound - structural_max_translation_action
-        )
-        hold_world_step = float(
-            args.position_action_scale * outward_priority_action
-        )
-        hold_target_xy = (
-            corridor_rebuffer_target[:2]
-            + corridor_outward_direction * hold_world_step
-        )
         trigger_buffer = float(
-            args.position_action_scale * action_bound
+            args.position_action_scale * geometric_height_action
         )
         return {
-            "active_translation_action_bound": action_bound,
-            "outward_priority_action": outward_priority_action,
-            "balanced_hold_world_step_m": hold_world_step,
-            "balanced_hold_target_xy": hold_target_xy,
+            "active_geometric_height_action": geometric_height_action,
+            "fixed_outward_translation_action_bound": (
+                vertical_corridor_outward_hold_max_translation_action
+            ),
+            "outward_priority_action": (
+                vertical_corridor_outward_priority_action
+            ),
+            "balanced_hold_world_step_m": (
+                vertical_corridor_balanced_hold_world_step
+            ),
+            "balanced_hold_target_xy": (
+                vertical_corridor_balanced_hold_target_xy
+            ),
             "settle_brake_trigger_buffer_m": trigger_buffer,
             "settle_brake_trigger_z_m": float(
                 corridor_side_target[2] + trigger_buffer
             ),
             "positive_z_settle_action": float(
                 max(
-                    action_bound,
+                    geometric_height_action,
                     vertical_corridor_descent_max_translation_action,
                 )
             ),
+            "outward_authority_invariant_across_height_schedule": True,
         }
     vertical_corridor_closed_loop_inward_response_bound = 0.0005
     vertical_corridor_reserve_recovery_entry_clearance = float(
@@ -13862,7 +13864,7 @@ def _seek_stable_plate_contact(
         and vertical_corridor_settle_brake_trigger_z
         > corridor_side_target[2]
         and structural_max_translation_action
-        < vertical_corridor_outward_hold_action_floor
+        < vertical_corridor_geometric_height_action_floor
         < vertical_corridor_descent_max_translation_action
         < vertical_corridor_outward_hold_max_translation_action
         and np.isfinite(
@@ -13909,20 +13911,22 @@ def _seek_stable_plate_contact(
                 "from position_action_scale times the existing 0.20 "
                 "side-corridor outward-hold bound"
             ),
-            "vertical_corridor_outward_hold_action_floor": (
-                vertical_corridor_outward_hold_action_floor
+            "vertical_corridor_geometric_height_action_floor": (
+                vertical_corridor_geometric_height_action_floor
             ),
-            "vertical_corridor_geometric_authority_schedule": [
+            "vertical_corridor_geometric_height_action_schedule": [
                 vertical_corridor_outward_hold_max_translation_action,
                 0.5
                 * vertical_corridor_outward_hold_max_translation_action,
-                vertical_corridor_outward_hold_action_floor,
+                vertical_corridor_geometric_height_action_floor,
             ],
-            "vertical_corridor_geometric_authority_rule": (
+            "vertical_corridor_geometric_height_action_rule": (
                 "after measured nonnegative outward, clearance, and Z "
-                "brake response above rim overlap, halve 0.20 to 0.10 to "
-                "the preregistered 0.05 floor and recompute the outward "
-                "hold plus pre-brake Z trigger"
+                "brake response above rim overlap, halve the geometric "
+                "height action from 0.20 to 0.10 to the preregistered "
+                "0.05 floor; recompute only the pre-brake Z trigger and "
+                "positive-Z schedule while retaining the proved 0.195 "
+                "outward-priority authority"
             ),
             "vertical_corridor_reserve_recovery_entry_clearance_m": (
                 vertical_corridor_reserve_recovery_entry_clearance
@@ -14496,7 +14500,7 @@ def _seek_stable_plate_contact(
     overhead_horizontal_z = float(initial_eef[2])
     latest_vertical_step_progress_m = 0.0
     latest_outward_step_progress_m = 0.0
-    active_vertical_corridor_outward_hold_action = float(
+    active_vertical_corridor_geometric_height_action = float(
         vertical_corridor_outward_hold_max_translation_action
     )
     vertical_corridor_reserve_recovery_active = False
@@ -14564,7 +14568,7 @@ def _seek_stable_plate_contact(
         )
         active_vertical_corridor_envelope = (
             _active_vertical_corridor_control_envelope(
-                active_vertical_corridor_outward_hold_action
+                active_vertical_corridor_geometric_height_action
             )
         )
         if structural_stage in fixed_buffer_lateral_stages or (
@@ -15576,7 +15580,7 @@ def _seek_stable_plate_contact(
                         position_action_scale=args.position_action_scale,
                         maximum_translation_action=(
                             active_vertical_corridor_envelope[
-                                "active_translation_action_bound"
+                                "fixed_outward_translation_action_bound"
                             ]
                         ),
                     )
@@ -15693,7 +15697,7 @@ def _seek_stable_plate_contact(
                     ),
                     maximum_lateral_translation_action=(
                         active_vertical_corridor_envelope[
-                            "active_translation_action_bound"
+                            "fixed_outward_translation_action_bound"
                         ]
                     ),
                     positive_z_action=(
@@ -16681,16 +16685,16 @@ def _seek_stable_plate_contact(
             elif (
                 lateral_settle_progress["kinematic_brake_reversed"]
                 and not latest_outside_side_guard["accepted"]
-                and active_vertical_corridor_outward_hold_action
-                > vertical_corridor_outward_hold_action_floor
+                and active_vertical_corridor_geometric_height_action
+                > vertical_corridor_geometric_height_action_floor
             ):
-                previous_active_authority = float(
-                    active_vertical_corridor_outward_hold_action
+                previous_geometric_height_action = float(
+                    active_vertical_corridor_geometric_height_action
                 )
-                active_vertical_corridor_outward_hold_action = float(
+                active_vertical_corridor_geometric_height_action = float(
                     max(
-                        vertical_corridor_outward_hold_action_floor,
-                        0.5 * previous_active_authority,
+                        vertical_corridor_geometric_height_action_floor,
+                        0.5 * previous_geometric_height_action,
                     )
                 )
                 lateral_settle_state = None
@@ -16700,14 +16704,20 @@ def _seek_stable_plate_contact(
                         "above_rim_kinematic_brake_reversed_to_reduced_"
                         "corridor_descent"
                     ),
-                    "previous_translation_action_bound": (
-                        previous_active_authority
+                    "previous_geometric_height_action": (
+                        previous_geometric_height_action
                     ),
-                    "next_translation_action_bound": (
-                        active_vertical_corridor_outward_hold_action
+                    "next_geometric_height_action": (
+                        active_vertical_corridor_geometric_height_action
                     ),
-                    "action_floor": (
-                        vertical_corridor_outward_hold_action_floor
+                    "geometric_height_action_floor": (
+                        vertical_corridor_geometric_height_action_floor
+                    ),
+                    "fixed_outward_translation_action_bound": (
+                        vertical_corridor_outward_hold_max_translation_action
+                    ),
+                    "fixed_outward_priority_action": (
+                        vertical_corridor_outward_priority_action
                     ),
                     "full_outside_side_guard_accepted": False,
                     "formal_corridor_target_unchanged": True,

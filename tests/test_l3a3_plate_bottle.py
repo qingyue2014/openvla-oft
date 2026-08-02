@@ -3229,6 +3229,21 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         "post_action_live_guards_required": True,
     }
 
+    # Job503282 proved that coupling the 0.20 -> 0.10 height release to
+    # the outward component was unsafe.  Its first X=0.10, Z=0.10 settle
+    # response crossed the unchanged 0.4 mm corridor gate.  The compiled
+    # low-side command above retains X~=0.195 while the positive-Z schedule
+    # is independently allowed to use 0.10.
+    job503282_pre_clearance = 0.0005870025635664605
+    job503282_post_clearance = 0.0003428052257444386
+    assert job503282_pre_clearance > 0.0004
+    assert job503282_post_clearance < 0.0004
+    assert (
+        job503282_post_clearance - job503282_pre_clearance
+    ) == pytest.approx(-0.0002441973378220219)
+    assert low_side_brake[0] > 0.19
+    assert low_side_brake[2] == pytest.approx(0.10)
+
     # Job503168's recovered tail already passed the unchanged formal corridor
     # gate.  The former extra zero-Z frame then fell 0.239 mm and restarted the
     # brake loop, so the proved tail must hand off on this exact state instead.
@@ -3560,6 +3575,16 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     bounded_seek = CONTROLLER_REFERENCE.read_text().split(
         "def _seek_stable_plate_contact(", 1
     )[1].split("\ndef _calibrate_stable_plate_contact_depth", 1)[0]
+    active_envelope = bounded_seek.split(
+        "def _active_vertical_corridor_control_envelope(", 1
+    )[1].split(
+        "vertical_corridor_closed_loop_inward_response_bound", 1
+    )[0]
+    assert "vertical_corridor_outward_priority_action" in active_envelope
+    assert "vertical_corridor_balanced_hold_target_xy" in active_envelope
+    assert "geometric_height_action - structural_max_translation_action" not in (
+        active_envelope
+    )
     descent_transition = bounded_seek[
         bounded_seek.index(
             'elif stage_before_action == "overhead_corridor_descent"'
@@ -4462,7 +4487,10 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
     vertical_corridor_action = bounded_seek.split(
         'elif structural_stage == "vertical_corridor_descent":', 1
     )[1].split('elif structural_stage == "vertical_corridor_settle":', 1)[0]
-    assert "active_translation_action_bound" in vertical_corridor_action
+    assert (
+        "fixed_outward_translation_action_bound"
+        in vertical_corridor_action
+    )
     post_descent_lateral_action = bounded_seek.split(
         'elif structural_stage == "overhead_post_descent_corridor_lateral":',
         1,
@@ -8876,9 +8904,18 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     )[0]
     assert "kinematic_brake_reversed" in settle_transition_logic
     assert "settle_geometric_authority_release" in settle_transition_logic
-    assert "0.5 * previous_active_authority" in settle_transition_logic
-    assert "vertical_corridor_outward_hold_action_floor" in (
+    assert (
+        "0.5 * previous_geometric_height_action"
+        in settle_transition_logic
+    )
+    assert "vertical_corridor_geometric_height_action_floor" in (
         settle_transition_logic
+    )
+    assert "fixed_outward_translation_action_bound" in settle_action
+    assert "active_geometric_height_action" in bounded_seek
+    assert (
+        "outward_authority_invariant_across_height_schedule"
+        in bounded_seek
     )
     assert '"fixed_safe_z_lateral_approach"' in bounded_seek
     assert (
