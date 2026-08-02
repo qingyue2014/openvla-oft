@@ -73,13 +73,14 @@ unmodified collision inventory:
 
 1. at the center-high Z, move in minus X while the complete rigid-hand AABB
    remains more than one maximum controller world step in front of every
-   `wooden_cabinet_1_cabinet_top` collision geom;
-2. while the complete rigid hand is strictly left of every cabinet-top geom,
-   traverse to the native trailing-side Y;
-3. retain that strict left separation while descending to the existing native
-   outside-side Z;
-4. only after the complete rigid hand is strictly below every cabinet-top
-   geom, return in plus X to the unchanged native outside-side contact column.
+   `wooden_cabinet_1_cabinet_top` and `wine_rack_1_main` collision geom;
+2. while the complete rigid hand remains both strictly left of the cabinet top
+   and strictly in front of the cabinet/wine-rack obstacle set, descend to the
+   existing native outside-side Z;
+3. only after the complete rigid hand is strictly below every cabinet-top and
+   wine-rack geom, traverse to the native trailing-side Y;
+4. retain that strict under-obstacle separation while returning in plus X to
+   the unchanged native outside-side contact column.
 
 The minus-X waypoint is compiled from the exact live cabinet minimum X and
 maximum rigid-hand X offset. Its separation-axis reserve is the unchanged
