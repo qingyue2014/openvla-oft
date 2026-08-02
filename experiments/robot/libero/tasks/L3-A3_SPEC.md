@@ -555,6 +555,19 @@ the reversal count and therefore restores `+Z=0.40`; release still requires two
 consecutive jointly nonnegative frames and the same strict `3.050 mm` reserve.
 The primary and confirmation translation norms remain about `0.565686` and
 `0.447214`, respectively, both strictly inside the native `1.0` bound.
+Job503688 showed that `+Z=0.20` eventually made every confirmation response
+negative, repeatedly resetting the reversal count. It also showed that the
+generic neutral-damping latch could start after the first hazard reversal
+frame, before the dedicated two-frame hazard release gate: its existing
+`0.025` decrement produced `X/Z=0.375`, retained positive vertical response,
+but slightly reversed the two lateral directions. Hazard confirmation now
+uses `+X=0.40, +Z=0.375`, with `0.375` derived exactly as the full `0.40`
+brake minus that existing `0.025` damping decrement. More importantly, a
+hazard-triggered settle cannot latch neutral damping until its dedicated
+two-frame directional and `3.050 mm` reserve release evidence is authorized.
+Geometric-only damping is unchanged. The confirmation norm is about `0.548293`,
+strictly inside the native `1.0` bound, and any negative direction still resets
+the count and restores the full `+Z=0.40` brake.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

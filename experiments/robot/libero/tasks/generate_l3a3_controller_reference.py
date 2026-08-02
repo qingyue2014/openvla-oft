@@ -16052,7 +16052,8 @@ def _seek_stable_plate_contact(
         2.0 * vertical_corridor_outward_hold_max_translation_action
     )
     vertical_corridor_hazard_positive_z_confirmation_action = float(
-        vertical_corridor_outward_hold_max_translation_action
+        vertical_corridor_hazard_positive_z_brake_action
+        - vertical_corridor_neutral_damping_release_action
     )
     fixed_safe_z_stable_count = 0
     fixed_safe_z_required_stable_count = 2
@@ -16199,10 +16200,10 @@ def _seek_stable_plate_contact(
             ),
             "vertical_corridor_hazard_positive_z_confirmation_derivation": (
                 "after one jointly nonnegative hazard-brake response, "
-                "retain outward X=0.40 but use the unchanged nominal "
-                "positive Z=0.20 only for the second confirmation frame; "
-                "any negative direction resets the count and restores "
-                "positive Z=0.40"
+                "retain outward X=0.40 but reduce positive Z by only the "
+                "existing 0.025 neutral-damping decrement, from 0.40 to "
+                "0.375, for the second confirmation frame; any negative "
+                "direction resets the count and restores positive Z=0.40"
             ),
         }
     )
@@ -18676,6 +18677,24 @@ def _seek_stable_plate_contact(
             lateral_settle_progress[
                 "hazard_brake_release_evidence"
             ] = hazard_brake_release_evidence
+            neutral_damping_reversal_authorized = bool(
+                lateral_settle_progress[
+                    "kinematic_brake_reversed"
+                ]
+                and hazard_brake_release_evidence[
+                    "release_authorized"
+                ]
+            )
+            lateral_settle_progress[
+                "neutral_damping_reversal_authorized"
+            ] = neutral_damping_reversal_authorized
+            lateral_settle_progress[
+                "neutral_damping_waits_for_hazard_release"
+            ] = bool(
+                hazard_brake_release_evidence[
+                    "hazard_response_triggered"
+                ]
+            )
             neutral_damping_latch_transition = (
                 _outside_side_neutral_damping_latch_transition(
                     damping_guard=neutral_damping_guard,
@@ -18685,10 +18704,8 @@ def _seek_stable_plate_contact(
                     damping_active_before=(
                         neutral_damping_active_before_action
                     ),
-                    kinematic_brake_reversed=bool(
-                        lateral_settle_progress[
-                            "kinematic_brake_reversed"
-                        ]
+                    kinematic_brake_reversed=(
+                        neutral_damping_reversal_authorized
                     ),
                     reserves_accepted=(
                         neutral_damping_reserves_accepted

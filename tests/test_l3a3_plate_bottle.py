@@ -3534,26 +3534,26 @@ def test_job503687_hazard_brake_reduces_only_confirmation_z_action():
         _vertical_corridor_hazard_positive_z_brake_schedule(
             previous_reversal_count=0,
             primary_positive_z_action=0.40,
-            confirmation_positive_z_action=0.20,
+            confirmation_positive_z_action=0.375,
         )
     )
     confirmation, confirmation_evidence = (
         _vertical_corridor_hazard_positive_z_brake_schedule(
             previous_reversal_count=1,
             primary_positive_z_action=0.40,
-            confirmation_positive_z_action=0.20,
+            confirmation_positive_z_action=0.375,
         )
     )
     restored, restored_evidence = (
         _vertical_corridor_hazard_positive_z_brake_schedule(
             previous_reversal_count=0,
             primary_positive_z_action=0.40,
-            confirmation_positive_z_action=0.20,
+            confirmation_positive_z_action=0.375,
         )
     )
     assert primary == pytest.approx(0.40)
     assert primary_evidence["confirmation_active"] is False
-    assert confirmation == pytest.approx(0.20)
+    assert confirmation == pytest.approx(0.375)
     assert confirmation_evidence["confirmation_active"] is True
     assert restored == pytest.approx(0.40)
     assert restored_evidence[
@@ -3569,7 +3569,7 @@ def test_job503687_hazard_brake_reduces_only_confirmation_z_action():
         {
             "previous_reversal_count": -1,
             "primary_positive_z_action": 0.40,
-            "confirmation_positive_z_action": 0.20,
+            "confirmation_positive_z_action": 0.375,
         },
         {
             "previous_reversal_count": 0,
@@ -10596,6 +10596,17 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "_vertical_corridor_hazard_positive_z_brake_schedule(" in (
         settle_action
     )
+    settle_transition = bounded_seek.split(
+        'elif stage_before_action == "vertical_corridor_settle":', 1
+    )[1].split(
+        'elif stage_before_action == "vertical_corridor_descent":', 1
+    )[0]
+    assert "neutral_damping_reversal_authorized" in settle_transition
+    assert (
+        'hazard_brake_release_evidence[\n'
+        '                    "release_authorized"\n'
+        "                ]"
+    ) in settle_transition
     assert "vertical_corridor_settle_brake_trigger_buffer" in bounded_seek
     assert "maximum_vertical_corridor_outward_hold_world_step" in (
         bounded_seek.split(
