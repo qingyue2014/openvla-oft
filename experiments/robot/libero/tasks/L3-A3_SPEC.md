@@ -773,6 +773,24 @@ predecessor Z action. Any response, height, or clearance-reserve loss
 immediately restores the existing PD and brake logic. No physical threshold,
 budget, prompt, goal, inventory, state, or intervention field changes.
 
+Job503874 showed that exact repetition was still too coarse. The repeated
+`0.347212` Z action changed the next response from `+0.047361 mm` to
+`+0.172145 mm`; the following within-band positive-response branch then
+dropped Z directly to zero and produced `-1.624687 mm`. It also showed a
+separate implementation mismatch: the rule that suspended only inward return
+cleared the complete XY command, and recovery replaced rather than preserved
+the already bounded tangential component. Vertical capture was active for 54
+of 57 fixed-stage actions and only one carried nonzero Y correction, ending at
+`6.232 mm` lateral error while every physical sample remained accepted. The
+captured positive Z action is now the baseline for the existing position-plus-
+response PD correction, native clipping, release slew, and live clearance
+proofs; it is not repeated exactly. Inside-band positive response no longer
+bypasses release slew to jump from a positive stabilizing action to zero.
+Vertical capture removes only the registered inward-axis component, and
+outside recovery preserves the orthogonal bounded tangential component while
+retaining its full outward authority. The physical thresholds, budget, task,
+inventory, states, prompt, goal, and intervention remain unchanged.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

@@ -1364,7 +1364,7 @@ def test_fixed_safe_z_lateral_hold_unloads_job503872_upward_overshoot():
         - 2.0 * 0.0005949002649012769
     ) / 0.08
     assert action[:3] == pytest.approx(
-        [0.10, 0.0, expected_guard_bounded_z]
+        [0.10, -0.004961583747930209, expected_guard_bounded_z]
     )
     assert evidence["above_safe_z_band"] is True
     assert evidence["positive_z_release_slew_applied"] is False
@@ -1380,7 +1380,7 @@ def test_fixed_safe_z_lateral_hold_unloads_job503872_upward_overshoot():
     ] is True
 
 
-def test_fixed_safe_z_lateral_hold_retains_job503873_captured_response():
+def test_fixed_safe_z_lateral_hold_tracks_job503873_captured_response():
     native_spec = {
         "source": "env.action_spec",
         "action_dimension": 7,
@@ -1426,18 +1426,93 @@ def test_fixed_safe_z_lateral_hold_retains_job503873_captured_response():
         ),
         maximum_positive_safety_release_action=0.05,
     )
+    requested_z_correction = -0.0011840297130027988
+    tracked_z_action = captured_z_action + requested_z_correction
     assert action[:3] == pytest.approx(
-        [0.3375, -0.0015417548062229937, captured_z_action]
+        [0.3375, -0.0015417548062229937, tracked_z_action]
     )
     assert evidence["captured_safe_z_response_hold_requested"] is True
     assert evidence[
         "guard_bounded_z_action_before_response_hold"
-    ] == pytest.approx(-0.0011840297130027988)
+    ] == pytest.approx(requested_z_correction)
+    assert evidence[
+        "captured_safe_z_response_hold_correction"
+    ] == pytest.approx(requested_z_correction)
     assert evidence["captured_safe_z_response_hold_action"] == pytest.approx(
-        captured_z_action
+        tracked_z_action
     )
     assert evidence["proof"][
-        "captured_safe_z_stable_response_retains_predecessor"
+        "captured_safe_z_hold_uses_incremental_pd_correction"
+    ] is True
+
+
+def test_fixed_safe_z_lateral_hold_corrects_job503874_without_xy_starvation():
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": (-np.ones(7, dtype=float)).tolist(),
+        "high": np.ones(7, dtype=float).tolist(),
+        "runtime_resolved": True,
+    }
+    action, evidence = _fixed_safe_z_lateral_hold_action(
+        current_eef=np.array(
+            [0.14244030342310485, -0.025092226080403672, 0.9207534331720553]
+        ),
+        lateral_target_xy=np.array(
+            [0.13242106705090634, -0.02850777957668001]
+        ),
+        lateral_position_tolerance_m=0.005,
+        fixed_safe_z_m=0.920581288496378,
+        vertical_position_tolerance_m=0.0004,
+        measured_vertical_step_progress_m=0.0001721446756772771,
+        measured_outward_step_progress_m=-0.00015542346867886137,
+        outside_side_guard={
+            "minimum_outside_clearance_m": 0.009850243356152102,
+            "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+            "finger_table_vertical_clearance_m": 0.0078361341794011,
+            "required_finger_table_clearance_m": np.nextafter(
+                0.0, np.inf
+            ),
+        },
+        outward_direction_xy=np.array([1.0, 0.0]),
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_lateral_translation_action=0.005,
+        maximum_safety_brake_action=0.20,
+        strict_outside_clearance_m=0.0004,
+        strict_table_clearance_m=0.0004,
+        closed_loop_hazard_response_bound_m=0.0011,
+        full_outward_brake_clearance_m=0.00095,
+        progress_resolution_m=0.00005,
+        derivative_gain=2.0,
+        native_action_spec=native_spec,
+        previous_commanded_action_xyz=np.array(
+            [0.3375, -0.0015417548062229937, 0.34721178863190255]
+        ),
+        maximum_positive_safety_release_action=0.05,
+    )
+    assert action[:3] == pytest.approx(
+        [0.2875, -0.0016133293249752092, 0.34075636329400466]
+    )
+    assert evidence["positive_response_unload_active"] is True
+    assert evidence["positive_z_release_slew_bypass_requested"] is False
+    assert evidence["captured_safe_z_response_hold_requested"] is True
+    assert evidence[
+        "captured_safe_z_response_hold_correction"
+    ] == pytest.approx(-0.006455425337897891)
+    assert evidence["inward_suspended_for_vertical_capture"] is True
+    assert evidence["outside_recovery_active"] is True
+    assert evidence[
+        "tangential_xy_action_before_recovery"
+    ] == pytest.approx([0.0, -0.0016133293249752092])
+    assert evidence[
+        "tangential_xy_action_preserved_during_recovery"
+    ] is True
+    assert evidence["proof"][
+        "vertical_capture_removes_only_inward_component"
+    ] is True
+    assert evidence["proof"][
+        "outside_recovery_preserves_bounded_tangential_return"
     ] is True
 
 

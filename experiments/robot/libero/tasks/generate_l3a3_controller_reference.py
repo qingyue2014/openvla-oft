@@ -5355,7 +5355,15 @@ def _fixed_safe_z_lateral_hold_action(
         vertical_capture_active and commanded_inward_component < 0.0
     )
     if inward_suspended_for_vertical_capture:
-        commanded_xy_action = np.zeros(2, dtype=float)
+        commanded_xy_action = (
+            commanded_xy_action
+            - commanded_inward_component * outward_direction_xy
+        )
+    tangential_xy_action_before_recovery = (
+        commanded_xy_action
+        - float(np.dot(commanded_xy_action, outward_direction_xy))
+        * outward_direction_xy
+    )
     predicted_outside_after_lateral = float(
         live_outside_clearance
         + position_action_scale
@@ -5416,6 +5424,7 @@ def _fixed_safe_z_lateral_hold_action(
         )
         commanded_xy_action = (
             outward_direction_xy * selected_outward_recovery_action
+            + tangential_xy_action_before_recovery
         )
 
     position_error_m = float(fixed_safe_z_m - current_eef[2])
@@ -5513,25 +5522,34 @@ def _fixed_safe_z_lateral_hold_action(
         release_slew_enabled
         and not lateral_target_reached
         and inside_safe_z_band
-        and abs(measured_vertical_step_progress_m)
-        <= progress_resolution_m
-        and not outside_recovery_active
+        and not downward_tail_brake_active
+        and not severe_vertical_response
         and not table_recovery_active
+        and live_outside_clearance > outside_recovery_exit_clearance
+        and live_table_clearance > table_recovery_clearance
         and previous_commanded_action_xyz[2] >= 0.0
     )
+    captured_safe_z_response_hold_correction = None
     if captured_safe_z_response_hold_requested:
-        commanded_z_action = float(previous_commanded_action_xyz[2])
+        captured_safe_z_response_hold_correction = float(
+            requested_z_action
+        )
+        commanded_z_action = float(
+            np.clip(
+                previous_commanded_action_xyz[2]
+                + captured_safe_z_response_hold_correction,
+                max(0.0, native_low[2]),
+                native_high[2],
+            )
+        )
 
     pre_release_slew_xy_action = commanded_xy_action.copy()
     pre_release_slew_z_action = float(commanded_z_action)
     outward_release_slew_applied = False
     positive_z_release_slew_applied = False
     positive_z_release_slew_bypass_requested = bool(
-        positive_response_unload_active
-        or (
-            above_safe_z_band
-            and measured_vertical_step_progress_m >= 0.0
-        )
+        above_safe_z_band
+        and measured_vertical_step_progress_m >= 0.0
     )
     if release_slew_enabled:
         previous_outward_action = float(
@@ -5680,8 +5698,11 @@ def _fixed_safe_z_lateral_hold_action(
         "captured_safe_z_response_hold_requested": (
             captured_safe_z_response_hold_requested
         ),
+        "captured_safe_z_response_hold_correction": (
+            captured_safe_z_response_hold_correction
+        ),
         "captured_safe_z_response_hold_action": (
-            float(previous_commanded_action_xyz[2])
+            float(pre_release_slew_z_action)
             if captured_safe_z_response_hold_requested
             else None
         ),
@@ -5700,9 +5721,7 @@ def _fixed_safe_z_lateral_hold_action(
             positive_z_release_slew_bypass_requested
         ),
         "positive_z_release_slew_bypass_reason": (
-            "inside_band_positive_response_unload"
-            if positive_response_unload_active
-            else "above_band_nonnegative_response"
+            "above_band_nonnegative_response"
             if (
                 above_safe_z_band
                 and measured_vertical_step_progress_m >= 0.0
@@ -5755,6 +5774,13 @@ def _fixed_safe_z_lateral_hold_action(
             if outside_recovery_active
             else None
         ),
+        "tangential_xy_action_before_recovery": (
+            tangential_xy_action_before_recovery.tolist()
+        ),
+        "tangential_xy_action_preserved_during_recovery": bool(
+            outside_recovery_active
+            and np.linalg.norm(tangential_xy_action_before_recovery) > 0.0
+        ),
         "vertical_capture_active": vertical_capture_active,
         "inward_suspended_for_vertical_capture": (
             inward_suspended_for_vertical_capture
@@ -5799,7 +5825,10 @@ def _fixed_safe_z_lateral_hold_action(
             "safe_z_upward_overshoot_uses_guard_bounded_pd_command": True,
             "downward_tail_retains_positive_release_slew": True,
             "captured_safe_z_stable_response_retains_predecessor": True,
+            "captured_safe_z_hold_uses_incremental_pd_correction": True,
             "captured_safe_z_hold_requires_live_clearance_reserve": True,
+            "vertical_capture_removes_only_inward_component": True,
+            "outside_recovery_preserves_bounded_tangential_return": True,
             "first_stable_frame_uses_neutral_z_confirmation": True,
             "noninward_refill_band_uses_exact_nominal_action": True,
             "recovery_release_requires_exit_headroom": True,
