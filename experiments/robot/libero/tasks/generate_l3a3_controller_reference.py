@@ -13462,7 +13462,7 @@ def _seek_stable_plate_contact(
                     "inward_response_"
                     "brake"
                 ),
-                "vertical_tail_brake_and_zero_confirmation",
+                "vertical_tail_brake_and_formal_corridor_handoff",
                 "high_z_controller_reserve_or_staging_formal_entry_via_"
                 "xy_nonnegative_z_plane_hold_correction",
                 "vertical_side_corridor_and_contact",
@@ -13655,7 +13655,6 @@ def _seek_stable_plate_contact(
         "overhead_corridor_descent": 0,
         "vertical_tail_brake": 0,
         "lateral_rebuffer_brake": 0,
-        "vertical_tail_zero_confirmation": 0,
         "overhead_post_descent_corridor_lateral": 0,
         "vertical_corridor_descent": 0,
         "vertical_corridor_settle": 0,
@@ -13679,7 +13678,6 @@ def _seek_stable_plate_contact(
         "overhead_corridor_descent",
         "vertical_tail_brake",
         "lateral_rebuffer_brake",
-        "vertical_tail_zero_confirmation",
     }
     capture(
         "outside_native_center_high_start",
@@ -13723,28 +13721,6 @@ def _seek_stable_plate_contact(
                     ),
                 )
             )
-        if (
-            structural_stage == "vertical_tail_brake"
-            and vertical_tail_brake_reason != "lateral_drift"
-            and latest_vertical_step_progress_m is not None
-            and latest_vertical_step_progress_m >= 0.0
-            and latest_overhead_lateral_buffer["accepted"]
-        ):
-            vertical_tail_events.append(
-                {
-                    "guard_step": int(guard_step),
-                    "event": "brake_pre_action_recovered_to_zero_confirmation",
-                    "measured_vertical_step_progress_m": (
-                        latest_vertical_step_progress_m
-                    ),
-                    "minimum_lateral_entry_buffer_surplus_m": (
-                        latest_overhead_lateral_buffer[
-                            "minimum_lateral_entry_buffer_surplus_m"
-                        ]
-                    ),
-                }
-            )
-            structural_stage = "vertical_tail_zero_confirmation"
         if (
             structural_stage == "lateral_rebuffer_brake"
             and latest_vertical_step_progress_m is not None
@@ -14430,82 +14406,6 @@ def _seek_stable_plate_contact(
                     else {}
                 ),
             }
-        elif structural_stage == "vertical_tail_zero_confirmation":
-            zero_z_confirmation_target_xy = np.asarray(
-                corridor_correction_hold_target_xy, dtype=float
-            ).copy()
-            if float(
-                np.dot(
-                    zero_z_confirmation_target_xy - current_eef[:2],
-                    corridor_outward_direction,
-                )
-            ) <= 0.0:
-                zero_z_confirmation_target_xy = current_eef[:2].copy()
-            action, path_control = _fixed_z_lateral_approach_action(
-                current_eef=current_eef,
-                lateral_target_xy=zero_z_confirmation_target_xy,
-                gripper=gripper,
-                position_action_scale=args.position_action_scale,
-                maximum_translation_action=(
-                    post_descent_lateral_max_translation_action
-                ),
-            )
-            if (
-                action[2] != 0.0
-                or np.any(action[3:6] != 0.0)
-                or float(
-                    np.dot(action[:2], corridor_outward_direction)
-                )
-                < 0.0
-            ):
-                raise RuntimeError(
-                    "vertical-tail zero-Z confirmation violated its "
-                    "one-sided outward action proof"
-                )
-            feedback = {
-                "mode": structural_stage,
-                "action": action.tolist(),
-                "pending_vertical_tail_brake_reason": (
-                    vertical_tail_brake_reason
-                ),
-                "zero_z_confirmation": {
-                    "formula": (
-                        "after measured dz is nonnegative and every compiled "
-                        "pair exceeds the registered lateral-entry buffer, "
-                        "issue one zero-Z, zero-rotation, one-sided outward "
-                        "XY action toward the existing correction target and "
-                        "require its measured dz to remain nonnegative; this "
-                        "confirms the control mode that will actually resume, "
-                        "not a fixed-N settling window"
-                    ),
-                    "fixed_z_lateral_path_control": path_control,
-                    "target_xy": zero_z_confirmation_target_xy.tolist(),
-                    "outward_direction_xy": (
-                        corridor_outward_direction.tolist()
-                    ),
-                    "commanded_xy_action": action[:2].tolist(),
-                    "commanded_z_action": float(action[2]),
-                    "one_sided_outward_command": bool(
-                        float(
-                            np.dot(
-                                action[:2], corridor_outward_direction
-                            )
-                        )
-                        >= 0.0
-                    ),
-                    "pre_action_buffer16_authorized": bool(
-                        latest_overhead_lateral_buffer["accepted"]
-                    ),
-                    "pre_action_measured_vertical_step_progress_m": (
-                        latest_vertical_step_progress_m
-                    ),
-                    "pre_action_overhead_lateral_buffer": (
-                        _overhead_lateral_buffer_frame_summary(
-                            latest_overhead_lateral_buffer
-                        )
-                    ),
-                },
-            }
         elif structural_stage == "overhead_high_corridor_lateral":
             if (
                 prepared_high_lateral_action is None
@@ -14791,8 +14691,6 @@ def _seek_stable_plate_contact(
                         if (
                             stage_before_action
                             in fixed_buffer_lateral_stages
-                            or stage_before_action
-                            == "vertical_tail_zero_confirmation"
                             or (
                                 stage_before_action
                                 == "lateral_rebuffer_brake"
@@ -15244,6 +15142,37 @@ def _seek_stable_plate_contact(
                 measured_vertical_step_progress_m >= 0.0
                 and latest_overhead_lateral_buffer["accepted"]
             ):
+                tail_brake_formal_corridor_entry = (
+                    _overhead_corridor_entry_evidence(
+                        current_eef=after_eef,
+                        corridor_high_target=corridor_rebuffer_target,
+                        outside_side_guard=latest_outside_side_guard,
+                        overhead_guard=latest_overhead_guard,
+                        overhead_lateral_buffer=(
+                            latest_overhead_lateral_buffer
+                        ),
+                        position_tolerance=args.position_tolerance,
+                        strict_corridor_entry_clearance_m=(
+                            corridor_rebuffer_acceptance_clearance
+                        ),
+                    )
+                )
+                feedback["tail_brake_formal_corridor_entry"] = (
+                    tail_brake_formal_corridor_entry
+                )
+                tail_brake_controller_handoff = (
+                    _high_z_controller_handoff_evidence(
+                        current_eef=after_eef,
+                        outside_side_guard=latest_outside_side_guard,
+                        overhead_guard=latest_overhead_guard,
+                        overhead_lateral_buffer=(
+                            latest_overhead_lateral_buffer
+                        ),
+                    )
+                )
+                feedback["tail_brake_controller_handoff_diagnostic"] = (
+                    tail_brake_controller_handoff
+                )
                 previous_active_translation_action = float(
                     active_overhead_descent_translation_action
                 )
@@ -15267,24 +15196,38 @@ def _seek_stable_plate_contact(
                     active_overhead_descent_brake_trigger_buffer = float(
                         2.0 * active_overhead_descent_world_step
                     )
-                    if brake_reason_before_recovery == "lateral_drift":
-                        structural_stage = "vertical_tail_zero_confirmation"
+                    if tail_brake_formal_corridor_entry["accepted"]:
+                        structural_stage = "overhead_corridor_descent"
                         recovered_event = (
-                            "lateral_drift_brake_recovered_above_staging_to_"
-                            "zero_confirmation"
+                            "tail_brake_formal_corridor_passed_to_bounded_"
+                            "overhead_descent"
                         )
                     else:
-                        structural_stage = "overhead_corridor_descent"
-                        vertical_tail_brake_reason = None
+                        structural_stage = (
+                            "overhead_post_descent_corridor_lateral"
+                        )
+                        overhead_horizontal_z = float(after_eef[2])
                         recovered_event = (
-                            "brake_recovered_above_staging_to_bounded_"
-                            "descent"
+                            "tail_brake_recovered_above_staging_to_formal_"
+                            "corridor_correction"
                         )
                 else:
-                    structural_stage = "vertical_tail_zero_confirmation"
-                    recovered_event = (
-                        "brake_recovered_to_zero_confirmation"
-                    )
+                    if tail_brake_formal_corridor_entry["accepted"]:
+                        structural_stage = "vertical_corridor_descent"
+                        recovered_event = (
+                            "tail_brake_formal_corridor_passed_at_staging_to_"
+                            "vertical_corridor"
+                        )
+                    else:
+                        structural_stage = (
+                            "overhead_post_descent_corridor_lateral"
+                        )
+                        overhead_horizontal_z = float(after_eef[2])
+                        recovered_event = (
+                            "tail_brake_recovered_at_staging_to_formal_"
+                            "corridor_correction"
+                        )
+                vertical_tail_brake_reason = None
                 vertical_tail_events.append(
                     {
                         "guard_step": int(guard_step),
@@ -15314,6 +15257,12 @@ def _seek_stable_plate_contact(
                             latest_overhead_lateral_buffer[
                                 "minimum_lateral_entry_buffer_surplus_m"
                             ]
+                        ),
+                        "formal_corridor_entry": (
+                            tail_brake_formal_corridor_entry
+                        ),
+                        "controller_handoff_diagnostic_only": (
+                            tail_brake_controller_handoff
                         ),
                     }
                 )
@@ -15414,149 +15363,6 @@ def _seek_stable_plate_contact(
                     {
                         "guard_step": int(guard_step),
                         "event": "lateral_rebuffer_continues_fail_closed",
-                        "measured_vertical_step_progress_m": (
-                            measured_vertical_step_progress_m
-                        ),
-                        "minimum_lateral_entry_buffer_surplus_m": (
-                            latest_overhead_lateral_buffer[
-                                "minimum_lateral_entry_buffer_surplus_m"
-                            ]
-                        ),
-                    }
-                )
-        elif stage_before_action == "vertical_tail_zero_confirmation":
-            if (
-                measured_vertical_step_progress_m >= 0.0
-                and latest_overhead_lateral_buffer["accepted"]
-            ):
-                post_descent_corridor_entry = (
-                    _overhead_corridor_entry_evidence(
-                        current_eef=after_eef,
-                        corridor_high_target=corridor_rebuffer_target,
-                        outside_side_guard=latest_outside_side_guard,
-                        overhead_guard=latest_overhead_guard,
-                        overhead_lateral_buffer=(
-                            latest_overhead_lateral_buffer
-                        ),
-                        position_tolerance=args.position_tolerance,
-                        strict_corridor_entry_clearance_m=(
-                            corridor_rebuffer_acceptance_clearance
-                        ),
-                    )
-                )
-                feedback["post_descent_corridor_entry"] = (
-                    post_descent_corridor_entry
-                )
-                post_descent_controller_handoff = (
-                    _high_z_controller_handoff_evidence(
-                        current_eef=after_eef,
-                        outside_side_guard=latest_outside_side_guard,
-                        overhead_guard=latest_overhead_guard,
-                        overhead_lateral_buffer=(
-                            latest_overhead_lateral_buffer
-                        ),
-                    )
-                )
-                feedback["post_descent_controller_handoff"] = (
-                    post_descent_controller_handoff
-                )
-                above_staging_tolerance = bool(
-                    after_eef[2]
-                    > overhead_staging_z + args.position_tolerance
-                )
-                if (
-                    above_staging_tolerance
-                    and post_descent_corridor_entry["accepted"]
-                ):
-                    structural_stage = "overhead_corridor_descent"
-                    zero_confirmation_event = (
-                        "zero_confirmation_passed_formal_corridor_"
-                        "entry_to_bounded_descent"
-                    )
-                    vertical_tail_brake_reason = None
-                    vertical_tail_events.append(
-                        {
-                            "guard_step": int(guard_step),
-                            "event": zero_confirmation_event,
-                            "measured_vertical_step_progress_m": (
-                                measured_vertical_step_progress_m
-                            ),
-                            "overhead_staging_z_m": overhead_staging_z,
-                            "remaining_z_above_staging_m": float(
-                                after_eef[2] - overhead_staging_z
-                            ),
-                            "formal_corridor_entry": (
-                                post_descent_corridor_entry
-                            ),
-                            "controller_handoff_diagnostic_only": (
-                                post_descent_controller_handoff
-                            ),
-                        }
-                    )
-                elif (
-                    not above_staging_tolerance
-                    and post_descent_corridor_entry["accepted"]
-                ):
-                    structural_stage = "vertical_corridor_descent"
-                    zero_confirmation_event = (
-                        "zero_confirmation_passed_at_staging_to_"
-                        "vertical_corridor"
-                    )
-                    vertical_tail_brake_reason = None
-                    vertical_tail_events.append(
-                        {
-                            "guard_step": int(guard_step),
-                            "event": zero_confirmation_event,
-                            "measured_vertical_step_progress_m": (
-                                measured_vertical_step_progress_m
-                            ),
-                            "overhead_staging_z_m": overhead_staging_z,
-                            "remaining_z_above_staging_m": float(
-                                after_eef[2] - overhead_staging_z
-                            ),
-                            **post_descent_corridor_entry,
-                        }
-                    )
-                elif (
-                    latest_overhead_guard["accepted"]
-                    and latest_overhead_lateral_buffer["accepted"]
-                ):
-                    structural_stage = "overhead_post_descent_corridor_lateral"
-                    overhead_horizontal_z = float(after_eef[2])
-                    vertical_tail_events.append(
-                        {
-                            "guard_step": int(guard_step),
-                            "event": (
-                                "zero_confirmation_passed_but_live_corridor_"
-                                "or_high_z_controller_reserve_requires_"
-                                "overhead_correction"
-                            ),
-                            "measured_vertical_step_progress_m": (
-                                measured_vertical_step_progress_m
-                            ),
-                            "formal_corridor_entry": (
-                                post_descent_corridor_entry
-                            ),
-                            "controller_handoff": (
-                                post_descent_controller_handoff
-                            ),
-                        }
-                    )
-                else:
-                    raise RuntimeError(
-                        "post-descent corridor correction lacks the live "
-                        "compiled overhead base8/buffer16 envelope"
-                    )
-            else:
-                if vertical_tail_brake_reason is None:
-                    vertical_tail_brake_reason = (
-                        "zero_confirmation_failure"
-                    )
-                structural_stage = "vertical_tail_brake"
-                vertical_tail_events.append(
-                    {
-                        "guard_step": int(guard_step),
-                        "event": "zero_confirmation_failed_to_brake",
                         "measured_vertical_step_progress_m": (
                             measured_vertical_step_progress_m
                         ),

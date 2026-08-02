@@ -2831,7 +2831,8 @@ def test_500133_enters_compiled_high_corridor_directly_without_native_high_stop(
     )
     assert '"overhead_corridor_descent"' in bounded_seek
     assert '"vertical_tail_brake"' in bounded_seek
-    assert '"vertical_tail_zero_confirmation"' in bounded_seek
+    assert '"vertical_tail_zero_confirmation"' not in bounded_seek
+    assert "vertical_tail_brake_and_formal_corridor_handoff" in bounded_seek
     assert '"overhead_post_descent_corridor_lateral"' in bounded_seek
     assert "_fixed_xy_vertical_approach_action(" in bounded_seek
     assert "_fixed_z_lateral_approach_action(" in bounded_seek
@@ -3101,6 +3102,30 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         "minimum_lateral_entry_buffer_surplus_m"
     ] > 0.0
 
+    # Job503168's recovered tail already passed the unchanged formal corridor
+    # gate.  The former extra zero-Z frame then fell 0.239 mm and restarted the
+    # brake loop, so the proved tail must hand off on this exact state instead.
+    job503168_recovered_eef = np.array(
+        [0.13251161316535595, -0.02827532139631423, 0.9445294804725799]
+    )
+    job503168_formal_entry = _overhead_corridor_entry_evidence(
+        current_eef=job503168_recovered_eef,
+        corridor_high_target=np.array(
+            [0.13282106705090635, -0.02850777957668001, 0.9325011680386681]
+        ),
+        outside_side_guard={
+            "accepted": False,
+            "minimum_outside_clearance_m": 0.0009045588122813253,
+        },
+        overhead_guard=recovered_guard,
+        overhead_lateral_buffer=recovered_buffer,
+        position_tolerance=0.004,
+        strict_corridor_entry_clearance_m=0.0009,
+    )
+    assert job503168_formal_entry["accepted"] is True
+    assert job503168_formal_entry["violations"] == []
+    assert -0.00023933083913896258 < 0.0
+
     bounded_seek = CONTROLLER_REFERENCE.read_text().split(
         "def _seek_stable_plate_contact(", 1
     )[1].split("\ndef _calibrate_stable_plate_contact_depth", 1)[0]
@@ -3123,10 +3148,16 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         'structural_stage = "overhead_corridor_descent"'
         in brake_transition
     )
+    assert "tail_brake_formal_corridor_entry" in brake_transition
+    assert "_overhead_corridor_entry_evidence(" in brake_transition
+    assert 'structural_stage = "vertical_corridor_descent"' in brake_transition
     assert (
-        'structural_stage = "vertical_tail_zero_confirmation"'
+        'structural_stage = (\n'
+        '                            "overhead_post_descent_corridor_lateral"'
         in brake_transition
     )
+    assert '"controller_handoff_diagnostic_only"' in brake_transition
+    assert "vertical_tail_zero_confirmation" not in brake_transition
     assert "previous_active_translation_action / 2.0" in brake_transition
     assert "structural_max_translation_action" in brake_transition
     assert 'elif structural_stage == "vertical_tail_brake"' in bounded_seek
@@ -3160,9 +3191,6 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     )[1].split("current_step_response = (", 1)[0]
     assert '== "overhead_corridor_descent"' in post_action_buffer_refresh
     assert '== "vertical_tail_brake"' in post_action_buffer_refresh
-    assert '== "vertical_tail_zero_confirmation"' in (
-        post_action_buffer_refresh
-    )
     assert "maximum_post_descent_lateral_world_step" in (
         post_action_buffer_refresh
     )
@@ -3183,25 +3211,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert "maximum_post_descent_lateral_world_step" in (
         pre_action_buffer_refresh
     )
-    assert (
-        'elif structural_stage == "vertical_tail_zero_confirmation"'
-        in bounded_seek
-    )
-    zero_z_action_branch = bounded_seek.split(
-        'elif structural_stage == "vertical_tail_zero_confirmation":', 1
-    )[1].split(
-        'elif structural_stage == "overhead_high_corridor_lateral":', 1
-    )[0]
-    assert "_fixed_z_lateral_approach_action(" in zero_z_action_branch
-    assert "corridor_correction_hold_target_xy" in zero_z_action_branch
-    assert "corridor_outward_direction" in zero_z_action_branch
-    assert "post_descent_lateral_max_translation_action" in (
-        zero_z_action_branch
-    )
-    assert '"one_sided_outward_command"' in zero_z_action_branch
-    assert "action[2] != 0.0" in zero_z_action_branch
-    assert "action = np.zeros(7" not in zero_z_action_branch
-    assert '"commanded_z_action": float(action[2])' in bounded_seek
+    assert "vertical_tail_zero_confirmation" not in bounded_seek
     assert "measured_vertical_step_progress_m >= 0.0" in bounded_seek
     assert 'latest_overhead_lateral_buffer["accepted"]' in bounded_seek
     assert "high_lateral_post_action_buffer_interlock_to_" not in bounded_seek
@@ -3209,13 +3219,6 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert "post_descent_lateral_buffer_interlock_to_" in bounded_seek
     assert "lateral_pre_action_buffer_interlock_to_brake" in bounded_seek
     assert "vertical_tail_events" in bounded_seek
-    assert "for confirm" not in bounded_seek[
-        bounded_seek.index(
-            'elif structural_stage == "vertical_tail_zero_confirmation"'
-        ) : bounded_seek.index(
-            'elif structural_stage == "overhead_high_corridor_lateral"'
-        )
-    ]
 
 
 def test_500154_negative_lateral_tail_continues_until_buffer_is_exhausted():
@@ -3726,13 +3729,19 @@ def test_500174_lateral_rebuffer_is_adaptive_and_skips_repeat_zero():
     )[1].split(
         'elif stage_before_action == "lateral_rebuffer_brake":', 1
     )[0]
-    assert 'structural_stage = "vertical_tail_zero_confirmation"' in (
+    assert "tail_brake_formal_corridor_entry" in initial_brake_transition
+    assert 'structural_stage = "overhead_corridor_descent"' in (
         initial_brake_transition
     )
+    assert 'structural_stage = "vertical_corridor_descent"' in (
+        initial_brake_transition
+    )
+    assert "vertical_tail_zero_confirmation" not in initial_brake_transition
     lateral_rebuffer_transition = bounded_seek.split(
         'elif stage_before_action == "lateral_rebuffer_brake":', 1
     )[1].split(
-        'elif stage_before_action == "vertical_tail_zero_confirmation":', 1
+        'elif stage_before_action == "overhead_post_descent_corridor_lateral":',
+        1,
     )[0]
     assert 'structural_stage = lateral_resume_stage' in (
         lateral_rebuffer_transition
@@ -3993,26 +4002,17 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
     brake_transition = bounded_seek.split(
         'elif stage_before_action == "vertical_tail_brake":', 1
     )[1].split('elif stage_before_action == "lateral_rebuffer_brake":', 1)[0]
-    assert 'brake_reason_before_recovery == "lateral_drift"' in (
-        brake_transition
-    )
-    assert 'structural_stage = "vertical_tail_zero_confirmation"' in (
-        brake_transition
-    )
-    zero_transition = bounded_seek.split(
-        'elif stage_before_action == "vertical_tail_zero_confirmation":', 1
-    )[1].split(
-        'elif stage_before_action == "overhead_post_descent_corridor_lateral":',
-        1,
-    )[0]
+    assert "tail_brake_formal_corridor_entry" in brake_transition
     assert (
-        "overhead_staging_z + args.position_tolerance" in zero_transition
+        "overhead_staging_z + args.position_tolerance" in brake_transition
     )
     assert 'structural_stage = "overhead_corridor_descent"' in (
-        zero_transition
+        brake_transition
     )
-    assert "corridor_rebuffer_target" in zero_transition
-    assert "corridor_rebuffer_acceptance_clearance" in zero_transition
+    assert 'structural_stage = "vertical_corridor_descent"' in brake_transition
+    assert "corridor_rebuffer_target" in brake_transition
+    assert "corridor_rebuffer_acceptance_clearance" in brake_transition
+    assert "vertical_tail_zero_confirmation" not in brake_transition
     correction_transition = bounded_seek.split(
         'elif stage_before_action == "overhead_post_descent_corridor_lateral":',
         1,
@@ -4460,10 +4460,7 @@ def test_500193_high_lateral_uses_compiled_dynamic_action_envelope():
         '"plane_recovery_applies_only_above_staging_tolerance": True'
         in bounded_seek
     )
-    assert (
-        'and post_descent_corridor_entry["accepted"]'
-        in bounded_seek
-    )
+    assert 'tail_brake_formal_corridor_entry["accepted"]' in bounded_seek
     assert (
         "not correction_requires_pre_descent_controller_reserve"
         in bounded_seek
@@ -7093,31 +7090,33 @@ def test_high_first_route_fails_closed_and_rechecks_post_descent_drift():
     bounded_seek = CONTROLLER_REFERENCE.read_text().split(
         "def _seek_stable_plate_contact(", 1
     )[1].split("\ndef _calibrate_stable_plate_contact_depth", 1)[0]
-    zero_transition = bounded_seek.split(
-        'elif stage_before_action == "vertical_tail_zero_confirmation":', 1
+    tail_brake_transition = bounded_seek.split(
+        'elif stage_before_action == "vertical_tail_brake":', 1
     )[1].split(
-        'elif stage_before_action == "overhead_post_descent_corridor_lateral":',
+        'elif stage_before_action == "lateral_rebuffer_brake":',
         1,
     )[0]
-    assert "_overhead_corridor_entry_evidence(" in zero_transition
-    assert 'structural_stage = "vertical_corridor_descent"' in zero_transition
+    assert "_overhead_corridor_entry_evidence(" in tail_brake_transition
     assert (
-        'structural_stage = "overhead_post_descent_corridor_lateral"'
-        in zero_transition
+        'structural_stage = "vertical_corridor_descent"'
+        in tail_brake_transition
     )
-    assert "post_descent_controller_handoff" in zero_transition
+    assert '"overhead_post_descent_corridor_lateral"' in tail_brake_transition
+    assert "tail_brake_controller_handoff" in tail_brake_transition
     assert (
         '"controller_handoff_diagnostic_only"'
-        in zero_transition
+        in tail_brake_transition
     )
-    assert 'post_descent_controller_handoff["accepted"]' not in (
-        zero_transition
+    assert 'tail_brake_controller_handoff["accepted"]' not in (
+        tail_brake_transition
     )
     assert (
-        'post_descent_corridor_entry["accepted"]'
-        in zero_transition
+        'tail_brake_formal_corridor_entry["accepted"]'
+        in tail_brake_transition
     )
-    assert "above_staging_tolerance" in zero_transition
+    assert "overhead_staging_z + args.position_tolerance" in (
+        tail_brake_transition
+    )
     correction_action = bounded_seek.split(
         'elif structural_stage == "overhead_post_descent_corridor_lateral":',
         1,
