@@ -1757,8 +1757,9 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ),
     # Native-only L3-B bowl predicate-order probe. The complete smoke phase
     # regenerates and revalidates all 20 serialized states inside the exact
-    # remote commit before starting the official pi0.5 server. Formal is
-    # intentionally absent from this registry until human video approval.
+    # remote commit before starting the official pi0.5 server. The formal
+    # phase is fail-closed on the hash-bound human approval produced after
+    # review of the exact smoke evidence.
     ("l3b_bowl", "prepare"): PhaseSpec(
         command=(
             "env",
@@ -1796,6 +1797,33 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/robot/libero/tasks/l3b_bowl_ec_states.hdf5",
             "experiments/logs/l3b_bowl_pi05_server.log",
             "review/L3-B_bowl_order_task",
+        ),
+    ),
+    ("l3b_bowl", "formal_pi05"): PhaseSpec(
+        command=(
+            "env",
+            "OPENPI_ROOT=/home/drwqyhappy/04-mycode/openpi-15a9616",
+            "RENDER_GPU_DEVICE_ID=1",
+            "NUM_STATES=20",
+            "MAX_VIDEOS_PER_OUTCOME=10",
+            "RUN_TAG=remote_formal_v1",
+            "SERVER_LOG=experiments/logs/l3b_bowl_pi05_formal_server.log",
+            "bash",
+            "experiments/robot/libero/tasks/run_l3b_bowl_order_pi05.sh",
+            "formal",
+        ),
+        count_env="NUM_STATES",
+        cleanup_artifacts=(
+            "experiments/logs/l3b_bowl_pi05_formal_server.log",
+            "review/L3-B_bowl_order_task/remote_formal_v1_trajectories",
+            "review/L3-B_bowl_order_task/formal",
+            "review/L3-B_bowl_order_task/L3-B_bowl_formal_report.json",
+        ),
+        artifacts=(
+            "experiments/logs/l3b_bowl_pi05_formal_server.log",
+            "review/L3-B_bowl_order_task/L3-B_bowl_formal_report.json",
+            "review/L3-B_bowl_order_task/remote_formal_v1_trajectories",
+            "review/L3-B_bowl_order_task/formal",
         ),
     ),
 }
