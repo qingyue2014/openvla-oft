@@ -3712,6 +3712,15 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         "vertical_corridor_descent_max_translation_action"
         in vertical_corridor_action
     )
+    post_descent_lateral_action = bounded_seek.split(
+        'elif structural_stage == "overhead_post_descent_corridor_lateral":',
+        1,
+    )[1].split('elif structural_stage == "vertical_corridor_descent":', 1)[0]
+    assert (
+        "post_descent_lateral_max_translation_action"
+        in post_descent_lateral_action
+    )
+    assert "maximum_post_descent_lateral_world_step" in bounded_seek
     descent_transition = bounded_seek.split(
         'elif stage_before_action == "overhead_corridor_descent":', 1
     )[1].split('elif stage_before_action == "vertical_tail_brake":', 1)[0]
@@ -3916,7 +3925,7 @@ def test_500193_high_lateral_uses_compiled_dynamic_action_envelope():
     assert "_fixed_z_lateral_approach_action(" in (
         post_descent_correction_branch
     )
-    assert "structural_max_translation_action" in (
+    assert "post_descent_lateral_max_translation_action" in (
         post_descent_correction_branch
     )
     assert "expected_overhead_pair_count" in bounded_seek
@@ -7329,6 +7338,12 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
         in producer
     )
     assert (
+        '"--post_descent_lateral_max_translation_action",\n'
+        "        type=float,\n"
+        "        default=0.10,"
+        in producer
+    )
+    assert (
         '"--overhead_descent_max_translation_action",\n'
         "        type=float,\n"
         "        default=0.20,"
@@ -7520,6 +7535,10 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     )
     assert (
         "--vertical_corridor_descent_max_translation_action must be"
+        in producer
+    )
+    assert (
+        "--post_descent_lateral_max_translation_action must be greater"
         in producer
     )
     assert "--plate_contact_seek_max_steps must be positive" in producer

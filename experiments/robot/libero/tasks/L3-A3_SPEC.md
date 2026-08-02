@@ -89,6 +89,11 @@ Once the controller has stopped inside that reachable corridor, its pure-Z
 side-height descent and positive-Z settle brake use a separate `0.10` action
 cap; this changes no lateral reserve and every step remains subject to the live
 outside/table/plate guards before and after execution.
+If that descent creates controller-coupled XY drift, the still-overhead return
+to the corridor uses a separate `0.10` lateral cap only after the all-pair
+buffer is recomputed for its `0.008 m` nominal world step. A failed buffer
+routes through the existing compiled positive-Z rebuffer and cannot authorize
+the lateral action until the larger live reserve is observed.
 The preceding far-field pure-Z descent is separately capped at `0.20`, or
 `0.016 m` nominal world displacement. Its positive-Z brake begins when the EEF
 enters a deterministic two-command (`0.032 m`) buffer above the compiled

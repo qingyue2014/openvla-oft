@@ -12275,12 +12275,19 @@ def _seek_stable_plate_contact(
     vertical_corridor_descent_max_translation_action = float(
         args.vertical_corridor_descent_max_translation_action
     )
+    post_descent_lateral_max_translation_action = float(
+        args.post_descent_lateral_max_translation_action
+    )
     maximum_controller_world_step = float(
         args.position_action_scale * structural_max_translation_action
     )
     maximum_overhead_descent_world_step = float(
         args.position_action_scale
         * overhead_descent_max_translation_action
+    )
+    maximum_post_descent_lateral_world_step = float(
+        args.position_action_scale
+        * post_descent_lateral_max_translation_action
     )
     overhead_descent_brake_trigger_buffer = float(
         2.0 * maximum_overhead_descent_world_step
@@ -12313,6 +12320,12 @@ def _seek_stable_plate_contact(
             ),
             "vertical_corridor_descent_max_translation_action": (
                 vertical_corridor_descent_max_translation_action
+            ),
+            "post_descent_lateral_max_translation_action": (
+                post_descent_lateral_max_translation_action
+            ),
+            "post_descent_lateral_maximum_world_step_m": (
+                maximum_post_descent_lateral_world_step
             ),
         }
     )
@@ -12796,6 +12809,18 @@ def _seek_stable_plate_contact(
         current_eef = np.asarray(
             rollout.obs["robot0_eef_pos"], dtype=float
         )
+        if structural_stage in fixed_buffer_lateral_stages or (
+            structural_stage == "lateral_rebuffer_brake"
+            and lateral_resume_stage in fixed_buffer_lateral_stages
+        ):
+            latest_overhead_lateral_buffer = (
+                _overhead_lateral_buffer_evidence(
+                    latest_overhead_guard,
+                    worst_case_controller_world_step_m=(
+                        maximum_post_descent_lateral_world_step
+                    ),
+                )
+            )
         if (
             structural_stage == "vertical_tail_brake"
             and latest_vertical_step_progress_m is not None
@@ -13271,7 +13296,10 @@ def _seek_stable_plate_contact(
                     native_action_spec=native_action_spec,
                     expected_pair_count=expected_overhead_pair_count,
                     worst_case_controller_world_step_m=(
-                        maximum_controller_world_step
+                        maximum_post_descent_lateral_world_step
+                        if lateral_resume_stage
+                        in fixed_buffer_lateral_stages
+                        else maximum_controller_world_step
                     ),
                 )
             )
@@ -13377,7 +13405,9 @@ def _seek_stable_plate_contact(
                 lateral_target_xy=corridor_high_target[:2],
                 gripper=gripper,
                 position_action_scale=args.position_action_scale,
-                maximum_translation_action=structural_max_translation_action,
+                maximum_translation_action=(
+                    post_descent_lateral_max_translation_action
+                ),
             )
             feedback = {
                 "mode": structural_stage,
@@ -13547,7 +13577,18 @@ def _seek_stable_plate_contact(
                 _overhead_lateral_buffer_evidence(
                     latest_overhead_guard,
                     worst_case_controller_world_step_m=(
-                        maximum_controller_world_step
+                        maximum_post_descent_lateral_world_step
+                        if (
+                            stage_before_action
+                            in fixed_buffer_lateral_stages
+                            or (
+                                stage_before_action
+                                == "lateral_rebuffer_brake"
+                                and lateral_resume_stage
+                                in fixed_buffer_lateral_stages
+                            )
+                        )
+                        else maximum_controller_world_step
                     ),
                 )
             )
@@ -14722,6 +14763,19 @@ def generate(args):
             "--vertical_corridor_descent_max_translation_action must be "
             "greater than the lateral near-plate bound and no greater than "
             "the contact-seek bound"
+        )
+    if (
+        not np.isfinite(args.post_descent_lateral_max_translation_action)
+        or not (
+            args.structural_near_plate_max_translation_action
+            < args.post_descent_lateral_max_translation_action
+            <= args.plate_contact_seek_max_translation_action
+        )
+    ):
+        raise ValueError(
+            "--post_descent_lateral_max_translation_action must be greater "
+            "than the corridor-entry lateral bound and no greater than the "
+            "contact-seek bound"
         )
     if args.plate_contact_seek_max_steps < 1:
         raise ValueError(
@@ -16117,6 +16171,11 @@ def main():
     )
     parser.add_argument(
         "--vertical_corridor_descent_max_translation_action",
+        type=float,
+        default=0.10,
+    )
+    parser.add_argument(
+        "--post_descent_lateral_max_translation_action",
         type=float,
         default=0.10,
     )
