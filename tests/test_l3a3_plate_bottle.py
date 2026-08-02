@@ -8838,6 +8838,19 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     )
     assert "compiled_low_side_settle_brake_envelope" in settle_action
     assert '"active_positive_z_brake_requested": True' in settle_action
+    assert "vertical_corridor_settle_brake_trigger_buffer" in bounded_seek
+    assert "maximum_vertical_corridor_outward_hold_world_step" in (
+        bounded_seek.split(
+            "vertical_corridor_settle_brake_trigger_buffer = float(", 1
+        )[1].split(")", 1)[0]
+    )
+    settle_transition = bounded_seek.split(
+        'elif stage_before_action == "vertical_corridor_descent":', 1
+    )[1].split('feedback["stage_after_action"]', 1)[0]
+    assert (
+        "after_eef[2] <= vertical_corridor_settle_brake_trigger_z"
+        in settle_transition
+    )
     assert '"fixed_safe_z_lateral_approach"' in bounded_seek
     assert (
         "for guard_step in range(1, structural_waypoint_budget + 1)"

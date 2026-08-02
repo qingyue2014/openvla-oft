@@ -13773,6 +13773,13 @@ def _seek_stable_plate_contact(
         + corridor_outward_direction
         * vertical_corridor_balanced_hold_world_step
     )
+    vertical_corridor_settle_brake_trigger_buffer = float(
+        maximum_vertical_corridor_outward_hold_world_step
+    )
+    vertical_corridor_settle_brake_trigger_z = float(
+        corridor_side_target[2]
+        + vertical_corridor_settle_brake_trigger_buffer
+    )
     vertical_corridor_closed_loop_inward_response_bound = 0.0005
     vertical_corridor_reserve_recovery_entry_clearance = float(
         vertical_staging_corridor[
@@ -13794,6 +13801,11 @@ def _seek_stable_plate_contact(
         and np.all(
             np.isfinite(vertical_corridor_balanced_hold_target_xy)
         )
+        and np.isfinite(vertical_corridor_settle_brake_trigger_buffer)
+        and vertical_corridor_settle_brake_trigger_buffer > 0.0
+        and np.isfinite(vertical_corridor_settle_brake_trigger_z)
+        and vertical_corridor_settle_brake_trigger_z
+        > corridor_side_target[2]
         and np.isfinite(
             vertical_corridor_reserve_recovery_entry_clearance
         )
@@ -13826,6 +13838,17 @@ def _seek_stable_plate_contact(
                 "prioritizing a 0.195-action-equivalent outward target "
                 "offset while the unchanged runtime-native Euclidean bound "
                 "leaves strict negative-Z descent authority"
+            ),
+            "vertical_corridor_settle_brake_trigger_buffer_m": (
+                vertical_corridor_settle_brake_trigger_buffer
+            ),
+            "vertical_corridor_settle_brake_trigger_z_m": (
+                vertical_corridor_settle_brake_trigger_z
+            ),
+            "vertical_corridor_settle_brake_trigger_derivation": (
+                "registered side target Z plus one nominal world envelope "
+                "from position_action_scale times the existing 0.20 "
+                "side-corridor outward-hold bound"
             ),
             "vertical_corridor_reserve_recovery_entry_clearance_m": (
                 vertical_corridor_reserve_recovery_entry_clearance
@@ -15536,6 +15559,9 @@ def _seek_stable_plate_contact(
                     and action[2] >= 0.0
                 ),
                 "formal_corridor_target_unchanged": True,
+                "vertical_corridor_settle_brake_trigger_z_m": (
+                    vertical_corridor_settle_brake_trigger_z
+                ),
             }
         elif structural_stage == "vertical_corridor_settle":
             if "trigger_step_response" in lateral_settle_state:
@@ -16553,7 +16579,7 @@ def _seek_stable_plate_contact(
                 rollout.obs["robot0_eef_pos"], dtype=float
             )
             if (
-                after_eef[2] <= corridor_side_target[2]
+                after_eef[2] <= vertical_corridor_settle_brake_trigger_z
                 and latest_outside_side_guard["accepted"]
             ):
                 lateral_settle_state = (

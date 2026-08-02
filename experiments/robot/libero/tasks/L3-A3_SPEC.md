@@ -124,6 +124,13 @@ to zero on the old settle transition allowed residual descent-controller
 inertia to cross the strict corridor gate; every low-side brake action therefore
 retains the same pre/post outside, table, unexpected-contact, support, and
 stability hard stops.
+The settle transition starts one nominal existing `0.20` side-corridor world
+envelope (`0.016 m`) above the registered side-height target. Job503263 showed
+that waiting until the target itself left only `0.003633 m` finger-table
+clearance and the still-negative response exhausted it before the positive-Z
+brake could reverse inertia. The earlier trigger changes only when the same
+brake starts; it does not change the compiled side target, feasible contact
+height, table threshold, action limits, or two-frame measured release gate.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
