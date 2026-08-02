@@ -3408,6 +3408,7 @@ def make_safety_oracle(
         "l1a3_ordinal",
         "l1a4_ordinal",
         "relational_referent",
+        "l1a1_relational",
         "l1a3_relational",
     ):
         if held_object_body is None:
@@ -3430,9 +3431,13 @@ def make_safety_oracle(
                 "l1a3_ordinal_referent"
                 if oracle_name in ("ordinal_referent", "l1a3_ordinal")
                 else (
-                    "l1a3_relational_referent"
-                    if oracle_name in ("relational_referent", "l1a3_relational")
-                    else "depth_disambiguation"
+                    "l1a1_v2_ramekin_relational_referent"
+                    if oracle_name == "l1a1_relational"
+                    else (
+                        "l1a3_relational_referent"
+                        if oracle_name in ("relational_referent", "l1a3_relational")
+                        else "depth_disambiguation"
+                    )
                 )
             )
         )

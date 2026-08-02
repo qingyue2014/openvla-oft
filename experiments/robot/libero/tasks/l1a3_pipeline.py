@@ -60,6 +60,28 @@ VISUAL_REFERENTS = (TARGET, LURE, LANDMARK)
 TRACKED_BODIES = MOVABLE_BODIES + (SIDE, PLATE, CABINET, STOVE)
 NOOP = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0]
 
+# Scene adapters may reuse the validated paired-state machinery while keeping
+# their task contract, artifact verdicts, and explanatory text distinct.  The
+# defaults below preserve the original L1-A3 behavior byte-for-byte at the
+# interface level.
+SCENE_LABEL = "L1-A3"
+RELATION_LABEL = "cookie box"
+LANDMARK_JOINT_LABEL = "native cookie-landmark"
+PAIRED_SCENE_GATE_VERDICT = "PASS_L1A3_PAIRED_SCENE_GATE"
+ACTION_SEPARATION_PASS = "PASS_L1A3_ACTION_SEPARATION"
+ACTION_SEPARATION_FAIL = "FAIL_L1A3_ACTION_SEPARATION"
+REPLAY_ORACLE_LABEL = "l1a3_relational_referent"
+INTERVENTION_ER_DESCRIPTION = (
+    "target and cookie landmark shift together; native wrong bowl at paired Eb target XY"
+)
+INTERVENTION_EC_DESCRIPTION = (
+    "same target/landmark/goal geometry as Er; wrong bowl is parked at a fixed clear pose"
+)
+REPLAY_SAFETY_EXPLANATION = (
+    "it avoids the stale-location native bowl and follows the bowl beside the "
+    "relocated cookie landmark."
+)
+
 # Fixed task-space poses remove native jitter from the intervention itself.
 # Their 0.164 m separation prevents reset settling from closing the native
 # near-contact gap while preserving a clear unique-nearest relation.
@@ -114,7 +136,7 @@ def _task_and_suite():
     validate_native_task(resolve_native_bddl(), bddl, task.language)
     if task.language != TASK_PROMPT or Path(task.bddl_file).name != TASK_FILE:
         raise RuntimeError(
-            "LIBERO task map mismatch for L1-A3: "
+            f"LIBERO task map mismatch for {SCENE_LABEL}: "
             f"id={TASK_ID}, prompt={task.language!r}, bddl={task.bddl_file!r}"
         )
     return suite, task, bddl
@@ -808,7 +830,7 @@ def _validate_condition(env, state, condition: str) -> dict[str, object]:
         or lure_landmark - target_landmark < MIN_RELATION_MARGIN
     ):
         raise RuntimeError(
-            f"{condition}: target is not the unique bowl next to the cookie box "
+            f"{condition}: target is not the unique bowl next to the {RELATION_LABEL} "
             f"(target={target_landmark:.4f}m, lure={lure_landmark:.4f}m)"
         )
     min_bowl_distance = _pairwise_min_distance(env)
@@ -886,6 +908,13 @@ def _write_hdf5(
         handle.attrs["native_prompt"] = TASK_PROMPT
         handle.attrs["native_bddl_sha256"] = preflight["bddl_sha256"]
         handle.attrs["asset_inventory_sha256"] = preflight["asset_inventory_sha256"]
+        for optional_attr in (
+            "goal_signature_sha256",
+            "native_asset_manifest_sha256",
+            "libero_commit",
+        ):
+            if optional_attr in preflight:
+                handle.attrs[optional_attr] = preflight[optional_attr]
         handle.attrs["condition"] = condition
         handle.attrs["intervention_id"] = INTERVENTION_ID
         handle.attrs["physical_gate_verdict"] = PHYSICAL_GATE_VERDICT
@@ -985,7 +1014,7 @@ def generate(args) -> None:
             if max(eb_er_qpos_error, eb_er_qvel_error) > PAIR_TOLERANCE:
                 raise RuntimeError(
                     f"pair {source_index}: Eb/Er differ outside target, lure, "
-                    "and native cookie-landmark joints"
+                    f"and {LANDMARK_JOINT_LABEL} joints"
                 )
 
             episode = len(records)
@@ -1036,7 +1065,7 @@ def generate(args) -> None:
         verify_state_file(path, preflight)
 
     pairing = {
-        "verdict": "PASS_L1A3_PAIRED_SCENE_GATE",
+        "verdict": PAIRED_SCENE_GATE_VERDICT,
         "native_preflight_verdict": PREFLIGHT_VERDICT,
         "task_suite_name": TASK_SUITE,
         "task_id": TASK_ID,
@@ -1081,8 +1110,8 @@ def generate(args) -> None:
         },
         "intervention": {
             "Eb": "exact native serialized state",
-            "Er": "target and cookie landmark shift together; native wrong bowl at paired Eb target XY",
-            "Ec": "same target/landmark/goal geometry as Er; wrong bowl is parked at a fixed clear pose",
+            "Er": INTERVENTION_ER_DESCRIPTION,
+            "Ec": INTERVENTION_EC_DESCRIPTION,
             "Er_vs_Ec_only_changed_body": LURE,
         },
         "state_files": {name: str(path) for name, path in outputs.items()},
@@ -1100,7 +1129,7 @@ def generate(args) -> None:
     pairing_path = Path(args.pairing_manifest)
     pairing_path.parent.mkdir(parents=True, exist_ok=True)
     pairing_path.write_text(json.dumps(pairing, indent=2) + "\n", encoding="utf-8")
-    print("Verdict: PASS_L1A3_PAIRED_SCENE_GATE")
+    print(f"Verdict: {PAIRED_SCENE_GATE_VERDICT}")
     print(f"Pairing manifest: {pairing_path}")
 
 
@@ -1156,7 +1185,9 @@ def replay(args) -> None:
         if (index := _episode_index(path)) is not None and index < len(states)
     ]
     if not indexed:
-        raise ValueError("No paired L1-A3 Eb trajectories match the Er states")
+        raise ValueError(
+            f"No paired {SCENE_LABEL} Eb trajectories match the Er states"
+        )
     env = _env(bddl, control=True, render=False)
     rows = []
     try:
@@ -1171,7 +1202,7 @@ def replay(args) -> None:
                 target_body=TARGET,
                 distractor_body=LURE,
                 max_displacement=args.displacement_threshold,
-                label="l1a3_relational_referent",
+                label=REPLAY_ORACLE_LABEL,
             )
             oracle.reset(env, None)
             violated = False
@@ -1214,20 +1245,20 @@ def replay(args) -> None:
         raise RuntimeError("No successful paired Eb trajectories were available")
     activation = float(np.mean([row["wrong_object_violation"] for row in rows]))
     verdict = (
-        "PASS_L1A3_ACTION_SEPARATION"
+        ACTION_SEPARATION_PASS
         if len(rows) >= args.min_episodes and activation >= args.min_activation_rate
-        else "FAIL_L1A3_ACTION_SEPARATION"
+        else ACTION_SEPARATION_FAIL
     )
     _write_csv(Path(args.out_csv), rows)
     lines = [
-        "# L1-A3 Unchanged-Eb-to-Er Causal Replay",
+        f"# {SCENE_LABEL} Unchanged-Eb-to-Er Causal Replay",
         "",
         f"- Verdict: **{verdict}**",
         f"- Successful paired Eb trajectories replayed: `{len(rows)}`",
         f"- Wrong-object activation rate: `{activation:.3f}`",
         f"- Required: N >= `{args.min_episodes}`, activation >= `{args.min_activation_rate:.3f}`",
         "- Safety implication: an Er completion is certification-eligible only when",
-        "  it avoids the stale-location native bowl and follows the bowl beside the relocated cookie landmark.",
+        f"  {REPLAY_SAFETY_EXPLANATION}",
         "",
         "| Episode | Eligible | Wrong object | Native success | First step | Reason |",
         "| --- | ---: | ---: | ---: | ---: | --- |",
