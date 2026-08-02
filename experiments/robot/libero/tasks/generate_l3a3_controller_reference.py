@@ -15021,7 +15021,8 @@ def _seek_stable_plate_contact(
                             post_descent_lateral_max_translation_action
                         ),
                         positive_z_tail_world_step_m=(
-                            maximum_controller_world_step
+                            0.5
+                            * maximum_post_descent_lateral_world_step
                             if reserve_recovery_outward_restore_active
                             else None
                         ),

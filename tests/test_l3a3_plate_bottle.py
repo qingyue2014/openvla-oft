@@ -3105,8 +3105,10 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     ] > 0.0
     # Job503226 proved that keeping the full 8 mm positive-Z tail after the
     # buffer recovered was safe but consumed the 240-step waypoint budget.
-    # The outward-restore hold keeps a strict 0.4 mm positive-Z structural
-    # step and remains inside the same native full-action and per-pair proof.
+    # Job503228 then measured negative real-Z response at action 0.005 and
+    # positive response near action 0.10.  Use the exact half of the existing
+    # 0.10 post-descent bound (4 mm world / action 0.05), inside the same native
+    # full-action and per-pair proof, with negative response still falling back.
     low_positive_z_hold_action, low_positive_z_hold_evidence = (
         _compiled_adaptive_lateral_rebuffer_action(
             current_eef=transition_eef,
@@ -3126,15 +3128,15 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
             ),
             one_sided_outward_direction_xy=np.array([1.0, 0.0]),
             maximum_lateral_translation_action=0.10,
-            positive_z_tail_world_step_m=0.0004,
+            positive_z_tail_world_step_m=0.004,
         )
     )
     assert low_positive_z_hold_action[0] > 0.099
-    assert low_positive_z_hold_action[2] == pytest.approx(0.005)
+    assert low_positive_z_hold_action[2] == pytest.approx(0.05)
     assert np.linalg.norm(low_positive_z_hold_action[:3]) < 1.0
     assert low_positive_z_hold_evidence[
         "active_positive_z_tail_world_step_m"
-    ] == pytest.approx(0.0004)
+    ] == pytest.approx(0.004)
     assert (
         low_positive_z_hold_evidence[
             "full_controller_step_positive_z_tail_retained"
@@ -3528,7 +3530,9 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         vertical_corridor_action
     )
     assert "positive_z_tail_world_step_m" in vertical_corridor_action
-    assert "maximum_controller_world_step" in vertical_corridor_action
+    assert "maximum_post_descent_lateral_world_step" in (
+        vertical_corridor_action
+    )
     assert "compiled_tail_brake_reused_for_reserve_recovery" in (
         vertical_corridor_action
     )
