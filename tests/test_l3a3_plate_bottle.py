@@ -886,7 +886,7 @@ def test_fixed_safe_z_lateral_hold_prioritizes_job503467_live_recovery():
     ] is True
 
 
-def test_fixed_safe_z_lateral_hold_uses_job503639_nominal_refill_band():
+def test_fixed_safe_z_lateral_hold_keeps_job503639_nominal_refill_band():
     native_spec = {
         "source": "env.action_spec",
         "action_dimension": 7,
@@ -905,7 +905,7 @@ def test_fixed_safe_z_lateral_hold_uses_job503639_nominal_refill_band():
         lateral_position_tolerance_m=0.005,
         fixed_safe_z_m=0.9196513910416114,
         vertical_position_tolerance_m=0.0004,
-        measured_vertical_step_progress_m=-0.00022190101860486422,
+        measured_vertical_step_progress_m=0.00022190101860486422,
         measured_outward_step_progress_m=0.00033320425177799096,
         outside_side_guard={
             "minimum_outside_clearance_m": live_clearance,
@@ -935,7 +935,7 @@ def test_fixed_safe_z_lateral_hold_uses_job503639_nominal_refill_band():
         np.inf,
     )
     assert action[:3].tolist() == pytest.approx(
-        [nominal_refill, 0.0, np.nextafter(0.20, 0.0)]
+        [nominal_refill, 0.0, 0.0]
     )
     assert nominal_refill < 0.005
     assert evidence["live_outside_recovery_active"] is True
@@ -994,14 +994,9 @@ def test_fixed_safe_z_lateral_hold_retains_job503642_downward_z_brake():
         derivative_gain=2.0,
         native_action_spec=native_spec,
     )
-    exit_clearance = np.nextafter(0.00155, np.inf)
-    refill_target = np.nextafter(exit_clearance + 0.00005, np.inf)
-    nominal_refill = np.nextafter(
-        (refill_target - live_clearance) / 0.08,
-        np.inf,
-    )
+    strict_brake = np.nextafter(0.20, 0.0)
     assert action[:3].tolist() == pytest.approx(
-        [nominal_refill, 0.0, np.nextafter(0.20, 0.0)]
+        [strict_brake, 0.0, strict_brake]
     )
     assert evidence["above_safe_z_band"] is True
     assert evidence["measured_downward_tail"] is True
@@ -1062,6 +1057,60 @@ def test_fixed_safe_z_lateral_hold_brakes_job503643_severe_vertical_tail():
     assert evidence["severe_vertical_response"] is True
     assert evidence["proof"][
         "severe_vertical_response_uses_full_outward_brake"
+    ] is True
+
+
+def test_fixed_safe_z_lateral_hold_brakes_job503644_downward_vertical_tail():
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": (-np.ones(7, dtype=float)).tolist(),
+        "high": np.ones(7, dtype=float).tolist(),
+        "runtime_resolved": True,
+    }
+    action, evidence = _fixed_safe_z_lateral_hold_action(
+        current_eef=np.array(
+            [0.1324596561463129, -0.02627091986387669, 0.9197740721907326]
+        ),
+        lateral_target_xy=np.array(
+            [0.13242106705090634, -0.02850777957668001]
+        ),
+        lateral_position_tolerance_m=0.005,
+        fixed_safe_z_m=0.9196513910416114,
+        vertical_position_tolerance_m=0.0004,
+        measured_vertical_step_progress_m=-0.0007133433586019589,
+        measured_outward_step_progress_m=0.00009228530233104659,
+        outside_side_guard={
+            "minimum_outside_clearance_m": 0.0011262756360018028,
+            "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+            "finger_table_vertical_clearance_m": 0.007009554745709967,
+            "required_finger_table_clearance_m": np.nextafter(
+                0.0, np.inf
+            ),
+        },
+        outward_direction_xy=np.array([1.0, 0.0]),
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_lateral_translation_action=0.005,
+        maximum_safety_brake_action=0.20,
+        strict_outside_clearance_m=0.0004,
+        strict_table_clearance_m=0.0004,
+        closed_loop_hazard_response_bound_m=0.0011,
+        full_outward_brake_clearance_m=0.00095,
+        progress_resolution_m=0.00005,
+        derivative_gain=2.0,
+        native_action_spec=native_spec,
+    )
+    strict_brake = np.nextafter(0.20, 0.0)
+    assert action[:3].tolist() == pytest.approx(
+        [strict_brake, 0.0, strict_brake]
+    )
+    assert evidence["live_full_outward_brake_active"] is False
+    assert evidence["measured_inward_response"] is False
+    assert evidence["severe_vertical_response"] is False
+    assert evidence["measured_downward_tail"] is True
+    assert evidence["proof"][
+        "downward_vertical_response_uses_full_outward_brake"
     ] is True
 
 
@@ -1158,14 +1207,8 @@ def test_fixed_safe_z_lateral_hold_retains_job503638_recovery_to_exit():
         native_action_spec=native_spec,
     )
     strict_brake = np.nextafter(0.20, 0.0)
-    exit_clearance = np.nextafter(0.00155, np.inf)
-    refill_target = np.nextafter(exit_clearance + 0.00005, np.inf)
-    nominal_refill = np.nextafter(
-        (refill_target - 0.001536) / 0.08,
-        np.inf,
-    )
     assert action[:3].tolist() == pytest.approx(
-        [nominal_refill, 0.0, strict_brake]
+        [strict_brake, 0.0, strict_brake]
     )
     assert evidence["outside_recovery_clearance_m"] == pytest.approx(
         0.0015
@@ -1175,6 +1218,7 @@ def test_fixed_safe_z_lateral_hold_retains_job503638_recovery_to_exit():
     )
     assert evidence["live_outside_recovery_active"] is True
     assert evidence["live_full_outward_brake_active"] is False
+    assert evidence["measured_downward_tail"] is True
     assert evidence["outside_recovery_active"] is True
     assert evidence["proof"][
         "recovery_release_requires_exit_headroom"

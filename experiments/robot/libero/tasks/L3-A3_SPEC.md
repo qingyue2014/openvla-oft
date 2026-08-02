@@ -294,9 +294,9 @@ response despite the continuing outward command. Full outward braking is now
 limited to either a measured inward response above the unchanged `0.050 mm`
 resolution or live clearance at or below `0.950 mm`. That low-reserve line is
 derived from the unchanged earlier `0.900 mm` recovery entry plus one progress
-resolution. On non-inward frames between `0.950 mm` and the `1.550 mm` release
-line, the controller requests only a nominal outward refill rather than full
-saturation.
+resolution. On non-inward, non-downward frames between `0.950 mm` and the
+`1.550 mm` release line, the controller requests only a nominal outward refill
+rather than full saturation.
 Job503641 left `0.3983 mm` outside reserve—only `1.7 micrometres` below the
 one-step gate—on such a nominal-refill frame while the vertical controller
 used its full downward-tail brake. Job503642 tested suppressing that brake
@@ -317,6 +317,13 @@ existing `1.100 mm` bound now independently selects the existing full outward
 brake. Non-inward frames within the registered vertical-response envelope
 continue to use the nominal `1.600 mm` refill, so the change does not restore
 continuous X saturation.
+Job503644 showed that direction must also be considered inside that magnitude
+bound: a `-0.713 mm/frame` vertical response paired with nominal X refill still
+caused a `0.787 mm` outside loss. During active outside recovery, any measured
+downward response beyond the unchanged `0.050 mm` progress resolution now
+selects the full outward brake. Upward or stable responses below the severe
+`1.100 mm` bound continue to use nominal refill, preserving the earlier fix
+against prolonged saturation.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
