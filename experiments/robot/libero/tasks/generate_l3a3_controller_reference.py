@@ -8569,6 +8569,179 @@ def _compiled_low_side_settle_brake_action(
     }
 
 
+def _compiled_hazard_release_descent_action(
+    *,
+    current_eef,
+    outside_side_guard,
+    gripper,
+    position_action_scale,
+    native_action_spec,
+    one_sided_outward_direction_xy,
+    persistent_outward_action,
+    maximum_descent_m,
+    maximum_negative_z_action,
+    strict_corridor_clearance_m,
+):
+    """Descend after hazard release without surrendering outward authority."""
+    current_eef = np.asarray(current_eef, dtype=float)
+    outward_direction = np.asarray(
+        one_sided_outward_direction_xy, dtype=float
+    )
+    outward_norm = float(np.linalg.norm(outward_direction))
+    scalars = (
+        position_action_scale,
+        persistent_outward_action,
+        maximum_descent_m,
+        maximum_negative_z_action,
+        strict_corridor_clearance_m,
+    )
+    if (
+        current_eef.shape != (3,)
+        or outward_direction.shape != (2,)
+        or not np.all(np.isfinite(current_eef))
+        or not np.all(np.isfinite(outward_direction))
+        or not np.isclose(outward_norm, 1.0, rtol=0.0, atol=1e-12)
+        or not all(np.isfinite(value) and value > 0.0 for value in scalars)
+    ):
+        raise ValueError("compiled hazard-release descent inputs are invalid")
+    try:
+        native_low = np.asarray(native_action_spec["low"], dtype=float)
+        native_high = np.asarray(native_action_spec["high"], dtype=float)
+        native_source = str(native_action_spec["source"])
+        live_outside_clearance = float(
+            outside_side_guard["minimum_outside_clearance_m"]
+        )
+        required_outside_clearance = float(
+            outside_side_guard["required_outside_clearance_m"]
+        )
+        live_finger_table_clearance = float(
+            outside_side_guard["finger_table_vertical_clearance_m"]
+        )
+        required_finger_table_clearance = float(
+            outside_side_guard["required_finger_table_clearance_m"]
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            "hazard-release descent native/guard evidence is incomplete"
+        ) from exc
+    if (
+        not native_action_spec.get("runtime_resolved", False)
+        or native_action_spec.get("action_dimension") != 7
+        or native_low.shape != (7,)
+        or native_high.shape != (7,)
+        or not np.all(np.isfinite(native_low))
+        or not np.all(np.isfinite(native_high))
+        or not np.all(native_low < native_high)
+        or not (native_low[6] <= gripper <= native_high[6])
+    ):
+        raise RuntimeError(
+            "native OSC bounds do not prove hazard-release descent"
+        )
+    native_translation_norm_bound = float(
+        min(
+            -native_low[0],
+            native_high[0],
+            -native_low[1],
+            native_high[1],
+            -native_low[2],
+            native_high[2],
+        )
+    )
+    strict_native_translation_norm_bound = float(
+        np.nextafter(native_translation_norm_bound, 0.0)
+    )
+    negative_z_action = float(
+        min(
+            maximum_negative_z_action,
+            maximum_descent_m / position_action_scale,
+        )
+    )
+    strict_outward_capacity = float(
+        np.sqrt(
+            max(
+                0.0,
+                strict_native_translation_norm_bound**2
+                - negative_z_action**2,
+            )
+        )
+    )
+    outward_action = float(
+        min(
+            np.nextafter(persistent_outward_action, 0.0),
+            strict_outward_capacity,
+        )
+    )
+    action = np.zeros(7, dtype=float)
+    action[:2] = outward_direction * outward_action
+    action[2] = -negative_z_action
+    action[-1] = float(gripper)
+    translation_norm = float(np.linalg.norm(action[:3]))
+    commanded_outward_world_delta = float(
+        position_action_scale * outward_action
+    )
+    commanded_descent_world_delta = float(
+        position_action_scale * negative_z_action
+    )
+    predicted_outside_clearance = float(
+        live_outside_clearance + commanded_outward_world_delta
+    )
+    predicted_finger_table_clearance = float(
+        live_finger_table_clearance - commanded_descent_world_delta
+    )
+    if not (
+        outward_action > 0.0
+        and negative_z_action > 0.0
+        and np.isfinite(live_outside_clearance)
+        and live_outside_clearance > strict_corridor_clearance_m
+        and live_outside_clearance >= required_outside_clearance
+        and predicted_outside_clearance > live_outside_clearance
+        and np.isfinite(live_finger_table_clearance)
+        and live_finger_table_clearance
+        >= required_finger_table_clearance
+        and predicted_finger_table_clearance
+        > required_finger_table_clearance
+        and translation_norm < native_translation_norm_bound
+        and np.all(action[:3] > native_low[:3])
+        and np.all(action[:3] < native_high[:3])
+    ):
+        raise RuntimeError(
+            "compiled hazard-release descent violates its live guard proof"
+        )
+    return action, {
+        "formula": (
+            "retain the registered persistent outward hazard authority "
+            "while applying only the existing bounded negative-Z geometric "
+            "descent; prove strict native norm, increasing outside clearance, "
+            "and remaining live finger-table clearance"
+        ),
+        "current_eef": current_eef.tolist(),
+        "native_action_spec_source": native_source,
+        "commanded_xy_action": action[:2].tolist(),
+        "commanded_z_action": float(action[2]),
+        "commanded_translation_action_norm": translation_norm,
+        "commanded_outward_world_delta_m": commanded_outward_world_delta,
+        "commanded_descent_world_delta_m": commanded_descent_world_delta,
+        "live_outside_clearance_m": live_outside_clearance,
+        "required_outside_clearance_m": required_outside_clearance,
+        "predicted_outside_clearance_m": predicted_outside_clearance,
+        "live_finger_table_clearance_m": live_finger_table_clearance,
+        "required_finger_table_clearance_m": (
+            required_finger_table_clearance
+        ),
+        "predicted_finger_table_clearance_m": (
+            predicted_finger_table_clearance
+        ),
+        "strict_corridor_clearance_m": float(strict_corridor_clearance_m),
+        "proof": {
+            "strictly_outward_xy_negative_z_zero_rotation": True,
+            "strictly_inside_native_3d_action_norm_bound": True,
+            "outside_clearance_statically_improves": True,
+            "finger_table_clearance_remains_strict": True,
+            "post_action_live_guards_required": True,
+        },
+    }
+
+
 def _outside_side_neutral_damping_guard_evidence(
     outside_side_guard, *, damping_active_before
 ):
@@ -16037,6 +16210,7 @@ def _seek_stable_plate_contact(
     vertical_corridor_reserve_recovery_active = False
     vertical_corridor_reserve_recovery_phase = None
     vertical_corridor_reserve_recovery_events = []
+    vertical_corridor_hazard_release_descent_active = False
     lateral_resume_stage = None
     vertical_tail_brake_reason = None
     vertical_tail_events = []
@@ -16130,6 +16304,11 @@ def _seek_stable_plate_contact(
             vertical_corridor_hazard_positive_z_brake_action,
         )
         < 1.0
+        and np.hypot(
+            vertical_corridor_hazard_outward_brake_action,
+            vertical_corridor_outward_hold_max_translation_action,
+        )
+        < 1.0
     ):
         raise RuntimeError(
             "fixed-safe-Z recovery envelope is not strictly conservative"
@@ -16204,6 +16383,16 @@ def _seek_stable_plate_contact(
                 "existing 0.025 neutral-damping decrement, from 0.40 to "
                 "0.375, for the second confirmation frame; any negative "
                 "direction resets the count and restores positive Z=0.40"
+            ),
+            "vertical_corridor_hazard_release_descent_outward_action": (
+                vertical_corridor_hazard_outward_brake_action
+            ),
+            "vertical_corridor_hazard_release_descent_derivation": (
+                "after a hazard release only, retain live persistent "
+                "outward X=0.40 while applying the existing bounded "
+                "negative-Z geometric descent; every action retains strict "
+                "native norm, live outside/table proofs, and post-action "
+                "guards"
             ),
         }
     )
@@ -17250,6 +17439,9 @@ def _seek_stable_plate_contact(
                     "balanced_hold_target_xy"
                 ]
             )
+            hazard_release_descent_active_before_action = bool(
+                vertical_corridor_hazard_release_descent_active
+            )
             if vertical_corridor_compiled_reserve_action_active:
                 if not latest_overhead_guard["accepted"]:
                     raise RuntimeError(
@@ -17291,6 +17483,31 @@ def _seek_stable_plate_contact(
                         "vertical-corridor compiled reserve brake failed "
                         "to command strictly positive Z"
                     )
+            elif hazard_release_descent_active_before_action:
+                action, path_control = (
+                    _compiled_hazard_release_descent_action(
+                        current_eef=current_eef,
+                        outside_side_guard=pre_action_guard,
+                        gripper=gripper,
+                        position_action_scale=args.position_action_scale,
+                        native_action_spec=native_action_spec,
+                        one_sided_outward_direction_xy=(
+                            corridor_outward_direction
+                        ),
+                        persistent_outward_action=(
+                            vertical_corridor_hazard_outward_brake_action
+                        ),
+                        maximum_descent_m=bounded_maximum_descent,
+                        maximum_negative_z_action=(
+                            active_vertical_corridor_geometric_height_action
+                        ),
+                        strict_corridor_clearance_m=float(
+                            vertical_staging_corridor[
+                                "strict_corridor_entry_clearance_m"
+                            ]
+                        ),
+                    )
+                )
             else:
                 action, path_control = (
                     _constraint_prioritized_outside_descent_action(
@@ -17327,6 +17544,7 @@ def _seek_stable_plate_contact(
                 ),
                 "balanced_outward_controller_hold_active": bool(
                     not vertical_corridor_reserve_recovery_active
+                    and not hazard_release_descent_active_before_action
                 ),
                 "balanced_outward_controller_hold_world_step_m": (
                     active_vertical_corridor_envelope[
@@ -17364,6 +17582,19 @@ def _seek_stable_plate_contact(
                 ),
                 "compiled_corridor_reserve_action_used": (
                     vertical_corridor_compiled_reserve_action_active
+                ),
+                "hazard_release_descent_active_before_action": (
+                    hazard_release_descent_active_before_action
+                ),
+                "compiled_hazard_release_descent_action_used": bool(
+                    hazard_release_descent_active_before_action
+                    and not vertical_corridor_compiled_reserve_action_active
+                ),
+                "compiled_hazard_release_descent_envelope": (
+                    path_control
+                    if hazard_release_descent_active_before_action
+                    and not vertical_corridor_compiled_reserve_action_active
+                    else None
                 ),
                 "compiled_corridor_reserve_action_envelope": (
                     path_control
@@ -18792,6 +19023,11 @@ def _seek_stable_plate_contact(
                 )
                 lateral_settle_state = None
                 structural_stage = "vertical_corridor_descent"
+                vertical_corridor_hazard_release_descent_active = bool(
+                    hazard_brake_release_evidence[
+                        "hazard_response_triggered"
+                    ]
+                )
                 feedback["settle_geometric_authority_release"] = {
                     "event": (
                         "above_rim_kinematic_brake_reversed_to_reduced_"
@@ -18818,6 +19054,9 @@ def _seek_stable_plate_contact(
                     "full_outside_side_guard_accepted": False,
                     "hazard_brake_release_evidence": (
                         hazard_brake_release_evidence
+                    ),
+                    "hazard_release_descent_activated": (
+                        vertical_corridor_hazard_release_descent_active
                     ),
                     "formal_corridor_target_unchanged": True,
                 }
@@ -18850,6 +19089,7 @@ def _seek_stable_plate_contact(
                 descent_settle_trigger_evidence
             )
             if descent_settle_trigger_evidence["triggered"]:
+                vertical_corridor_hazard_release_descent_active = False
                 lateral_settle_state = (
                     _outside_side_staircase_settle_trigger(
                         feedback_mode=(

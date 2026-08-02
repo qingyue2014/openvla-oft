@@ -568,6 +568,19 @@ two-frame directional and `3.050 mm` reserve release evidence is authorized.
 Geometric-only damping is unchanged. The confirmation norm is about `0.548293`,
 strictly inside the native `1.0` bound, and any negative direction still resets
 the count and restores the full `+Z=0.40` brake.
+Job503689 verified that `+Z=0.375` completes the two-frame release, but the
+first ordinary descent frame after every release used only its shrinking fixed
+target error for lateral authority. Its first `+X=0.129274` command produced
+negative EEF-outward and live-clearance responses and therefore immediately
+retriggered the mandatory hazard brake. After a hazard release only, the
+vertical descent now retains a live persistent `+X=0.40` command while applying
+the existing bounded negative-Z geometric component. The maximum combined norm
+is below `hypot(0.40, 0.20)=0.447214`, strictly inside the native `1.0` bound.
+The compiled action must statically increase outside clearance, keep predicted
+finger-table clearance strictly positive, use zero rotation, and pass all live
+post-action guards. It remains active until the unchanged geometric or measured
+hazard trigger returns to settle; a hazardous measured response therefore still
+hard-stops the shielded descent and restores the full brake.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

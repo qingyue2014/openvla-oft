@@ -23,6 +23,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _vertical_corridor_reserve_recovery_phase_evidence,
     _compiled_corridor_reserve_action,
     _compiled_low_side_settle_brake_action,
+    _compiled_hazard_release_descent_action,
     _compiled_low_side_neutral_damping_action,
     _outside_side_neutral_damping_guard_evidence,
     _outside_side_neutral_damping_latch_transition,
@@ -3581,6 +3582,77 @@ def test_job503687_hazard_brake_reduces_only_confirmation_z_action():
 def test_job503687_hazard_brake_schedule_rejects_invalid_inputs(kwargs):
     with pytest.raises(ValueError):
         _vertical_corridor_hazard_positive_z_brake_schedule(**kwargs)
+
+
+def test_job503689_hazard_release_descent_retains_outward_authority():
+    action, evidence = _compiled_hazard_release_descent_action(
+        current_eef=np.array([0.145, -0.0285, 0.940]),
+        outside_side_guard={
+            "minimum_outside_clearance_m": 0.0069,
+            "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+            "finger_table_vertical_clearance_m": 0.0225,
+            "required_finger_table_clearance_m": np.nextafter(0.0, np.inf),
+        },
+        gripper=-1.0,
+        position_action_scale=0.08,
+        native_action_spec={
+            "low": [-1.0] * 7,
+            "high": [1.0] * 7,
+            "source": "test_runtime",
+            "runtime_resolved": True,
+            "action_dimension": 7,
+        },
+        one_sided_outward_direction_xy=np.array([1.0, 0.0]),
+        persistent_outward_action=0.40,
+        maximum_descent_m=0.008,
+        maximum_negative_z_action=0.10,
+        strict_corridor_clearance_m=0.0004,
+    )
+    assert np.nextafter(0.40, 0.0) <= action[0] < 0.40
+    assert action[1] == 0.0
+    assert action[2] == pytest.approx(-0.10)
+    assert np.linalg.norm(action[:3]) < 1.0
+    assert evidence["predicted_outside_clearance_m"] == pytest.approx(
+        0.0389
+    )
+    assert evidence["predicted_finger_table_clearance_m"] == (
+        pytest.approx(0.0145)
+    )
+    assert evidence["proof"][
+        "outside_clearance_statically_improves"
+    ] is True
+    assert evidence["proof"][
+        "finger_table_clearance_remains_strict"
+    ] is True
+
+
+def test_job503689_hazard_release_descent_rejects_table_crossing():
+    with pytest.raises(RuntimeError):
+        _compiled_hazard_release_descent_action(
+            current_eef=np.array([0.145, -0.0285, 0.920]),
+            outside_side_guard={
+                "minimum_outside_clearance_m": 0.0069,
+                "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+                "finger_table_vertical_clearance_m": 0.001,
+                "required_finger_table_clearance_m": np.nextafter(
+                    0.0, np.inf
+                ),
+            },
+            gripper=-1.0,
+            position_action_scale=0.08,
+            native_action_spec={
+                "low": [-1.0] * 7,
+                "high": [1.0] * 7,
+                "source": "test_runtime",
+                "runtime_resolved": True,
+                "action_dimension": 7,
+            },
+            one_sided_outward_direction_xy=np.array([1.0, 0.0]),
+            persistent_outward_action=0.40,
+            maximum_descent_m=0.002,
+            maximum_negative_z_action=0.025,
+            strict_corridor_clearance_m=0.0004,
+        )
 
 
 def test_500099_every_descent_requires_preventive_active_braking_settle():
@@ -10596,6 +10668,8 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "_vertical_corridor_hazard_positive_z_brake_schedule(" in (
         settle_action
     )
+    assert "_compiled_hazard_release_descent_action(" in bounded_seek
+    assert "hazard_release_descent_active_before_action" in bounded_seek
     settle_transition = bounded_seek.split(
         'elif stage_before_action == "vertical_corridor_settle":', 1
     )[1].split(
