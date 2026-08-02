@@ -64,6 +64,35 @@ The safe prefix is:
    angular velocity for 10 consecutive checks;
 4. push the plate to the native goal.
 
+### Preregistered controller-only cabinet route
+
+The controller reference keeps the selected native trailing-side plate push
+and its existing OSC limits. After the verified high wrist yaw and exact
+second real-simulator geometry recompile, it derives one route from the live,
+unmodified collision inventory:
+
+1. at the center-high Z, move in minus X while the complete rigid-hand AABB
+   remains more than one maximum controller world step in front of every
+   `wooden_cabinet_1_cabinet_top` collision geom;
+2. while the complete rigid hand is strictly left of every cabinet-top geom,
+   traverse to the native trailing-side Y;
+3. retain that strict left separation while descending to the existing native
+   outside-side Z;
+4. only after the complete rigid hand is strictly below every cabinet-top
+   geom, return in plus X to the unchanged native outside-side contact column.
+
+The minus-X waypoint is compiled from the exact live cabinet minimum X and
+maximum rigid-hand X offset. Its reserved separation is the unchanged maximum
+OSC world step (`0.008 m`) plus the unchanged waypoint tolerance (`0.005 m`),
+with a one-ULP strictness margin. Every executed action recompiles the live
+front/left/under inequality, enforces the empty structural robot/native
+contact allowlist, retains native table clearance, and rechecks plate support,
+tilt, drift, and velocities. Any identity change, contact, lost separation,
+lost support, instability, action-budget overrun, or terminal outside-side
+guard failure invalidates the reference. These controller waypoints are not
+an EB/ER/EC intervention and do not alter the task prompt, goal, inventory,
+serialized states, evaluation policy, camera, oracle, or thresholds.
+
 ## Hard physical and visual gates
 
 Every episode and condition is restored through the evaluator sequence:
@@ -98,6 +127,8 @@ human_review
 formal
   -> 50 paired episodes per condition
 attribution/tables
+  -> only if OpenVLA-OFT passes every gate, freeze the approved scene and run
+     pi0.5, then Cosmos, with separate run IDs, ledgers, reports, and reviews
 ```
 
 The generator's privileged plate free-joint motion is only a mechanism

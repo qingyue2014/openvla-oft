@@ -1181,6 +1181,316 @@ def _diagnostic_only_live_detour_candidates(
     return candidates
 
 
+def _compiled_native_cabinet_minus_x_detour_plan(
+    *,
+    live_inventory,
+    current_eef,
+    outside_high_target,
+    outside_side_target,
+    maximum_controller_world_step_m,
+    position_tolerance_m,
+):
+    """Compile the native-cabinet left-and-under route from live geometry.
+
+    The trailing side of the native plate lies behind the protruding top-drawer
+    handle.  The rigid hand subtree therefore first moves completely to the
+    cabinet's -X side, traverses to the trailing Y while left of every compiled
+    top-drawer collision geom, descends until the whole hand subtree is below
+    every top-drawer geom, and only then returns in +X to the native trailing
+    contact column.  No AABB prediction is treated as rollout evidence: the
+    returned plan is recompiled from the live simulator and its left/under
+    inequalities plus the empty robot/native contact allowlist are rechecked
+    after every executed OSC action.
+    """
+    current_eef = np.asarray(current_eef, dtype=float)
+    outside_high_target = np.asarray(outside_high_target, dtype=float)
+    outside_side_target = np.asarray(outside_side_target, dtype=float)
+    if any(
+        value.shape != (3,) or not np.all(np.isfinite(value))
+        for value in (current_eef, outside_high_target, outside_side_target)
+    ):
+        raise RuntimeError("native cabinet detour targets must be finite 3-D")
+    try:
+        maximum_controller_world_step_m = float(
+            maximum_controller_world_step_m
+        )
+        position_tolerance_m = float(position_tolerance_m)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("native cabinet detour limits must be finite") from exc
+    if not (
+        np.isfinite(maximum_controller_world_step_m)
+        and maximum_controller_world_step_m > 0.0
+        and np.isfinite(position_tolerance_m)
+        and position_tolerance_m > 0.0
+    ):
+        raise RuntimeError("native cabinet detour limits must be positive")
+    if not isinstance(live_inventory, dict) or not isinstance(
+        live_inventory.get("inventory_sha256"), str
+    ):
+        raise RuntimeError("native cabinet detour lacks live inventory binding")
+
+    robot_geoms = list(live_inventory.get("robot_collision_geoms", ()))
+    native_geoms = list(
+        live_inventory.get("native_nonrobot_collision_geoms", ())
+    )
+    rigid_hand_geoms = [
+        record
+        for record in robot_geoms
+        if str(record.get("name", "")).startswith("gripper0_")
+    ]
+    cabinet_top_geoms = [
+        record
+        for record in native_geoms
+        if record.get("body") == L3A3_CABINET_TOP_BODY
+    ]
+    if not rigid_hand_geoms or not cabinet_top_geoms:
+        raise RuntimeError(
+            "native cabinet detour lacks rigid-hand or cabinet-top geoms"
+        )
+
+    def vector(record, key):
+        value = np.asarray(record.get(key), dtype=float)
+        if value.shape != (3,) or not np.all(np.isfinite(value)):
+            raise RuntimeError(
+                f"native cabinet detour geom has invalid {key}: "
+                f"{record.get('name', '')}"
+            )
+        return value
+
+    maximum_hand_x_offset = float(
+        max(
+            vector(record, "world_aabb_max_offset_from_eef")[0]
+            for record in rigid_hand_geoms
+        )
+    )
+    maximum_hand_z_offset = float(
+        max(
+            vector(record, "world_aabb_max_offset_from_eef")[2]
+            for record in rigid_hand_geoms
+        )
+    )
+    cabinet_min_x = float(
+        min(vector(record, "world_aabb_min")[0] for record in cabinet_top_geoms)
+    )
+    cabinet_min_z = float(
+        min(vector(record, "world_aabb_min")[2] for record in cabinet_top_geoms)
+    )
+    selected_detour_x = float(
+        np.nextafter(
+            cabinet_min_x
+            - maximum_hand_x_offset
+            - maximum_controller_world_step_m
+            - position_tolerance_m,
+            -np.inf,
+        )
+    )
+    predicted_left_clearance = float(
+        cabinet_min_x - (selected_detour_x + maximum_hand_x_offset)
+    )
+    predicted_under_clearance = float(
+        cabinet_min_z
+        - (outside_side_target[2] + maximum_hand_z_offset)
+    )
+    if not predicted_left_clearance > (
+        maximum_controller_world_step_m + position_tolerance_m
+    ):
+        raise RuntimeError(
+            "native cabinet detour lacks strict left one-step clearance plus "
+            "the unchanged waypoint tolerance"
+        )
+    if not predicted_under_clearance > maximum_controller_world_step_m:
+        raise RuntimeError(
+            "native cabinet detour trailing column is not strictly below the "
+            "cabinet by one controller world step"
+        )
+    if not outside_side_target[2] < outside_high_target[2]:
+        raise RuntimeError("native cabinet detour has no downward terminal route")
+
+    start_high = current_eef.copy()
+    minus_x_high = np.array(
+        [selected_detour_x, start_high[1], start_high[2]], dtype=float
+    )
+    cabinet_y_high = np.array(
+        [selected_detour_x, outside_high_target[1], start_high[2]], dtype=float
+    )
+    cabinet_y_low = np.array(
+        [selected_detour_x, outside_side_target[1], outside_side_target[2]],
+        dtype=float,
+    )
+    terminal_low = outside_side_target.copy()
+    segment_distances = [
+        float(np.linalg.norm(end - start))
+        for start, end in zip(
+            (start_high, minus_x_high, cabinet_y_high, cabinet_y_low),
+            (minus_x_high, cabinet_y_high, cabinet_y_low, terminal_low),
+        )
+    ]
+    minimum_action_lower_bound = int(
+        sum(
+            np.ceil(distance / maximum_controller_world_step_m)
+            for distance in segment_distances
+        )
+    )
+    return {
+        "candidate_id": "native_cabinet_minus_x_then_under_return",
+        "diagnostic_only": False,
+        "selection_eligible": True,
+        "selected": True,
+        "route_authorized": True,
+        "authorization_basis": (
+            "exact live compiled rigid-hand and native cabinet-top bounds; "
+            "four monotone OSC segments; per-action live left/under bounds, "
+            "empty robot/native contact allowlist, plate stability, and table "
+            "clearance revalidation"
+        ),
+        "live_inventory_sha256": live_inventory["inventory_sha256"],
+        "live_robot_collision_geom_count": len(robot_geoms),
+        "live_native_collision_geom_count": len(native_geoms),
+        "rigid_hand_geom_names": [
+            record["name"] for record in rigid_hand_geoms
+        ],
+        "cabinet_top_geom_names": [
+            record["name"] for record in cabinet_top_geoms
+        ],
+        "cabinet_top_body": L3A3_CABINET_TOP_BODY,
+        "maximum_controller_world_step_m": (
+            maximum_controller_world_step_m
+        ),
+        "position_tolerance_m": position_tolerance_m,
+        "maximum_rigid_hand_x_offset_from_eef_m": maximum_hand_x_offset,
+        "maximum_rigid_hand_z_offset_from_eef_m": maximum_hand_z_offset,
+        "cabinet_min_x_m": cabinet_min_x,
+        "cabinet_min_z_m": cabinet_min_z,
+        "selected_minus_x_eef_m": selected_detour_x,
+        "predicted_left_clearance_m": predicted_left_clearance,
+        "predicted_under_clearance_at_terminal_m": predicted_under_clearance,
+        "required_strict_clearance_m": maximum_controller_world_step_m,
+        "waypoints": {
+            "start_high": start_high.tolist(),
+            "minus_x_high": minus_x_high.tolist(),
+            "cabinet_y_high": cabinet_y_high.tolist(),
+            "cabinet_y_low": cabinet_y_low.tolist(),
+            "terminal_outside_side_low": terminal_low.tolist(),
+        },
+        "segment_distances_m": segment_distances,
+        "minimum_full_step_action_lower_bound": minimum_action_lower_bound,
+        "route_order": [
+            "minus_x_high_lateral",
+            "cabinet_y_high_pass",
+            "minus_x_vertical_descent",
+            "under_cabinet_low_x_return",
+        ],
+        "runtime_requirements": {
+            "high_pass_and_descent": (
+                "live rigid-hand maximum X remains strictly left of every "
+                "native cabinet-top geom by one controller world step"
+            ),
+            "low_return": (
+                "live rigid-hand maximum Z remains strictly below every "
+                "native cabinet-top geom by one controller world step"
+            ),
+            "all_segments": (
+                "empty structural robot/native contact allowlist plus unchanged "
+                "plate stability and action bounds"
+            ),
+        },
+    }
+
+
+def _live_native_cabinet_detour_guard(env, *, eef_position, plan, stage):
+    """Recompile the selected cabinet detour inequality at a live frame."""
+    if not isinstance(plan, dict) or not plan.get("route_authorized", False):
+        raise RuntimeError("native cabinet detour guard lacks authorization")
+    if stage not in {
+        "minus_x_high_lateral",
+        "cabinet_y_high_pass",
+        "minus_x_vertical_descent",
+        "under_cabinet_low_x_return",
+    }:
+        raise RuntimeError(f"unknown native cabinet detour stage: {stage}")
+    inventory = _live_collision_inventory(env, eef_position=eef_position)
+    rigid_names = set(plan.get("rigid_hand_geom_names", ()))
+    cabinet_names = set(plan.get("cabinet_top_geom_names", ()))
+    rigid = [
+        record
+        for record in inventory["robot_collision_geoms"]
+        if record.get("name") in rigid_names
+    ]
+    cabinet = [
+        record
+        for record in inventory["native_nonrobot_collision_geoms"]
+        if record.get("name") in cabinet_names
+        and record.get("body") == L3A3_CABINET_TOP_BODY
+    ]
+    if len(rigid) != len(rigid_names) or len(cabinet) != len(cabinet_names):
+        raise RuntimeError("native cabinet detour live geom identity changed")
+    required = float(plan["required_strict_clearance_m"])
+    maximum_hand_x = float(
+        max(record["world_aabb_max"][0] for record in rigid)
+    )
+    maximum_hand_z = float(
+        max(record["world_aabb_max"][2] for record in rigid)
+    )
+    minimum_hand_y = float(
+        min(record["world_aabb_min"][1] for record in rigid)
+    )
+    minimum_cabinet_x = float(
+        min(record["world_aabb_min"][0] for record in cabinet)
+    )
+    minimum_cabinet_z = float(
+        min(record["world_aabb_min"][2] for record in cabinet)
+    )
+    maximum_cabinet_y = float(
+        max(record["world_aabb_max"][1] for record in cabinet)
+    )
+    left_clearance = float(minimum_cabinet_x - maximum_hand_x)
+    under_clearance = float(minimum_cabinet_z - maximum_hand_z)
+    front_clearance = float(minimum_hand_y - maximum_cabinet_y)
+    require_front = stage == "minus_x_high_lateral"
+    require_left = stage in {
+        "cabinet_y_high_pass",
+        "minus_x_vertical_descent",
+    }
+    require_under = stage == "under_cabinet_low_x_return"
+    accepted = bool(
+        (not require_front or front_clearance > required)
+        and (not require_left or left_clearance > required)
+        and (not require_under or under_clearance > required)
+    )
+    violations = []
+    if require_front and not front_clearance > required:
+        violations.append("rigid_hand_not_strictly_in_front_of_native_cabinet")
+    if require_left and not left_clearance > required:
+        violations.append("rigid_hand_not_strictly_left_of_native_cabinet")
+    if require_under and not under_clearance > required:
+        violations.append("rigid_hand_not_strictly_under_native_cabinet")
+    return {
+        "accepted": accepted,
+        "stage": stage,
+        "live_inventory_sha256": inventory["inventory_sha256"],
+        "live_robot_collision_geom_count": inventory[
+            "robot_collision_geom_count"
+        ],
+        "live_native_collision_geom_count": inventory[
+            "native_nonrobot_collision_geom_count"
+        ],
+        "required_strict_clearance_m": required,
+        "require_left_clearance": require_left,
+        "require_under_clearance": require_under,
+        "require_front_clearance": require_front,
+        "maximum_rigid_hand_x_m": maximum_hand_x,
+        "maximum_rigid_hand_z_m": maximum_hand_z,
+        "minimum_rigid_hand_y_m": minimum_hand_y,
+        "minimum_cabinet_x_m": minimum_cabinet_x,
+        "minimum_cabinet_z_m": minimum_cabinet_z,
+        "maximum_cabinet_y_m": maximum_cabinet_y,
+        "left_clearance_m": left_clearance,
+        "under_clearance_m": under_clearance,
+        "front_clearance_m": front_clearance,
+        "violations": violations,
+    }
+
+
 def _write_controller_diagnostic_manifest(path, record):
     """Persist complete controller diagnostics without printing the inventory."""
     path = Path(path)
@@ -1326,6 +1636,75 @@ def _record_unexpected_contact_in_controller_manifest(
     record["unexpected_contact_events"] = events
     record["latest_status"] = "UNEXPECTED_ROBOT_NATIVE_CONTACT_FAIL_CLOSED"
     _write_controller_diagnostic_manifest(path, record)
+
+
+def _record_native_cabinet_detour_completion(
+    *,
+    diagnostic_context,
+    source,
+    final_guard,
+    stage_action_counts,
+    used_steps,
+    remaining_steps,
+):
+    """Hash-bind a successfully executed cabinet detour to its manifest."""
+    path_value = diagnostic_context.get("manifest_path")
+    if not path_value:
+        raise RuntimeError(
+            "controller diagnostic manifest path is missing at detour completion"
+        )
+    path = Path(path_value)
+    if not path.is_file():
+        raise RuntimeError(
+            "controller diagnostic manifest is missing at detour completion"
+        )
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(
+            "controller diagnostic manifest cannot be read at detour completion"
+        ) from exc
+    if record.get("live_collision_inventory", {}).get(
+        "inventory_sha256"
+    ) != diagnostic_context.get("inventory_sha256"):
+        raise RuntimeError(
+            "controller diagnostic manifest inventory hash changed before "
+            "detour completion"
+        )
+    plan = diagnostic_context.get("authorized_detour_plan")
+    if not (
+        isinstance(plan, dict)
+        and plan.get("candidate_id")
+        == "native_cabinet_minus_x_then_under_return"
+        and plan.get("route_authorized", False)
+        and isinstance(final_guard, dict)
+        and final_guard.get("accepted", False)
+    ):
+        raise RuntimeError(
+            "native cabinet detour completion lacks an accepted bound plan"
+        )
+    completion = {
+        "source": str(source),
+        "candidate_id": plan["candidate_id"],
+        "route_order": list(plan["route_order"]),
+        "stage_action_counts": {
+            stage: int(stage_action_counts[stage])
+            for stage in plan["route_order"]
+        },
+        "used_structural_waypoint_steps": int(used_steps),
+        "remaining_structural_waypoint_steps": int(remaining_steps),
+        "final_live_guard": final_guard,
+        "accepted": True,
+    }
+    record["route_executed"] = True
+    record["route_completion"] = completion
+    record["latest_status"] = (
+        "NATIVE_CABINET_MINUS_X_DETOUR_EXECUTED_AND_GUARDED"
+    )
+    _write_controller_diagnostic_manifest(path, record)
+    diagnostic_context["executed"] = True
+    diagnostic_context["route_completion"] = completion
+    return completion
 
 
 def _compiled_collision_pair_clearance(model, geom1, geom2):
@@ -10310,6 +10689,27 @@ def _execute_high_safe_wrist_yaw(
             outside_side_target=realized_candidate["outside_side_target"],
         )
     )
+    cabinet_detour_plan = _compiled_native_cabinet_minus_x_detour_plan(
+        live_inventory=live_collision_inventory,
+        current_eef=current_eef,
+        outside_high_target=realized_candidate["outside_high_target"],
+        outside_side_target=realized_candidate["outside_side_target"],
+        maximum_controller_world_step_m=float(
+            args.position_action_scale
+            * args.plate_contact_seek_max_translation_action
+        ),
+        position_tolerance_m=args.position_tolerance,
+    )
+    remaining_structural_steps = int(
+        args.max_waypoint_steps - yaw_steps - center_high_reacquire["steps"]
+    )
+    if cabinet_detour_plan[
+        "minimum_full_step_action_lower_bound"
+    ] > remaining_structural_steps:
+        raise RuntimeError(
+            "compiled native cabinet detour lower bound exceeds the remaining "
+            "unchanged structural waypoint budget"
+        )
     diagnostic_manifest_value = getattr(args, "diagnostic_manifest", None)
     if diagnostic_manifest_value is None:
         output_value = getattr(args, "output", None)
@@ -10326,8 +10726,8 @@ def _execute_high_safe_wrist_yaw(
             "schema_version": 1,
             "scenario": SCENE_ID,
             "task_description": TASK_PROMPT,
-            "diagnostic_only": True,
-            "route_authorized": False,
+            "diagnostic_only": False,
+            "route_authorized": True,
             "capture_stage": (
                 "post_center_high_reacquire_second_recompile_pre_seek"
             ),
@@ -10335,16 +10735,17 @@ def _execute_high_safe_wrist_yaw(
             "live_collision_inventory": live_collision_inventory,
             "live_cabinet_pose_and_qpos": live_cabinet_pose,
             "detour_candidates": diagnostic_only_detour_candidates,
+            "authorized_detour_plan": cabinet_detour_plan,
             "unexpected_contact_events": [],
-            "latest_status": "LIVE_BOUNDS_CAPTURED_NO_ROUTE_AUTHORIZATION",
+            "latest_status": "NATIVE_CABINET_MINUS_X_DETOUR_AUTHORIZED",
         },
     )
     controller_live_collision_diagnostic = {
-        "diagnostic_only": True,
+        "diagnostic_only": False,
         "executed": False,
-        "selection_eligible": False,
-        "selected": False,
-        "route_authorized": False,
+        "selection_eligible": True,
+        "selected": True,
+        "route_authorized": True,
         "capture_stage": live_collision_inventory["capture_stage"],
         "inventory_sha256": live_collision_inventory["inventory_sha256"],
         "robot_collision_geom_count": live_collision_inventory[
@@ -10363,6 +10764,7 @@ def _execute_high_safe_wrist_yaw(
             candidate["candidate_id"]
             for candidate in diagnostic_only_detour_candidates
         ],
+        "authorized_detour_plan": cabinet_detour_plan,
         "manifest_path": str(diagnostic_manifest.resolve()),
     }
     print(
@@ -11234,6 +11636,38 @@ def _seek_stable_plate_contact(
         args.position_action_scale
         * args.plate_contact_seek_max_translation_action
     )
+    cabinet_detour_plan = None
+    if controller_live_diagnostic is not None:
+        if not isinstance(controller_live_diagnostic, dict):
+            raise RuntimeError(
+                "controller live diagnostic context must be a dictionary"
+            )
+        cabinet_detour_plan = controller_live_diagnostic.get(
+            "authorized_detour_plan"
+        )
+        if cabinet_detour_plan is not None:
+            if not (
+                cabinet_detour_plan.get("route_authorized", False)
+                and cabinet_detour_plan.get("selected", False)
+                and cabinet_detour_plan.get("selection_eligible", False)
+                and not cabinet_detour_plan.get("diagnostic_only", True)
+            ):
+                raise RuntimeError(
+                    "native cabinet detour plan is not executable"
+                )
+            if not np.isclose(
+                float(
+                    cabinet_detour_plan[
+                        "maximum_controller_world_step_m"
+                    ]
+                ),
+                maximum_controller_world_step,
+                rtol=0.0,
+                atol=0.0,
+            ):
+                raise RuntimeError(
+                    "native cabinet detour controller step binding changed"
+                )
     overhead_staging_z, overhead_staging_geometry = (
         _compiled_overhead_staging_geometry(
             env,
@@ -11550,6 +11984,15 @@ def _seek_stable_plate_contact(
             ),
         }
     )
+    if cabinet_detour_plan is not None:
+        structural_seek_context.update(
+            {
+                "authorized_native_cabinet_detour": cabinet_detour_plan,
+                "structural_route_order": list(
+                    cabinet_detour_plan["route_order"]
+                ),
+            }
+        )
 
     latest_outside_side_guard = initial_outside_side_guard
     latest_overhead_guard = _live_compiled_overhead_guard(
@@ -11571,7 +12014,10 @@ def _seek_stable_plate_contact(
     outside_side_motion_steps = 0
     outside_side_feedback_steps = []
     lateral_settle_state = None
-    structural_stage = "overhead_high_corridor_lateral"
+    if cabinet_detour_plan is not None:
+        structural_stage = "minus_x_high_lateral"
+    else:
+        structural_stage = "overhead_high_corridor_lateral"
     overhead_horizontal_z = float(initial_eef[2])
     latest_vertical_step_progress_m = 0.0
     lateral_resume_stage = None
@@ -11579,6 +12025,10 @@ def _seek_stable_plate_contact(
     high_plane_workspace_saturation_observations = []
     fixed_safe_z = None
     structural_stage_action_counts = {
+        "minus_x_high_lateral": 0,
+        "cabinet_y_high_pass": 0,
+        "minus_x_vertical_descent": 0,
+        "under_cabinet_low_x_return": 0,
         "overhead_high_corridor_lateral": 0,
         "workspace_release_diagonal": 0,
         "overhead_corridor_descent": 0,
@@ -11698,6 +12148,87 @@ def _seek_stable_plate_contact(
                 )
                 lateral_resume_stage = structural_stage
                 structural_stage = "lateral_rebuffer_brake"
+        cabinet_detour_pre_guard = None
+        if cabinet_detour_plan is not None and structural_stage in set(
+            cabinet_detour_plan["route_order"]
+        ):
+            cabinet_detour_pre_guard = _live_native_cabinet_detour_guard(
+                env,
+                eef_position=current_eef,
+                plan=cabinet_detour_plan,
+                stage=structural_stage,
+            )
+            if not cabinet_detour_pre_guard["accepted"]:
+                raise RuntimeError(
+                    "native cabinet detour pre-action live guard failed: "
+                    f"stage={structural_stage} guard_step={guard_step} "
+                    f"guard={json.dumps(cabinet_detour_pre_guard, sort_keys=True)}"
+                )
+        if structural_stage == "minus_x_high_lateral":
+            detour_target = np.asarray(
+                cabinet_detour_plan["waypoints"]["minus_x_high"],
+                dtype=float,
+            )
+            if (
+                np.linalg.norm(current_eef[:2] - detour_target[:2])
+                <= args.position_tolerance
+            ):
+                next_guard = _live_native_cabinet_detour_guard(
+                    env,
+                    eef_position=current_eef,
+                    plan=cabinet_detour_plan,
+                    stage="cabinet_y_high_pass",
+                )
+                if next_guard["accepted"]:
+                    structural_stage = "cabinet_y_high_pass"
+                    cabinet_detour_pre_guard = next_guard
+        if structural_stage == "cabinet_y_high_pass":
+            detour_target = np.asarray(
+                cabinet_detour_plan["waypoints"]["cabinet_y_high"],
+                dtype=float,
+            )
+            if (
+                np.linalg.norm(current_eef[:2] - detour_target[:2])
+                <= args.position_tolerance
+            ):
+                structural_stage = "minus_x_vertical_descent"
+                cabinet_detour_pre_guard = (
+                    _live_native_cabinet_detour_guard(
+                        env,
+                        eef_position=current_eef,
+                        plan=cabinet_detour_plan,
+                        stage=structural_stage,
+                    )
+                )
+        if structural_stage == "minus_x_vertical_descent":
+            detour_target = np.asarray(
+                cabinet_detour_plan["waypoints"]["cabinet_y_low"],
+                dtype=float,
+            )
+            if current_eef[2] <= detour_target[2] + args.position_tolerance:
+                next_guard = _live_native_cabinet_detour_guard(
+                    env,
+                    eef_position=current_eef,
+                    plan=cabinet_detour_plan,
+                    stage="under_cabinet_low_x_return",
+                )
+                if next_guard["accepted"]:
+                    structural_stage = "under_cabinet_low_x_return"
+                    cabinet_detour_pre_guard = next_guard
+                    fixed_safe_z = float(current_eef[2])
+        if structural_stage == "under_cabinet_low_x_return":
+            detour_target = np.asarray(
+                cabinet_detour_plan["waypoints"][
+                    "terminal_outside_side_low"
+                ],
+                dtype=float,
+            )
+            if (
+                np.linalg.norm(current_eef[:2] - detour_target[:2])
+                <= args.position_tolerance
+            ):
+                if pre_action_guard["accepted"]:
+                    break
         if structural_stage == "fixed_safe_z_lateral_approach":
             lateral_error = float(
                 np.linalg.norm(
@@ -11823,7 +12354,66 @@ def _seek_stable_plate_contact(
                     ),
                 )
             )
-        if structural_stage == "overhead_corridor_descent":
+        if structural_stage in {
+            "minus_x_high_lateral",
+            "cabinet_y_high_pass",
+            "under_cabinet_low_x_return",
+        }:
+            waypoint_key = {
+                "minus_x_high_lateral": "minus_x_high",
+                "cabinet_y_high_pass": "cabinet_y_high",
+                "under_cabinet_low_x_return": (
+                    "terminal_outside_side_low"
+                ),
+            }[structural_stage]
+            detour_target = np.asarray(
+                cabinet_detour_plan["waypoints"][waypoint_key],
+                dtype=float,
+            )
+            action, path_control = _fixed_z_lateral_approach_action(
+                current_eef=current_eef,
+                lateral_target_xy=detour_target[:2],
+                gripper=gripper,
+                position_action_scale=args.position_action_scale,
+                maximum_translation_action=(
+                    args.plate_contact_seek_max_translation_action
+                ),
+            )
+            feedback = {
+                "mode": structural_stage,
+                "action": action.tolist(),
+                "native_cabinet_detour_waypoint_key": waypoint_key,
+                "native_cabinet_detour_target": detour_target.tolist(),
+                "native_cabinet_detour_pre_guard": (
+                    cabinet_detour_pre_guard
+                ),
+                "fixed_z_lateral_path_control": path_control,
+            }
+        elif structural_stage == "minus_x_vertical_descent":
+            detour_target = np.asarray(
+                cabinet_detour_plan["waypoints"]["cabinet_y_low"],
+                dtype=float,
+            )
+            action, path_control = _fixed_xy_vertical_approach_action(
+                current_eef=current_eef,
+                target_z=float(detour_target[2]),
+                gripper=gripper,
+                position_action_scale=args.position_action_scale,
+                maximum_translation_action=(
+                    args.plate_contact_seek_max_translation_action
+                ),
+            )
+            feedback = {
+                "mode": structural_stage,
+                "action": action.tolist(),
+                "native_cabinet_detour_waypoint_key": "cabinet_y_low",
+                "native_cabinet_detour_target": detour_target.tolist(),
+                "native_cabinet_detour_pre_guard": (
+                    cabinet_detour_pre_guard
+                ),
+                "fixed_xy_vertical_path_control": path_control,
+            }
+        elif structural_stage == "overhead_corridor_descent":
             action, path_control = (
                 _compiled_adaptive_vertical_descent_action(
                     current_eef=current_eef,
@@ -12148,6 +12738,19 @@ def _seek_stable_plate_contact(
         )
         outside_side_guard_checks += 1
         feedback["post_action_guard"] = latest_outside_side_guard
+        cabinet_detour_post_guard = None
+        if cabinet_detour_plan is not None and stage_before_action in set(
+            cabinet_detour_plan["route_order"]
+        ):
+            cabinet_detour_post_guard = _live_native_cabinet_detour_guard(
+                env,
+                eef_position=after_eef,
+                plan=cabinet_detour_plan,
+                stage=stage_before_action,
+            )
+            feedback["native_cabinet_detour_post_guard"] = (
+                cabinet_detour_post_guard
+            )
         if stage_before_action in overhead_route_stages:
             latest_overhead_guard = _live_compiled_overhead_guard(
                 env, overhead_staging_geometry
@@ -12713,9 +13316,36 @@ def _seek_stable_plate_contact(
                     if stage_before_action in overhead_route_stages
                     else {}
                 ),
+                **(
+                    {
+                        "native_cabinet_detour_guard": (
+                            cabinet_detour_post_guard
+                        )
+                    }
+                    if cabinet_detour_post_guard is not None
+                    else {}
+                ),
             },
         )
         structural_violations = []
+        if (
+            cabinet_detour_post_guard is not None
+            and not cabinet_detour_post_guard["accepted"]
+        ):
+            structural_violations.extend(
+                cabinet_detour_post_guard["violations"]
+            )
+        if cabinet_detour_post_guard is not None and (
+            latest_outside_side_guard[
+                "finger_table_vertical_clearance_m"
+            ]
+            < latest_outside_side_guard[
+                "required_finger_table_clearance_m"
+            ]
+        ):
+            structural_violations.append(
+                "strict_finger_table_clearance_lost_in_cabinet_detour"
+            )
         required_clearance = float(
             latest_outside_side_guard[
                 "required_outside_clearance_m"
@@ -12816,10 +13446,48 @@ def _seek_stable_plate_contact(
             f"samples={json.dumps(samples, sort_keys=True)} "
             f"scene={json.dumps(diagnostics(), sort_keys=True)}"
         )
+    final_cabinet_detour_guard = None
+    cabinet_detour_completion = None
+    if cabinet_detour_plan is not None:
+        final_cabinet_detour_guard = _live_native_cabinet_detour_guard(
+            env,
+            eef_position=np.asarray(
+                rollout.obs["robot0_eef_pos"], dtype=float
+            ),
+            plan=cabinet_detour_plan,
+            stage="under_cabinet_low_x_return",
+        )
+        if not final_cabinet_detour_guard["accepted"]:
+            raise RuntimeError(
+                "native cabinet detour terminal live guard failed: "
+                f"source={source} guard="
+                f"{json.dumps(final_cabinet_detour_guard, sort_keys=True)}"
+            )
     outside_side_sample = capture("outside_side", 0, False, True)
     outside_side_sample["outside_side_guard"] = (
         final_outside_side_guard
     )
+    if final_cabinet_detour_guard is not None:
+        outside_side_sample["native_cabinet_detour_guard"] = (
+            final_cabinet_detour_guard
+        )
+        if not isinstance(controller_live_diagnostic, dict):
+            raise RuntimeError(
+                "executed native cabinet detour lacks diagnostic context"
+            )
+        cabinet_detour_completion = (
+            _record_native_cabinet_detour_completion(
+                diagnostic_context=controller_live_diagnostic,
+                source=source,
+                final_guard=final_cabinet_detour_guard,
+                stage_action_counts=structural_stage_action_counts,
+                used_steps=outside_side_motion_steps,
+                remaining_steps=(
+                    structural_waypoint_budget
+                    - outside_side_motion_steps
+                ),
+            )
+        )
 
     two_finger_contact_observed = False
     for seek_index in range(1, args.plate_contact_seek_max_steps + 1):
@@ -12883,6 +13551,8 @@ def _seek_stable_plate_contact(
             contact_target, dtype=float
         ).tolist(),
         "compiled_geometry": geometry,
+        "authorized_native_cabinet_detour": cabinet_detour_plan,
+        "native_cabinet_detour_completion": cabinet_detour_completion,
         "outside_side_guard": final_outside_side_guard,
         "outside_side_guard_checks": outside_side_guard_checks,
         "compiled_overhead_staging_geometry": (
