@@ -3213,6 +3213,161 @@ def _compiled_vertical_staging_corridor(
     }
 
 
+def _strict_native_high_prebuffer_target(
+    *,
+    native_outside_high_target,
+    corridor_high_target,
+    outward_direction_xy,
+    minimum_lateral_reserve_m,
+    maximum_nextafter_steps=128,
+):
+    """Add only the representable native-tangent reserve needed at high Z."""
+    native_target = np.asarray(native_outside_high_target, dtype=float)
+    corridor_target = np.asarray(corridor_high_target, dtype=float)
+    outward = np.asarray(outward_direction_xy, dtype=float)
+    if (
+        native_target.shape != (3,)
+        or corridor_target.shape != (3,)
+        or outward.shape != (2,)
+        or not np.all(np.isfinite(native_target))
+        or not np.all(np.isfinite(corridor_target))
+        or not np.all(np.isfinite(outward))
+        or not np.isfinite(minimum_lateral_reserve_m)
+        or minimum_lateral_reserve_m <= 0.0
+        or not isinstance(maximum_nextafter_steps, (int, np.integer))
+        or not (1 <= int(maximum_nextafter_steps) <= 128)
+    ):
+        raise ValueError("native high-prebuffer inputs are invalid")
+    outward_norm = float(np.linalg.norm(outward))
+    if not np.isfinite(outward_norm) or outward_norm <= 1e-9:
+        raise ValueError("native high-prebuffer direction is invalid")
+    outward = outward / outward_norm
+
+    raw_delta = corridor_target[:2] - native_target[:2]
+    raw_euclidean_reserve = float(np.linalg.norm(raw_delta))
+    raw_outward_projection = float(np.dot(raw_delta, outward))
+    raw_transverse_residual = float(
+        np.linalg.norm(raw_delta - raw_outward_projection * outward)
+    )
+    if not (
+        np.isfinite(raw_euclidean_reserve)
+        and np.isfinite(raw_outward_projection)
+        and np.isfinite(raw_transverse_residual)
+    ):
+        raise RuntimeError("native high-prebuffer raw reserve is non-finite")
+    if raw_outward_projection <= 0.0:
+        raise RuntimeError(
+            "corridor high target points against the normalized native "
+            "outward tangent"
+        )
+
+    selected_target = corridor_target.copy()
+    selected_scalar_reserve = raw_outward_projection
+    final_euclidean_reserve = raw_euclidean_reserve
+    final_outward_projection = raw_outward_projection
+    nextafter_iterations = 0
+    raw_reserve_is_strict = bool(
+        raw_euclidean_reserve > minimum_lateral_reserve_m
+        and raw_outward_projection > minimum_lateral_reserve_m
+    )
+    if not raw_reserve_is_strict:
+        for nextafter_iterations in range(
+            1, int(maximum_nextafter_steps) + 1
+        ):
+            selected_scalar_reserve = float(
+                np.nextafter(selected_scalar_reserve, np.inf)
+            )
+            if not np.isfinite(selected_scalar_reserve):
+                raise RuntimeError(
+                    "native high-prebuffer scalar became non-finite"
+                )
+            selected_target = corridor_target.copy()
+            selected_target[:2] = (
+                native_target[:2] + outward * selected_scalar_reserve
+            )
+            if not np.all(np.isfinite(selected_target)):
+                raise RuntimeError(
+                    "native high-prebuffer target became non-finite"
+                )
+            final_delta = selected_target[:2] - native_target[:2]
+            final_euclidean_reserve = float(np.linalg.norm(final_delta))
+            final_outward_projection = float(np.dot(final_delta, outward))
+            if not (
+                np.isfinite(final_euclidean_reserve)
+                and np.isfinite(final_outward_projection)
+            ):
+                raise RuntimeError(
+                    "native high-prebuffer reconstructed reserve is "
+                    "non-finite"
+                )
+            if (
+                final_euclidean_reserve > minimum_lateral_reserve_m
+                and final_outward_projection > minimum_lateral_reserve_m
+            ):
+                break
+        else:
+            raise RuntimeError(
+                "native high-prebuffer exhausted 128 scalar nextafter steps "
+                "without a representable strict reserve"
+            )
+
+    prebuffer_displacement = float(
+        np.linalg.norm(selected_target[:2] - corridor_target[:2])
+    )
+    maximum_inward_return = float(
+        np.nextafter(prebuffer_displacement, np.inf)
+    )
+    if not (
+        np.all(np.isfinite(selected_target))
+        and np.isfinite(prebuffer_displacement)
+        and np.isfinite(maximum_inward_return)
+        and final_euclidean_reserve > minimum_lateral_reserve_m
+        and final_outward_projection > minimum_lateral_reserve_m
+    ):
+        raise RuntimeError(
+            "native high-prebuffer final strict reserve is invalid"
+        )
+    return selected_target, {
+        "accepted": True,
+        "native_tangent_provenance": (
+            "live geometry['outward_direction_xy'], normalized at high-plane "
+            "route registration"
+        ),
+        "normalized_outward_direction_xy": outward.tolist(),
+        "outward_direction_input_norm": outward_norm,
+        "native_outside_high_target": native_target.tolist(),
+        "unchanged_corridor_high_target": corridor_target.tolist(),
+        "minimum_strict_lateral_reserve_m": float(
+            minimum_lateral_reserve_m
+        ),
+        "raw_euclidean_reserve_m": raw_euclidean_reserve,
+        "raw_outward_projection_m": raw_outward_projection,
+        "raw_transverse_residual_m": raw_transverse_residual,
+        "raw_euclidean_reserve_gap_m": float(
+            raw_euclidean_reserve - minimum_lateral_reserve_m
+        ),
+        "raw_outward_projection_gap_m": float(
+            raw_outward_projection - minimum_lateral_reserve_m
+        ),
+        "raw_reserve_was_already_strict": raw_reserve_is_strict,
+        "selected_scalar_reserve_m": selected_scalar_reserve,
+        "final_euclidean_reserve_m": final_euclidean_reserve,
+        "final_outward_projection_m": final_outward_projection,
+        "final_euclidean_reserve_surplus_m": float(
+            final_euclidean_reserve - minimum_lateral_reserve_m
+        ),
+        "final_outward_projection_surplus_m": float(
+            final_outward_projection - minimum_lateral_reserve_m
+        ),
+        "nextafter_iterations": int(nextafter_iterations),
+        "maximum_nextafter_steps": int(maximum_nextafter_steps),
+        "prebuffer_target": selected_target.tolist(),
+        "prebuffer_displacement_from_corridor_m": prebuffer_displacement,
+        "maximum_inward_return_one_ulp_bound_m": maximum_inward_return,
+        "corridor_high_and_side_targets_unchanged": True,
+    }
+
+
 def _fixed_z_lateral_approach_action(
     *,
     current_eef,
@@ -4547,10 +4702,48 @@ def _compiled_adaptive_workspace_release_action(
     native_action_spec,
     expected_pair_count,
     worst_case_controller_world_step_m,
+    outward_direction_xy=None,
+    maximum_inward_xy_correction_m=None,
 ):
-    """Move outward/down only with buffer16; recover while base8 remains."""
+    """Release toward the corridor under buffer16 and optional ULP return."""
     current_eef = np.asarray(current_eef, dtype=float)
     corridor_target_xy = np.asarray(corridor_target_xy, dtype=float)
+    native_tangent_return_gate_enabled = bool(
+        outward_direction_xy is not None
+        or maximum_inward_xy_correction_m is not None
+    )
+    if (outward_direction_xy is None) != (
+        maximum_inward_xy_correction_m is None
+    ):
+        raise ValueError(
+            "workspace-release native-tangent return gate is incomplete"
+        )
+    normalized_outward_direction = None
+    maximum_inward_xy_correction = None
+    if native_tangent_return_gate_enabled:
+        normalized_outward_direction = np.asarray(
+            outward_direction_xy, dtype=float
+        )
+        if (
+            normalized_outward_direction.shape != (2,)
+            or not np.all(np.isfinite(normalized_outward_direction))
+            or not np.isfinite(maximum_inward_xy_correction_m)
+            or maximum_inward_xy_correction_m < 0.0
+        ):
+            raise ValueError(
+                "workspace-release native-tangent return gate is invalid"
+            )
+        outward_norm = float(np.linalg.norm(normalized_outward_direction))
+        if not np.isfinite(outward_norm) or outward_norm <= 1e-9:
+            raise ValueError(
+                "workspace-release native-tangent direction is invalid"
+            )
+        normalized_outward_direction = (
+            normalized_outward_direction / outward_norm
+        )
+        maximum_inward_xy_correction = float(
+            maximum_inward_xy_correction_m
+        )
     if (
         current_eef.shape != (3,)
         or corridor_target_xy.shape != (2,)
@@ -4609,6 +4802,29 @@ def _compiled_adaptive_workspace_release_action(
 
     xy_error = corridor_target_xy - current_eef[:2]
     xy_remaining = float(np.linalg.norm(xy_error))
+    requested_outward_projection = None
+    requested_inward_xy_correction = 0.0
+    if native_tangent_return_gate_enabled:
+        requested_outward_projection = float(
+            np.dot(xy_error, normalized_outward_direction)
+        )
+        requested_inward_xy_correction = float(
+            max(0.0, -requested_outward_projection)
+        )
+        if not (
+            np.isfinite(requested_outward_projection)
+            and np.isfinite(requested_inward_xy_correction)
+        ):
+            raise RuntimeError(
+                "workspace-release native-tangent return is non-finite"
+            )
+        if requested_inward_xy_correction > (
+            maximum_inward_xy_correction
+        ):
+            raise RuntimeError(
+                "workspace-release inward correction exceeds the registered "
+                "high-prebuffer one-ULP bound"
+            )
     full_downward_z_error = float(
         max(0.0, current_eef[2] - release_target_z)
     )
@@ -5073,7 +5289,11 @@ def _compiled_adaptive_workspace_release_action(
         "motion_kind": (
             "positive_z_inertial_recovery"
             if recovery_required
-            else "outward_downward_workspace_release"
+            else (
+                "ulp_bounded_inward_downward_workspace_release"
+                if requested_inward_xy_correction > 0.0
+                else "outward_downward_workspace_release"
+            )
         ),
         "formula": (
             "request corridor XY plus negative Z capped in world magnitude "
@@ -5085,10 +5305,35 @@ def _compiled_adaptive_workspace_release_action(
             "that fixed buffer16; size and revalidate the literal scalar "
             "action against every unchanged post-action base8 clearance; if "
             "pre-action buffer16 is exhausted, prohibit negative Z and issue "
-            "event-driven pure +Z with the unchanged recovery route norm"
+            "event-driven pure +Z with the unchanged recovery route norm; "
+            "when the registered high target was nudged outward only to make "
+            "the strict 8 mm reserve representable, permit an inward return "
+            "only within its recorded one-ULP-expanded nudge distance"
         ),
         "current_eef": current_eef.tolist(),
         "corridor_target_xy": corridor_target_xy.tolist(),
+        "native_tangent_return_gate_enabled": bool(
+            native_tangent_return_gate_enabled
+        ),
+        "normalized_outward_direction_xy": (
+            None
+            if normalized_outward_direction is None
+            else normalized_outward_direction.tolist()
+        ),
+        "requested_corridor_error_outward_projection_m": (
+            requested_outward_projection
+        ),
+        "requested_inward_xy_correction_m": (
+            requested_inward_xy_correction
+        ),
+        "maximum_inward_xy_correction_one_ulp_bound_m": (
+            maximum_inward_xy_correction
+        ),
+        "inward_xy_correction_within_one_ulp_bound": bool(
+            not native_tangent_return_gate_enabled
+            or requested_inward_xy_correction
+            <= maximum_inward_xy_correction
+        ),
         "release_target_z_m": float(release_target_z),
         "xy_remaining_m": xy_remaining,
         "full_release_downward_z_error_m": full_downward_z_error,
@@ -5156,6 +5401,13 @@ def _compiled_adaptive_workspace_release_action(
         "proof": {
             "outward_xy_plus_nonpositive_z_zero_rotation": bool(
                 not recovery_required
+                and requested_inward_xy_correction == 0.0
+            ),
+            "inward_xy_limited_to_prebuffer_one_ulp_bound": bool(
+                native_tangent_return_gate_enabled
+                and requested_inward_xy_correction > 0.0
+                and requested_inward_xy_correction
+                <= maximum_inward_xy_correction
             ),
             "pure_positive_z_zero_xy_rotation_recovery": bool(
                 recovery_required
@@ -8765,16 +9017,31 @@ def _seek_stable_plate_contact(
             args.plate_contact_seek_max_translation_action
         ),
     )
-    high_lateral_prebuffer_target = corridor_high_target.copy()
+    (
+        high_lateral_prebuffer_target,
+        high_lateral_prebuffer_evidence,
+    ) = _strict_native_high_prebuffer_target(
+        native_outside_high_target=overhead_outside_high_target,
+        corridor_high_target=corridor_high_target,
+        outward_direction_xy=geometry["outward_direction_xy"],
+        minimum_lateral_reserve_m=maximum_controller_world_step,
+        maximum_nextafter_steps=128,
+    )
     high_lateral_anticooupling_reserve = float(
-        np.linalg.norm(
-            high_lateral_prebuffer_target[:2]
-            - overhead_outside_high_target[:2]
-        )
+        high_lateral_prebuffer_evidence[
+            "final_euclidean_reserve_m"
+        ]
+    )
+    high_lateral_outward_projection = float(
+        high_lateral_prebuffer_evidence[
+            "final_outward_projection_m"
+        ]
     )
     if not (
         np.all(np.isfinite(high_lateral_prebuffer_target))
         and high_lateral_anticooupling_reserve
+        > maximum_controller_world_step
+        and high_lateral_outward_projection
         > maximum_controller_world_step
     ):
         raise RuntimeError(
@@ -8861,12 +9128,21 @@ def _seek_stable_plate_contact(
             "high_plane_anticooupling_lateral_reserve_m": (
                 high_lateral_anticooupling_reserve
             ),
+            "high_plane_anticooupling_outward_projection_m": (
+                high_lateral_outward_projection
+            ),
+            "high_plane_anticooupling_prebuffer_evidence": (
+                high_lateral_prebuffer_evidence
+            ),
             "high_plane_anticooupling_lateral_reserve_source": (
-                "registered corridor_high_target minus unchanged native "
-                "outside_high_target; corridor target is compiled from the "
-                "native no-contact boundary, native outside clearance, "
-                "strict required clearance, and the existing maximum "
-                "controller world step"
+                "start from registered corridor_high_target minus unchanged "
+                "native outside_high_target; if final-coordinate Euclidean "
+                "reserve or normalized native-tangent projection does not "
+                "remain strictly above the existing controller world step "
+                "after floating-point reconstruction, advance only that "
+                "scalar projection by at most 128 nextafter(+inf) values and "
+                "reconstruct the high-plane prebuffer; corridor high/side "
+                "targets, candidate semantics, and threshold remain unchanged"
             ),
             "native_high_boundary_crossing_gate": {
                 "uses_position_tolerance": False,
@@ -8907,7 +9183,10 @@ def _seek_stable_plate_contact(
                     "native_center_high_to_registered_corridor_high_"
                     "anticooupling_prebuffer"
                 ),
-                "outward_downward_workspace_release_diagonal",
+                (
+                    "corridor_directed_workspace_release_diagonal_with_only_"
+                    "registered_ulp_bounded_inward_return"
+                ),
                 "corridor_xy_adaptive_pure_z_descent",
                 "vertical_tail_brake_and_zero_confirmation",
                 "live_corridor_entry_or_xy_drift_correction",
@@ -8920,9 +9199,13 @@ def _seek_stable_plate_contact(
                 "center-high Z plane; this moves the existing geometry-derived "
                 "one-world-step corridor reserve to the safe high plane without "
                 "redefining the native outside-high target; only after that "
-                "target passes, command residual outward XY plus nonpositive Z "
-                "toward the same strict corridor XY and outside-side Z to "
-                "release the high workspace; if that registered target is "
+                "target passes, command corridor-directed XY plus nonpositive "
+                "Z toward the unchanged strict corridor XY and outside-side Z "
+                "to release the high workspace; XY remains outward except for "
+                "a return from the representability-only prebuffer nudge, "
+                "which must remain within its recorded one-ULP-expanded "
+                "displacement or fail closed before action compilation; if "
+                "that registered target is "
                 "outside the runtime native action bound, permit the same "
                 "release only after the existing push-tracking window proves "
                 "persistent outward requests with EEF and live-clearance "
@@ -9241,6 +9524,12 @@ def _seek_stable_plate_contact(
                 worst_case_controller_world_step_m=(
                     maximum_controller_world_step
                 ),
+                outward_direction_xy=geometry["outward_direction_xy"],
+                maximum_inward_xy_correction_m=(
+                    high_lateral_prebuffer_evidence[
+                        "maximum_inward_return_one_ulp_bound_m"
+                    ]
+                ),
             )
         workspace_negative_z_action_requires_buffer16 = bool(
             stage_before_action == "workspace_release_diagonal"
@@ -9432,7 +9721,7 @@ def _seek_stable_plate_contact(
                 "mode": structural_stage,
                 "action": action.tolist(),
                 "compiled_adaptive_workspace_release_envelope": path_control,
-                "lateral_route_phase": "outward_downward_workspace_release",
+                "lateral_route_phase": path_control["motion_kind"],
                 "pre_action_measured_vertical_step_progress_m": (
                     latest_vertical_step_progress_m
                 ),

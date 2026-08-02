@@ -66,6 +66,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _select_executable_wrist_yaw_candidate,
     _select_reachable_trailing_contact,
     _side_contact_targets_from_compiled_bounds,
+    _strict_native_high_prebuffer_target,
     _validated_rigid_rotation_matrix,
     _wrist_yaw_attainment_evidence,
     _wrist_yaw_stage_budget_evidence,
@@ -3597,6 +3598,7 @@ def test_500199_routes_reachable_outside_high_before_workspace_release():
     )
     assert evidence["proof"] == {
         "outward_xy_plus_nonpositive_z_zero_rotation": True,
+        "inward_xy_limited_to_prebuffer_one_ulp_bound": False,
         "pure_positive_z_zero_xy_rotation_recovery": False,
         "strictly_inside_native_3d_action_norm_bound": True,
         "does_not_cross_corridor_target_xy": True,
@@ -4843,8 +4845,10 @@ def test_500251_manifest_records_true_high_target_without_gate_changes():
     release = controller.split(
         "def _compiled_adaptive_workspace_release_action(", 1
     )[1].split("\ndef _compiled_adaptive_lateral_rebuffer_action", 1)[0]
-    assert "high_lateral_prebuffer_target = corridor_high_target.copy()" in (
-        bounded_seek
+    assert "_strict_native_high_prebuffer_target(" in bounded_seek
+    assert "maximum_nextafter_steps=128" in bounded_seek
+    assert (
+        "maximum_inward_xy_correction_m=(" in bounded_seek
     )
     assert (
         "lateral_target_xy=high_lateral_prebuffer_target[:2]"
@@ -4875,6 +4879,234 @@ def test_500251_manifest_records_true_high_target_without_gate_changes():
         "        default=0.10,"
         in controller
     )
+
+
+def test_502404_exact_high_prebuffer_roundoff_regression_and_budget():
+    native_outside_high = np.array(
+        [
+            0.1585669667189191,
+            0.017063712111350614,
+            1.062506338529415,
+        ]
+    )
+    corridor_high = np.array(
+        [
+            0.16592415268504696,
+            0.020205656518849122,
+            1.062506338529415,
+        ]
+    )
+    original_native = native_outside_high.copy()
+    original_corridor = corridor_high.copy()
+    native_clockwise_tangent = np.array(
+        [0.9196482457659836, 0.39274305093731343]
+    )
+    threshold = 0.008
+
+    prebuffer, evidence = _strict_native_high_prebuffer_target(
+        native_outside_high_target=native_outside_high,
+        corridor_high_target=corridor_high,
+        outward_direction_xy=native_clockwise_tangent,
+        minimum_lateral_reserve_m=threshold,
+        maximum_nextafter_steps=128,
+    )
+
+    assert np.array_equal(native_outside_high, original_native)
+    assert np.array_equal(corridor_high, original_corridor)
+    assert np.array_equal(
+        prebuffer,
+        np.array(
+            [
+                0.16592415268504698,
+                0.020205656518849126,
+                1.062506338529415,
+            ]
+        ),
+    )
+    assert evidence["raw_euclidean_reserve_m"] == (
+        0.007999999999999993
+    )
+    assert evidence["raw_outward_projection_m"] == (
+        0.007999999999999993
+    )
+    assert evidence["raw_euclidean_reserve_gap_m"] == (
+        -6.938893903907228e-18
+    )
+    assert evidence["selected_scalar_reserve_m"] == (
+        0.008000000000000007
+    )
+    assert evidence["final_euclidean_reserve_m"] == (
+        0.008000000000000021
+    )
+    assert evidence["final_outward_projection_m"] == (
+        0.008000000000000021
+    )
+    assert evidence["nextafter_iterations"] == 8
+    assert evidence["maximum_nextafter_steps"] == 128
+    assert evidence["final_euclidean_reserve_m"] > threshold
+    assert evidence["final_outward_projection_m"] > threshold
+    assert evidence["prebuffer_displacement_from_corridor_m"] == (
+        2.797157557069881e-17
+    )
+    assert evidence["maximum_inward_return_one_ulp_bound_m"] > (
+        evidence["prebuffer_displacement_from_corridor_m"]
+    )
+    assert "live geometry['outward_direction_xy']" in (
+        evidence["native_tangent_provenance"]
+    )
+    assert evidence["corridor_high_and_side_targets_unchanged"] is True
+
+    native_center_high = np.array(
+        [0.05554037906914336, -0.029154933875409465]
+    )
+    strict_native_high_world_step = float(np.nextafter(0.08, 0.0))
+    old_high_route_lower_bound = float(
+        np.linalg.norm(corridor_high[:2] - native_center_high)
+        / strict_native_high_world_step
+    )
+    nudged_high_route_lower_bound = float(
+        (
+            np.linalg.norm(prebuffer[:2] - native_center_high)
+            + evidence["prebuffer_displacement_from_corridor_m"]
+        )
+        / strict_native_high_world_step
+    )
+    assert np.ceil(nudged_high_route_lower_bound) == np.ceil(
+        old_high_route_lower_bound
+    )
+    assert np.ceil(nudged_high_route_lower_bound) < 167
+    assert (
+        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        in CONTROLLER_REFERENCE.read_text()
+    )
+
+
+def test_502404_high_prebuffer_fails_closed_on_invalid_numeric_routes():
+    valid_native = np.array([0.1, 0.2, 1.0])
+    valid_corridor = np.array([0.108, 0.2, 1.0])
+    with pytest.raises(ValueError, match="inputs are invalid"):
+        _strict_native_high_prebuffer_target(
+            native_outside_high_target=np.array([np.nan, 0.2, 1.0]),
+            corridor_high_target=valid_corridor,
+            outward_direction_xy=np.array([1.0, 0.0]),
+            minimum_lateral_reserve_m=0.008,
+        )
+    with pytest.raises(RuntimeError, match="against the normalized"):
+        _strict_native_high_prebuffer_target(
+            native_outside_high_target=valid_native,
+            corridor_high_target=np.array([0.092, 0.2, 1.0]),
+            outward_direction_xy=np.array([1.0, 0.0]),
+            minimum_lateral_reserve_m=0.008,
+        )
+
+    # At this magnitude, 0.0078125 is representable in the target coordinate,
+    # but 128 scalar ULP increments cannot change that reconstructed target.
+    coarse_native = np.array([1.0e12, 0.0, 1.0])
+    coarse_corridor = np.array([1.0e12 + 0.0078125, 0.0, 1.0])
+    with pytest.raises(RuntimeError, match="exhausted 128"):
+        _strict_native_high_prebuffer_target(
+            native_outside_high_target=coarse_native,
+            corridor_high_target=coarse_corridor,
+            outward_direction_xy=np.array([1.0, 0.0]),
+            minimum_lateral_reserve_m=0.008,
+            maximum_nextafter_steps=128,
+        )
+
+
+def test_502404_workspace_release_allows_only_registered_ulp_return():
+    native_outside_high = np.array(
+        [0.1585669667189191, 0.017063712111350614, 1.0]
+    )
+    corridor_high = np.array(
+        [0.16592415268504696, 0.020205656518849122, 1.0]
+    )
+    native_clockwise_tangent = np.array(
+        [0.9196482457659836, 0.39274305093731343]
+    )
+    prebuffer, prebuffer_evidence = _strict_native_high_prebuffer_target(
+        native_outside_high_target=native_outside_high,
+        corridor_high_target=corridor_high,
+        outward_direction_xy=native_clockwise_tangent,
+        minimum_lateral_reserve_m=0.008,
+    )
+    strict_clearance = np.nextafter(0.0, np.inf)
+    pairs = [
+        {
+            "gripper_geom": f"gripper_{index // 11}",
+            "counterpart_geom": f"native_{index % 11}",
+            "counterpart_kind": (
+                "table" if index % 11 == 10 else "plate"
+            ),
+            "strict_no_contact_clearance_m": strict_clearance,
+            "vertical_clearance_m": 0.13332117746677247,
+            "accepted": True,
+        }
+        for index in range(55)
+    ]
+    guard = {
+        "accepted": True,
+        "one_step_vertical_reserve_m": 0.008,
+        "pairs": pairs,
+    }
+    native_action_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": [-1.0] * 7,
+        "high": [1.0] * 7,
+        "runtime_resolved": True,
+    }
+    inward_bound = prebuffer_evidence[
+        "maximum_inward_return_one_ulp_bound_m"
+    ]
+    action, evidence = _compiled_adaptive_workspace_release_action(
+        current_eef=prebuffer,
+        corridor_target_xy=corridor_high[:2],
+        release_target_z=0.9,
+        measured_vertical_step_progress_m=0.0,
+        overhead_guard=guard,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        native_action_spec=native_action_spec,
+        expected_pair_count=55,
+        worst_case_controller_world_step_m=0.008,
+        outward_direction_xy=native_clockwise_tangent,
+        maximum_inward_xy_correction_m=inward_bound,
+    )
+    assert evidence["motion_kind"] == (
+        "ulp_bounded_inward_downward_workspace_release"
+    )
+    assert evidence["requested_inward_xy_correction_m"] > 0.0
+    assert evidence["requested_inward_xy_correction_m"] <= inward_bound
+    assert evidence["inward_xy_correction_within_one_ulp_bound"] is True
+    assert float(np.dot(action[:2], native_clockwise_tangent)) < 0.0
+    assert action[2] < 0.0
+    assert evidence["compiled_pair_count"] == 55
+    assert evidence["proof"][
+        "inward_xy_limited_to_prebuffer_one_ulp_bound"
+    ] is True
+    assert evidence["proof"][
+        "all_compiled_pairs_retain_strict_base8_after_worst_case_tail"
+    ] is True
+
+    excessive_outward_overshoot = prebuffer.copy()
+    excessive_outward_overshoot[:2] += (
+        native_clockwise_tangent * 1.0e-12
+    )
+    with pytest.raises(RuntimeError, match="one-ULP bound"):
+        _compiled_adaptive_workspace_release_action(
+            current_eef=excessive_outward_overshoot,
+            corridor_target_xy=corridor_high[:2],
+            release_target_z=0.9,
+            measured_vertical_step_progress_m=0.0,
+            overhead_guard=guard,
+            gripper=-1.0,
+            position_action_scale=0.08,
+            native_action_spec=native_action_spec,
+            expected_pair_count=55,
+            worst_case_controller_world_step_m=0.008,
+            outward_direction_xy=native_clockwise_tangent,
+            maximum_inward_xy_correction_m=inward_bound,
+        )
 
 
 def _job500261_saturation_fixture():
