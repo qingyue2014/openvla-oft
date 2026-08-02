@@ -12697,8 +12697,14 @@ def _seek_stable_plate_contact(
     corridor_rebuffer_acceptance_clearance = float(
         vertical_staging_corridor["corridor_clearance_m"]
     )
+    corridor_correction_hold_target_xy = (
+        corridor_rebuffer_target[:2]
+        + corridor_outward_direction
+        * maximum_post_descent_lateral_world_step
+    )
     if not (
         np.all(np.isfinite(corridor_rebuffer_target))
+        and np.all(np.isfinite(corridor_correction_hold_target_xy))
         and np.isfinite(corridor_rebuffer_clearance)
         and np.isfinite(corridor_rebuffer_acceptance_clearance)
         and corridor_rebuffer_clearance
@@ -12899,6 +12905,20 @@ def _seek_stable_plate_contact(
             "descent_corridor_rebuffer_target": (
                 corridor_rebuffer_target.tolist()
             ),
+            "post_descent_correction_controller_hold_target_xy": (
+                corridor_correction_hold_target_xy.tolist()
+            ),
+            "post_descent_correction_controller_outward_reserve_m": (
+                maximum_post_descent_lateral_world_step
+            ),
+            "post_descent_correction_controller_hold_target_formula": (
+                "corridor_rebuffer_target XY plus normalized registered "
+                "outward direction times the existing post-descent one-step "
+                "world displacement; this is only the controller target, "
+                "while formal corridor acceptance continues to use the "
+                "unchanged corridor_rebuffer_target and compiled full "
+                "corridor clearance"
+            ),
             "descent_corridor_hold_target_formula": (
                 "corridor_rebuffer_target XY plus normalized registered "
                 "outward direction times the active overhead-descent one-step "
@@ -12988,7 +13008,11 @@ def _seek_stable_plate_contact(
                 "displacement in that outward direction, so the same "
                 "geometric cap-halving schedule also shrinks this deterministic "
                 "inertia reserve; it does not change formal corridor "
-                "acceptance. The unchanged 0.10 "
+                "acceptance. The post-descent plane-hold correction similarly "
+                "uses its existing one-step 8 mm world displacement as a "
+                "deterministic outward controller-target reserve to overcome "
+                "the observed proportional static error; its formal target "
+                "and clearance remain unchanged. The unchanged 0.10 "
                 "bound remains exclusive to the post-descent XY/nonnegative-Z "
                 "plane-hold correction and contact motion"
             ),
@@ -13487,7 +13511,7 @@ def _seek_stable_plate_contact(
                 prepared_high_lateral_envelope,
             ) = _compiled_adaptive_high_plane_action(
                 current_eef=current_eef,
-                lateral_target_xy=corridor_rebuffer_target[:2],
+                lateral_target_xy=corridor_correction_hold_target_xy,
                 overhead_horizontal_z=overhead_horizontal_z,
                 measured_vertical_step_progress_m=(
                     latest_vertical_step_progress_m
@@ -13840,6 +13864,16 @@ def _seek_stable_plate_contact(
                 "corridor_rebuffer_target": (
                     corridor_rebuffer_target.tolist()
                 ),
+                "correction_controller_hold_target_xy": (
+                    corridor_correction_hold_target_xy.tolist()
+                ),
+                "correction_controller_outward_reserve_m": (
+                    maximum_post_descent_lateral_world_step
+                ),
+                "correction_controller_outward_reserve_source": (
+                    "existing post-descent one-step world displacement"
+                ),
+                "formal_corridor_acceptance_target_unchanged": True,
                 "corridor_rebuffer_clearance_m": (
                     corridor_rebuffer_clearance
                 ),
@@ -14075,7 +14109,7 @@ def _seek_stable_plate_contact(
                 stage_before_action
                 == "overhead_post_descent_corridor_lateral"
             ):
-                lateral_feedback_target = corridor_rebuffer_target[:2]
+                lateral_feedback_target = corridor_correction_hold_target_xy
             else:
                 lateral_feedback_target = corridor_high_target[:2]
             feedback["corridor_lateral_error_m"] = float(

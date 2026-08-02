@@ -4162,6 +4162,21 @@ def test_500193_high_lateral_uses_compiled_dynamic_action_envelope():
         post_descent_compilation
     )
     assert "maximum_translation_action=(" in post_descent_compilation
+    assert (
+        "lateral_target_xy=corridor_correction_hold_target_xy"
+        in post_descent_compilation
+    )
+    assert (
+        "corridor_rebuffer_target[:2]\n"
+        "        + corridor_outward_direction\n"
+        "        * maximum_post_descent_lateral_world_step"
+        in bounded_seek
+    )
+    assert 'corridor_high_target=corridor_rebuffer_target' in bounded_seek
+    assert (
+        '"formal_corridor_acceptance_target_unchanged": True'
+        in post_descent_correction_branch
+    )
     assert "expected_overhead_pair_count" in bounded_seek
 
 
@@ -4293,6 +4308,51 @@ def test_500195_high_plane_hold_reserves_measured_negative_dz_tail():
     assert capped["proof"][
         "inside_configured_translation_action_norm_bound"
     ] is True
+
+    terminal_eef = np.array(
+        [0.129843840417745, -0.02832361366276086, 0.9479874073242678]
+    )
+    base_correction_target = np.array(
+        [0.13287111676914737, -0.02850806703327148]
+    )
+    correction_hold_target = base_correction_target + np.array([0.008, 0.0])
+    terminal_hold_z = 0.9503643006811242
+    base_action, base_evidence = _compiled_adaptive_high_plane_action(
+        current_eef=terminal_eef,
+        lateral_target_xy=base_correction_target,
+        overhead_horizontal_z=terminal_hold_z,
+        measured_vertical_step_progress_m=0.0,
+        overhead_guard=guard,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        native_action_spec=native,
+        expected_pair_count=55,
+        maximum_translation_action=0.10,
+    )
+    correction_action, correction_evidence = (
+        _compiled_adaptive_high_plane_action(
+            current_eef=terminal_eef,
+            lateral_target_xy=correction_hold_target,
+            overhead_horizontal_z=terminal_hold_z,
+            measured_vertical_step_progress_m=0.0,
+            overhead_guard=guard,
+            gripper=-1.0,
+            position_action_scale=0.08,
+            native_action_spec=native,
+            expected_pair_count=55,
+            maximum_translation_action=0.10,
+        )
+    )
+    assert base_evidence["lateral_target_xy"] == pytest.approx(
+        base_correction_target
+    )
+    assert correction_evidence["lateral_target_xy"] == pytest.approx(
+        correction_hold_target
+    )
+    assert correction_action[0] > base_action[0] > 0.0
+    assert correction_action[2] >= 0.0
+    assert np.linalg.norm(correction_action[:3]) < 0.10
+    assert np.all(correction_action[3:6] == 0.0)
 
     tight_pairs = [
         {
