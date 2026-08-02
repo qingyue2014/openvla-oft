@@ -14742,6 +14742,14 @@ def _seek_stable_plate_contact(
                         **reserve_recovery_evidence,
                     }
                 )
+            reserve_recovery_vertical_brake_required = bool(
+                vertical_corridor_reserve_recovery_active
+                and latest_vertical_step_progress_m < 0.0
+            )
+            reserve_recovery_outward_only_active = bool(
+                vertical_corridor_reserve_recovery_active
+                and not reserve_recovery_vertical_brake_required
+            )
             maximum_descent = max(
                 0.0,
                 float(current_eef[2] - corridor_side_target[2]),
@@ -14758,7 +14766,9 @@ def _seek_stable_plate_contact(
                 corridor_side_target, dtype=float
             ).copy()
             vertical_corridor_control_target[:2] = (
-                vertical_corridor_balanced_hold_target_xy
+                corridor_correction_hold_target_xy
+                if reserve_recovery_outward_only_active
+                else vertical_corridor_balanced_hold_target_xy
             )
             action, path_control = (
                 _constraint_prioritized_outside_descent_action(
@@ -14767,14 +14777,18 @@ def _seek_stable_plate_contact(
                     outward_direction_xy=geometry[
                         "outward_direction_xy"
                     ],
-                    maximum_descent_m=maximum_descent,
+                    maximum_descent_m=(
+                        0.0
+                        if vertical_corridor_reserve_recovery_active
+                        else maximum_descent
+                    ),
                     gripper=gripper,
                     position_action_scale=args.position_action_scale,
                     maximum_translation_action=(
                         vertical_corridor_descent_max_translation_action
                     ),
                     active_positive_z_brake=(
-                        vertical_corridor_reserve_recovery_active
+                        reserve_recovery_vertical_brake_required
                     ),
                 )
             )
@@ -14799,6 +14813,17 @@ def _seek_stable_plate_contact(
                 "reserve_recovery_evidence": reserve_recovery_evidence,
                 "reserve_recovery_active": (
                     vertical_corridor_reserve_recovery_active
+                ),
+                "reserve_recovery_vertical_brake_required": (
+                    reserve_recovery_vertical_brake_required
+                ),
+                "reserve_recovery_outward_only_active": (
+                    reserve_recovery_outward_only_active
+                ),
+                "reserve_recovery_outward_only_target_source": (
+                    "existing 8 mm post-descent correction-hold target"
+                    if reserve_recovery_outward_only_active
+                    else None
                 ),
                 "negative_z_descent_suspended_for_reserve_recovery": bool(
                     vertical_corridor_reserve_recovery_active

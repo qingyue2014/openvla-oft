@@ -3244,6 +3244,25 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert recovery_action[2] > 0.0
     assert np.linalg.norm(recovery_action[:3]) < 0.10
     assert recovery_path["active_positive_z_brake"] is True
+    outward_only_target = reserve_side_target.copy()
+    outward_only_target[0] = 0.13287106705090635 + 0.008
+    job503197_outward_action, job503197_outward_path = (
+        _constraint_prioritized_outside_descent_action(
+            current_eef=np.array(
+                [0.13261073171023696, -0.028292198406861677, 0.9437519494597584]
+            ),
+            outside_side_target=outward_only_target,
+            outward_direction_xy=np.array([1.0, 0.0]),
+            maximum_descent_m=0.0,
+            gripper=-1.0,
+            position_action_scale=0.08,
+            maximum_translation_action=0.10,
+        )
+    )
+    assert job503197_outward_action[0] > 0.099
+    assert job503197_outward_action[2] == 0.0
+    assert np.linalg.norm(job503197_outward_action[:3]) < 0.10
+    assert job503197_outward_path["maximum_descent_m"] == 0.0
 
     bounded_seek = CONTROLLER_REFERENCE.read_text().split(
         "def _seek_stable_plate_contact(", 1
@@ -3304,6 +3323,13 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert "negative_z_descent_suspended_for_reserve_recovery" in (
         vertical_corridor_action
     )
+    assert "reserve_recovery_vertical_brake_required" in (
+        vertical_corridor_action
+    )
+    assert "reserve_recovery_outward_only_active" in (
+        vertical_corridor_action
+    )
+    assert "corridor_correction_hold_target_xy" in vertical_corridor_action
     assert 'elif structural_stage == "vertical_tail_brake"' in bounded_seek
     brake_action_branch = bounded_seek.split(
         'elif structural_stage == "vertical_tail_brake":', 1
