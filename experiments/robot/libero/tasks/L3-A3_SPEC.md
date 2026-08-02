@@ -269,6 +269,15 @@ clearance, an exact nominal recovery action paired with negative Z left only
 threshold now always receives the full registered outward brake. Negative Z
 is suspended throughout outside recovery and resumes only after the live
 outside reserve is restored; positive Z safety braking remains available.
+Job503637 demonstrated that the earlier `0.500 mm` vertical-corridor response
+bound is not conservative for this final coupled hold: clearance fell by
+`0.622 mm` from a `0.936 mm` pre-frame, and the maximum observed inward tail
+across the final-stage traces is `1.061 mm`. The final safe-Z stage therefore
+registers its own `1.100 mm` closed-loop hazard-response bound and derives a
+`1.500 mm` recovery entry by adding it to the unchanged strict `0.400 mm`
+threshold. The earlier corridor bound remains unchanged in its original stage.
+This is controller headroom only: the formal outside and table acceptance
+thresholds remain `0.400 mm`.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

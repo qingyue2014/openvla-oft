@@ -15188,6 +15188,35 @@ def _seek_stable_plate_contact(
             "strict_corridor_entry_clearance_m"
         ]
     )
+    fixed_safe_z_closed_loop_hazard_response_bound = 0.0011
+    fixed_safe_z_recovery_entry_clearance = float(
+        fixed_safe_z_position_tolerance
+        + fixed_safe_z_closed_loop_hazard_response_bound
+    )
+    if not (
+        fixed_safe_z_closed_loop_hazard_response_bound
+        > vertical_corridor_closed_loop_inward_response_bound
+        and fixed_safe_z_recovery_entry_clearance
+        > vertical_corridor_reserve_recovery_entry_clearance
+    ):
+        raise RuntimeError(
+            "fixed-safe-Z recovery envelope is not strictly conservative"
+        )
+    structural_seek_context.update(
+        {
+            "fixed_safe_z_closed_loop_hazard_response_bound_m": (
+                fixed_safe_z_closed_loop_hazard_response_bound
+            ),
+            "fixed_safe_z_recovery_entry_clearance_m": (
+                fixed_safe_z_recovery_entry_clearance
+            ),
+            "fixed_safe_z_recovery_derivation": (
+                "unchanged 0.400 mm strict corridor threshold plus a "
+                "final-stage-only 1.100 mm bound strictly above the "
+                "maximum 1.061 mm measured inward response tail"
+            ),
+        }
+    )
     structural_stage_action_counts = {
         "right_high_lateral": 0,
         "right_high_trailing_pass": 0,
@@ -15422,13 +15451,12 @@ def _seek_stable_plate_contact(
                 and abs(latest_vertical_step_progress_m)
                 <= args.minimum_saturated_waypoint_progress
                 and pre_action_guard["minimum_outside_clearance_m"]
-                > vertical_corridor_reserve_recovery_entry_clearance
+                > fixed_safe_z_recovery_entry_clearance
                 and pre_action_guard[
                     "finger_table_vertical_clearance_m"
                 ]
                 > (
-                    fixed_safe_z_position_tolerance
-                    + vertical_corridor_closed_loop_inward_response_bound
+                    fixed_safe_z_recovery_entry_clearance
                 )
             )
             fixed_safe_z_stable_count = (
@@ -16465,7 +16493,7 @@ def _seek_stable_plate_contact(
                     fixed_safe_z_position_tolerance
                 ),
                 closed_loop_hazard_response_bound_m=(
-                    vertical_corridor_closed_loop_inward_response_bound
+                    fixed_safe_z_closed_loop_hazard_response_bound
                 ),
                 progress_resolution_m=(
                     args.minimum_saturated_waypoint_progress
