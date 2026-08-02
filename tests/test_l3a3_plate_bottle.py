@@ -3149,6 +3149,14 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         brake_action_branch
     )
     assert "_fixed_xy_vertical_approach_action(" not in brake_action_branch
+    post_action_buffer_refresh = bounded_seek.split(
+        "if stage_before_action in overhead_route_stages:", 1
+    )[1].split("current_step_response = (", 1)[0]
+    assert '"overhead_corridor_descent",' in post_action_buffer_refresh
+    assert '"vertical_tail_brake",' in post_action_buffer_refresh
+    assert "active_overhead_descent_world_step" in (
+        post_action_buffer_refresh
+    )
     assert (
         'elif structural_stage == "vertical_tail_zero_confirmation"'
         in bounded_seek

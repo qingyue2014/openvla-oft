@@ -14727,7 +14727,10 @@ def _seek_stable_plate_contact(
                         else (
                             active_overhead_descent_world_step
                             if stage_before_action
-                            == "overhead_corridor_descent"
+                            in {
+                                "overhead_corridor_descent",
+                                "vertical_tail_brake",
+                            }
                             else maximum_controller_world_step
                         )
                     ),
