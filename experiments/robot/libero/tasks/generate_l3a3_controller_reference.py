@@ -86,6 +86,7 @@ def _bounded_contact_seek_vertical_stabilization_action(
     target_eef_z_m,
     vertical_step_progress_m,
     outside_side_guard,
+    outward_direction_xy,
     gripper,
     position_action_scale,
     maximum_translation_action,
@@ -107,6 +108,10 @@ def _bounded_contact_seek_vertical_stabilization_action(
     derivative_gain = float(derivative_gain)
     native_low = np.asarray(native_action_spec.get("low", ()), dtype=float)
     native_high = np.asarray(native_action_spec.get("high", ()), dtype=float)
+    outward_direction_xy = np.asarray(
+        outward_direction_xy, dtype=float
+    )
+    outward_norm = float(np.linalg.norm(outward_direction_xy))
     if not (
         np.isfinite(current_eef_z_m)
         and np.isfinite(target_eef_z_m)
@@ -125,8 +130,12 @@ def _bounded_contact_seek_vertical_stabilization_action(
         and native_action_spec.get("action_dimension") == 7
         and native_low.shape == (7,)
         and native_high.shape == (7,)
+        and outward_direction_xy.shape == (2,)
+        and np.all(np.isfinite(outward_direction_xy))
+        and outward_norm > 0.0
     ):
         raise ValueError("invalid contact-seek vertical-stabilization inputs")
+    outward_direction_xy = outward_direction_xy / outward_norm
     live_table_clearance = float(
         outside_side_guard["finger_table_vertical_clearance_m"]
     )
@@ -165,6 +174,14 @@ def _bounded_contact_seek_vertical_stabilization_action(
             maximum_translation_action,
         )
     )
+    vertical_action_cap = float(0.5 * maximum_translation_action)
+    bounded_z_action = float(
+        np.clip(
+            bounded_z_action,
+            -vertical_action_cap,
+            vertical_action_cap,
+        )
+    )
     maximum_safe_negative_z_action = float(
         min(
             maximum_translation_action,
@@ -178,7 +195,25 @@ def _bounded_contact_seek_vertical_stabilization_action(
     commanded_world_delta_m = float(
         position_action_scale * bounded_z_action
     )
+    strict_translation_action_bound = float(
+        0.999 * maximum_translation_action
+    )
+    outward_action = float(
+        np.sqrt(
+            max(
+                0.0,
+                strict_translation_action_bound**2
+                - bounded_z_action**2,
+            )
+        )
+    )
+    if outward_action <= 0.0:
+        raise RuntimeError(
+            "contact-seek vertical stabilization lost its paired "
+            "outward authority"
+        )
     action = np.zeros(7, dtype=float)
+    action[:2] = outward_direction_xy * outward_action
     action[2] = bounded_z_action
     action[-1] = float(gripper)
     if np.any(action < native_low) or np.any(action > native_high):
@@ -213,8 +248,18 @@ def _bounded_contact_seek_vertical_stabilization_action(
         ),
         "requested_world_delta_m": requested_world_delta_m,
         "requested_z_action": requested_z_action,
+        "vertical_action_cap": vertical_action_cap,
+        "strict_translation_action_bound": (
+            strict_translation_action_bound
+        ),
         "maximum_safe_negative_z_action": (
             maximum_safe_negative_z_action
+        ),
+        "outward_direction_xy": outward_direction_xy.tolist(),
+        "commanded_outward_action": outward_action,
+        "commanded_xy_action": action[:2].tolist(),
+        "commanded_translation_action_norm": float(
+            np.linalg.norm(action[:3])
         ),
         "commanded_world_delta_m": commanded_world_delta_m,
         "commanded_z_action": bounded_z_action,
@@ -223,9 +268,10 @@ def _bounded_contact_seek_vertical_stabilization_action(
             predicted_table_clearance
         ),
         "proof": {
-            "zero_xy_and_rotation": True,
+            "strictly_outward_xy_zero_rotation": True,
             "position_plus_velocity_vertical_feedback": True,
             "inside_unchanged_contact_seek_translation_bound": True,
+            "paired_outward_authority_retained_for_every_z_command": True,
             "negative_z_uses_at_most_half_live_table_reserve": True,
             "nominal_post_action_table_clearance_strict": True,
             "post_action_live_guards_required": True,
@@ -17152,6 +17198,7 @@ def _seek_stable_plate_contact(
                     latest_vertical_step_progress_m
                 ),
                 outside_side_guard=pre_stabilization_guard,
+                outward_direction_xy=corridor_outward_direction,
                 gripper=gripper,
                 position_action_scale=args.position_action_scale,
                 maximum_translation_action=(

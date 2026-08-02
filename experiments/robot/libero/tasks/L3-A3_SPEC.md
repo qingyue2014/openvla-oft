@@ -177,9 +177,14 @@ from `+0.599 mm` to `-0.536 mm`, but released `1.274 mm` above the target and
 rebuilt the upward oscillation during contact seek. The stabilization command
 uses the deterministic world-delta formula
 `target_z - current_z - 2 * measured_vertical_response`. Each action has zero
-XY and rotation, remains inside the unchanged `0.10` contact-seek norm and
-runtime native bounds, and any negative-Z command uses at most half of the live
-table reserve above the strict `0.400 mm` post-action clearance. Release
+rotation and remains inside the unchanged `0.10` contact-seek norm and runtime
+native bounds. Job503305 showed that zero commanded XY was not a physical
+decoupling: a `Z=+0.0258` frame moved inward enough to change outside clearance
+from `+0.336 mm` to `-0.712 mm`. Absolute Z action is therefore capped at half
+the `0.10` norm, and the remaining strict 3-D norm is always allocated along
+the registered outward axis. Any negative-Z command additionally uses at most
+half of the live table reserve above the strict `0.400 mm` post-action
+clearance. Release
 requires both absolute target-height error at most `0.400 mm` and absolute
 vertical response at most the existing `0.05 mm` progress resolution for two
 consecutive frames. The full outside-side and all physical/contact gates are

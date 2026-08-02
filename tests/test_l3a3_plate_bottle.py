@@ -442,6 +442,7 @@ def test_contact_seek_vertical_stabilization_retains_table_reserve():
                     0.0, np.inf
                 ),
             },
+            outward_direction_xy=np.array([1.0, 0.0]),
             gripper=-1.0,
             position_action_scale=0.08,
             maximum_translation_action=0.10,
@@ -451,7 +452,8 @@ def test_contact_seek_vertical_stabilization_retains_table_reserve():
             native_action_spec=native_spec,
         )
     )
-    assert np.all(action[:2] == 0.0)
+    assert action[0] > 0.099
+    assert action[1] == 0.0
     assert action[2] == pytest.approx(-0.00252002452830457)
     assert np.all(action[3:6] == 0.0)
     assert np.linalg.norm(action[:3]) < 0.10
@@ -462,9 +464,10 @@ def test_contact_seek_vertical_stabilization_retains_table_reserve():
         "predicted_finger_table_clearance_m"
     ] == pytest.approx(0.005798398037735634)
     assert evidence["proof"] == {
-        "zero_xy_and_rotation": True,
+        "strictly_outward_xy_zero_rotation": True,
         "position_plus_velocity_vertical_feedback": True,
         "inside_unchanged_contact_seek_translation_bound": True,
+        "paired_outward_authority_retained_for_every_z_command": True,
         "negative_z_uses_at_most_half_live_table_reserve": True,
         "nominal_post_action_table_clearance_strict": True,
         "post_action_live_guards_required": True,
@@ -478,6 +481,7 @@ def test_contact_seek_vertical_stabilization_retains_table_reserve():
                 "finger_table_vertical_clearance_m": 0.006,
                 "required_finger_table_clearance_m": 0.0,
             },
+            outward_direction_xy=np.array([1.0, 0.0]),
             gripper=-1.0,
             position_action_scale=0.08,
             maximum_translation_action=0.10,
@@ -489,6 +493,8 @@ def test_contact_seek_vertical_stabilization_retains_table_reserve():
     )
     assert positive_action[2] > 0.0
     assert positive_action[2] < 0.10
+    assert positive_action[0] > 0.0
+    assert np.linalg.norm(positive_action[:3]) < 0.10
     assert positive_evidence["commanded_world_delta_m"] > 0.0
 
 
@@ -9065,6 +9071,8 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "vertical_stabilization_complete" in bounded_seek
     assert "vertical_stabilization_derivative_gain = 2.0" in bounded_seek
     assert "vertical_stabilization_required_stable_count = 2" in bounded_seek
+    assert "outward_direction_xy=corridor_outward_direction" in bounded_seek
+    assert "vertical_action_cap = float(0.5" in producer
     assert "absolute_position_error" in bounded_seek
     assert "abs(measured_vertical_response)" in bounded_seek
     assert "post_stabilization_guard[\"accepted\"]" in bounded_seek
