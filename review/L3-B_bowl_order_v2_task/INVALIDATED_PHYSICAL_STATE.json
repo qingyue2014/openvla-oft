@@ -1,0 +1,8 @@
+{
+  "status": "INVALID",
+  "invalidated_on": "2026-08-02",
+  "scope": "all v2 serialized states, jobs, metrics, videos, tables, reports, and HTML entries",
+  "reason": "The Er closed-drawer target qpos 0.005 produced material drawer-cabinet interpenetration and mechanically locked the drawer at the first policy frame.",
+  "replacement_preregistration": "l3b-bowl-order-v2r1-native50-20260802",
+  "interpretation_allowed": false
+}

@@ -18,11 +18,13 @@ from experiments.robot.libero.tasks.l3b_bowl_order_common import (
 
 V1_ID = "l3b-bowl-order-v1-native20-20260802"
 V2_ID = "l3b-bowl-order-v2-native50-20260802"
+V2R1_ID = "l3b-bowl-order-v2r1-native50-20260802"
 REGISTERED_POOLS = {
     V1_ID: list(range(20)),
     V2_ID: list(range(50)),
+    V2R1_ID: list(range(50)),
 }
-EXPECTED_THRESHOLDS = {
+LEGACY_THRESHOLDS = {
     "bowl_max_tilt_deg_throughout": 1.0,
     "bottle_max_tilt_deg_throughout": 5.0,
     "native_ten_step_spawn_settle_max_translation_m": 0.08,
@@ -34,6 +36,11 @@ EXPECTED_THRESHOLDS = {
     "ec_bowl_spawn_offset_above_bottom_region_center_m": 0.0,
     "ec_drawer_joint_locked_during_construction": True,
 }
+V2R1_THRESHOLDS = {
+    **LEGACY_THRESHOLDS,
+    "er_closed_drawer_target_qpos": 0.002,
+    "drawer_cabinet_self_contact_allowed": False,
+}
 
 
 def validate_spec(path: str | Path) -> dict:
@@ -44,7 +51,7 @@ def validate_spec(path: str | Path) -> dict:
         raise ValueError(f"unregistered L3-B bowl design: {registration_id!r}")
     expected = {
         "scenario": SCENE_ID,
-        "design_version": DESIGN_VERSION,
+        "design_version": DESIGN_VERSION if registration_id == V2R1_ID else 1,
         "native_suite": SUITE,
         "native_task_id": TASK_ID,
         "native_prompt": TASK_PROMPT,
@@ -62,6 +69,15 @@ def validate_spec(path: str | Path) -> dict:
                 },
             }
         )
+    elif registration_id == V2R1_ID:
+        expected.update(
+            {
+                "evaluation_version": 3,
+                "model_matrix": {
+                    "pi05": "gs://openpi-assets/checkpoints/pi05_libero",
+                },
+            }
+        )
     mismatches = {
         key: (record.get(key), value)
         for key, value in expected.items()
@@ -75,7 +91,10 @@ def validate_spec(path: str | Path) -> dict:
         "fraction of Er episodes with full ordered rollback-and-repair trace"
     ):
         raise ValueError("L3-B bowl primary metric is not locked")
-    if record.get("physical_thresholds") != EXPECTED_THRESHOLDS:
+    expected_thresholds = (
+        V2R1_THRESHOLDS if registration_id == V2R1_ID else LEGACY_THRESHOLDS
+    )
+    if record.get("physical_thresholds") != expected_thresholds:
         raise ValueError("L3-B bowl physical thresholds are not locked")
     indices = REGISTERED_POOLS[registration_id]
     return {

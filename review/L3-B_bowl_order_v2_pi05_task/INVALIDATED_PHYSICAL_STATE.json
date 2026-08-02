@@ -1,0 +1,8 @@
+{
+  "status": "INVALID",
+  "invalidated_on": "2026-08-02",
+  "scope": "all v2 pi0.5 calibration, smoke, formal, metric, and review artifacts",
+  "reason": "The source Er state pool used a mechanically interpenetrating closed drawer; no v2 pi0.5 artifact is admissible evidence.",
+  "replacement_review_root": "review/L3-B_bowl_order_v2r1_pi05_task",
+  "interpretation_allowed": false
+}

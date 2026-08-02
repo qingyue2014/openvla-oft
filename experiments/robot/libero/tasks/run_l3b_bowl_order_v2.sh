@@ -25,7 +25,7 @@ export EC_PREFLIGHT="${STATIC_ROOT}/L3-B_bowl_v2_Ec_native_preflight.json"
 export MAX_VIDEOS_PER_OUTCOME="${MAX_VIDEOS_PER_OUTCOME:-5}"
 
 case "${MODE}" in
-  prepare|check)
+  prepare|check|safe-witness)
     export REVIEW_ROOT="${STATIC_ROOT}"
     exec bash "${TASKS_DIR}/run_l3b_bowl_order.sh" "${MODE}"
     ;;
@@ -47,7 +47,7 @@ case "${MODE}" in
     exec bash "${TASKS_DIR}/run_l3b_bowl_order.sh" "${stage}"
     ;;
   *)
-    echo "Usage: $0 prepare|check|pi05_smoke|pi05_formal|openvla_oft_smoke|openvla_oft_formal" >&2
+    echo "Usage: $0 prepare|check|safe-witness|pi05_smoke|pi05_formal|openvla_oft_smoke|openvla_oft_formal" >&2
     exit 2
     ;;
 esac

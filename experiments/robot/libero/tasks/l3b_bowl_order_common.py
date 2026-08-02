@@ -26,7 +26,7 @@ import numpy as np
 
 
 SCENE_ID = "L3-B-BOWL-ORDER"
-DESIGN_VERSION = 1
+DESIGN_VERSION = 2
 SUITE = "libero_10"
 TASK_ID = 3
 TASK_FILE = (
@@ -85,7 +85,11 @@ DUMMY_ACTION = np.asarray([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
 FORMAL_WAIT_STEPS = 10
 CONSTRUCTION_SETTLE_STEPS = 100
 POST_WAIT_HOLD_STEPS = 100
-DRAWER_CLOSED_QPOS = 0.005
+# The native Close predicate accepts qpos in [0.0, 0.005], but the upper end
+# of that interval interpenetrates the cabinet base and mechanically locks the
+# drawer.  Starting from 0.002 lets the passive construction settle to about
+# 0.00072: still Close, collision-free, and executable through OSC actions.
+DRAWER_CLOSED_QPOS = 0.002
 DRAWER_OPEN_PREDICATE_MAX_QPOS = -0.14
 DRAWER_CLOSE_PREDICATE_MIN_QPOS = 0.0
 BOWL_SPAWN_HEIGHT_M = 0.0
@@ -109,6 +113,10 @@ MAX_FINAL_LINEAR_SPEED_MPS = 0.01
 MAX_FINAL_ANGULAR_SPEED_RADPS = 0.05
 MAX_DRAWER_WINDOW_QPOS_DRIFT = 0.003
 MAX_DRAWER_FINAL_SPEED = 0.01
+# Closed drawers may rest on the cabinet stop with floating-point contact at
+# roughly 1e-10 m.  Reject material interpenetration, not a valid zero-distance
+# supporting contact.
+MAX_DRAWER_CABINET_PENETRATION_M = 1e-5
 
 PAIRING_METHOD = "same_official_native_state_predicate_progress_intervention"
 INITIAL_GATE_VERDICT = "PASS_L3B_BOWL_INITIAL_PHYSICAL_GATES"
@@ -286,6 +294,35 @@ def contact_body_names(env, body_name: str) -> list[str]:
     return sorted(contacts)
 
 
+def drawer_cabinet_self_contacts(env) -> list[dict]:
+    """Return contacts between the bottom drawer and the rest of its cabinet."""
+    model, data = env.sim.model, env.sim.data
+    drawer_ids = _descendant_body_ids(model, int(model.body_name2id(DRAWER_BODY)))
+    cabinet_ids = _descendant_body_ids(model, int(model.body_name2id(CABINET_BODY)))
+    other_cabinet_ids = cabinet_ids - drawer_ids
+    records = []
+    for index in range(int(data.ncon)):
+        contact = data.contact[index]
+        first_geom, second_geom = int(contact.geom1), int(contact.geom2)
+        first_body = int(model.geom_bodyid[first_geom])
+        second_body = int(model.geom_bodyid[second_geom])
+        if not (
+            (first_body in drawer_ids and second_body in other_cabinet_ids)
+            or (second_body in drawer_ids and first_body in other_cabinet_ids)
+        ):
+            continue
+        records.append(
+            {
+                "geom1": str(model.geom_id2name(first_geom) or ""),
+                "geom2": str(model.geom_id2name(second_geom) or ""),
+                "body1": str(model.body_id2name(first_body) or ""),
+                "body2": str(model.body_id2name(second_body) or ""),
+                "distance_m": float(contact.dist),
+            }
+        )
+    return records
+
+
 def body_measurement(env, body_name: str) -> dict:
     model, data = env.sim.model, env.sim.data
     body_id = int(model.body_name2id(body_name))
@@ -342,6 +379,7 @@ def scene_measurement(env) -> dict:
             "qpos": float(env.sim.data.qpos[qpos_address]),
             "speed": float(abs(env.sim.data.qvel[qvel_address])),
         },
+        "drawer_cabinet_self_contacts": drawer_cabinet_self_contacts(env),
         "predicates": predicate_state(env),
     }
 

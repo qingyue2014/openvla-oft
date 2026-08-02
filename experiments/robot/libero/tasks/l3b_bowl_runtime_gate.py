@@ -18,6 +18,7 @@ from experiments.robot.libero.tasks.l3b_bowl_order_common import (
     MAX_BOTTLE_TILT_DEG,
     MAX_BOWL_TILT_DEG,
     MAX_DRAWER_FINAL_SPEED,
+    MAX_DRAWER_CABINET_PENETRATION_M,
     MAX_DRAWER_WINDOW_QPOS_DRIFT,
     MAX_FINAL_ANGULAR_SPEED_RADPS,
     MAX_FINAL_LINEAR_SPEED_MPS,
@@ -116,6 +117,12 @@ def _window_failures(samples: list[dict], condition: str) -> tuple[list[str], di
         failures.append("drawer:qpos_drift")
     if first["drawer_joint"]["speed"] > MAX_DRAWER_FINAL_SPEED:
         failures.append("drawer:first_policy_speed")
+    if any(
+        float(contact["distance_m"]) < -MAX_DRAWER_CABINET_PENETRATION_M
+        for sample in samples
+        for contact in sample["drawer_cabinet_self_contacts"]
+    ):
+        failures.append("drawer:cabinet_self_contact")
     expected = EXPECTED_INITIAL_PREDICATES[condition]
     if any(sample["predicates"] != expected for sample in samples):
         failures.append("predicate:formal_window_mismatch")

@@ -35,7 +35,7 @@ intervened on.
 | Eb / native | `Close=False`, `In=False` | none; bit-exact official state | insert bowl, then close |
 | Er / premature close | `Close=True`, `In=False` | bottom drawer scalar joint only | reopen, insert, reclose |
 | Ec / prerequisite done | `Close=False`, `In=True` | black-bowl free joint only | close |
-| Safe | starts from exact Er | none after restore | scripted real 7-D OSC open, insert, close reference |
+| Safe | starts from exact Er | none after restore | scripted real 7-D OSC stage, reopen, regrasp, insert, reclose reference |
 
 Er and Ec are intentionally different current progress states. Their raw
 success rates are therefore **workload-asymmetric**: Er has more remaining
@@ -61,6 +61,11 @@ capability separately.
   ten controller no-ops, refreshed observations, and first policy frame.
 - Per-episode pre-wait, first-policy, full-window, and 100-step post-wait hold
   records for Eb/Er/Ec.
+- Er targets drawer qpos `0.002`, which passively settles near `0.00072`:
+  `Close=True`, no material cabinet penetration, and still action-executable.
+- Drawer--cabinet contacts deeper than `1e-5 m` are invalid; numerical
+  zero-distance contact at the closed stop is recorded but not misclassified
+  as interpenetration.
 - Black bowl remains upright within `1.0°` throughout every gate.
 - Translation, linear/angular speed, drawer-joint drift, support contact, and
   forbidden robot/object contacts are checked independently.
@@ -69,6 +74,12 @@ capability separately.
 - Agent and wrist views are saved in raw 256 and π0.5 224 preprocessing. The
   intended Eb→Er and Eb→Ec changes must be visible in agent-view policy RGB.
 - No custom-asset XML audit is applicable because the inventory is native.
+- A deterministic safe witness must restore exact Er and execute an action-only
+  bowl stage--reopen--regrasp--insert--reclose route through 7-D OSC
+  `env.step`. The stage clears the native drawer sweep and is reversed before
+  opening to recover a collision-free arm posture. The witness saves
+  trajectory, agent-view, and wrist-view evidence and may not use a learned
+  reference or post-restore simulator edits.
 
 ## Metrics and outcome taxonomy
 
@@ -89,7 +100,8 @@ Failures are separated into `no_rollback`, `rollback_without_insertion`,
 ## Formal authorization
 
 Formal submission is fail-closed until all native-only, pairing, exact-runtime,
-physical, policy-view, and short dynamic smoke gates pass and an explicit human
-approval JSON hash-binds the reviewed videos and smoke report. At most ten
+physical, policy-view, executable-safe-witness, and short dynamic smoke gates
+pass and an explicit human approval JSON hash-binds the reviewed videos and
+smoke report. At most ten
 local videos are retained per result category under
 `review/L3-B_bowl_order_task/`.

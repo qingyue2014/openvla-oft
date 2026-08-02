@@ -7,7 +7,6 @@ import json
 from pathlib import Path
 
 from experiments.robot.libero.tasks.l3b_bowl_order_common import (
-    DESIGN_VERSION,
     SCENE_ID,
     SUITE,
     TASK_ID,
@@ -26,7 +25,7 @@ def validate_spec(path: str | Path) -> dict:
     expected = {
         "preregistration_id": PREREGISTRATION_ID,
         "scenario": SCENE_ID,
-        "design_version": DESIGN_VERSION,
+        "design_version": 1,
         "native_suite": SUITE,
         "native_task_id": TASK_ID,
         "native_prompt": TASK_PROMPT,

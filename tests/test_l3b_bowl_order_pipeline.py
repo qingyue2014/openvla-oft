@@ -1,3 +1,4 @@
+import ast
 import json
 from pathlib import Path
 
@@ -6,6 +7,8 @@ import pytest
 from experiments.robot.libero.tasks.l3b_bowl_order_common import (
     CONDITION_LABEL,
     DESIGN_VERSION,
+    DRAWER_CLOSED_QPOS,
+    MAX_DRAWER_CABINET_PENETRATION_M,
     EXPECTED_INITIAL_PREDICATES,
     SCENE_ID,
     SUITE,
@@ -53,7 +56,9 @@ class _PredicateEnv:
 
 def test_native_task_and_condition_contract():
     assert SCENE_ID == "L3-B-BOWL-ORDER"
-    assert DESIGN_VERSION == 1
+    assert DESIGN_VERSION == 2
+    assert DRAWER_CLOSED_QPOS == 0.002
+    assert MAX_DRAWER_CABINET_PENETRATION_M == 1e-5
     assert (SUITE, TASK_ID) == ("libero_10", 3)
     assert TASK_FILE == (
         "KITCHEN_SCENE4_put_the_black_bowl_in_the_bottom_drawer_of_the_"
@@ -83,6 +88,8 @@ def test_v1_design_locks_fixed_native20_and_event_metric():
     )
     assert result["collision_oracle"] is False
     assert result["physical_thresholds"]["bowl_max_tilt_deg_throughout"] == 1.0
+    assert "er_closed_drawer_target_qpos" not in result["physical_thresholds"]
+    assert "drawer_cabinet_self_contact_allowed" not in result["physical_thresholds"]
     assert result["physical_thresholds"]["ec_drawer_joint_locked_during_construction"] is True
 
 
@@ -162,6 +169,45 @@ def test_runner_is_native_only_event_based_and_formal_fail_closed():
     assert "BowlOrderSequenceTracker" in evaluator
     assert "l3b_bowl_sequence" in evaluator
     assert "first_policy_image_dir" in evaluator
+    assert "safe-witness) run_safe_witness" in runner
+    assert "validate_l3b_bowl_safe_witness.py" in runner
+
+
+def test_executable_safe_witness_is_action_only_and_not_learned():
+    path = TASKS / "validate_l3b_bowl_safe_witness.py"
+    text = path.read_text(encoding="utf-8")
+    assert "materialize_native_scene_state" in text
+    assert "BowlOrderRuntimeGate" in text
+    assert "BowlOrderSequenceTracker" in text
+    assert "TrajectoryRecorder" in text
+    assert '"learned_reference_used": False' in text
+    assert '"direct_qpos_edits_after_restore": False' in text
+    assert "env.step(" in text
+    assert "OPEN_TARGET_QPOS = -0.145" in text
+    assert "TERMINAL_SETTLE_STEPS = 100" in text
+    assert "forbidden robot contact" in text
+    assert "GRASP_EEF_OFFSETS" in text
+    assert "_stage_bowl_clear_of_drawer" in text
+    assert "_return_to_policy_start_pose" in text
+    assert '"robot0_eye_in_hand": output_dir' in text
+
+    tree = ast.parse(text)
+    forbidden_targets = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+            targets = (
+                node.targets
+                if isinstance(node, ast.Assign)
+                else [node.target]
+            )
+            for target in targets:
+                source = ast.get_source_segment(text, target) or ""
+                if any(
+                    token in source
+                    for token in ("sim.data.qpos", "sim.data.qvel", "body_xpos")
+                ):
+                    forbidden_targets.append(source)
+    assert forbidden_targets == []
 
 
 def test_v2_runner_keeps_models_on_identical_registered_states():
@@ -173,6 +219,23 @@ def test_v2_runner_keeps_models_on_identical_registered_states():
     assert "pi05_smoke|pi05_formal" in runner
     assert "openvla_oft_smoke|openvla_oft_formal" in runner
     assert "moojink/openvla-7b-oft-finetuned-libero-10" in runner
+    assert "prepare|check|safe-witness" in runner
+
+
+def test_v2r1_runner_is_pi05_only_and_uses_fresh_evidence_paths():
+    runner = (TASKS / "run_l3b_bowl_order_v2r1.sh").read_text(encoding="utf-8")
+    design = validate_registered_design(TASKS / "l3b_bowl_v2r1_design_prereg.json")
+    assert design["preregistration_id"] == "l3b-bowl-order-v2r1-native50-20260802"
+    assert design["evaluation_version"] == 3
+    assert design["model_matrix"] == {
+        "pi05": "gs://openpi-assets/checkpoints/pi05_libero"
+    }
+    assert design["safe_witness_episode_indices"] == [0, 1, 2, 3, 4]
+    assert "NUM_STATES=50" in runner
+    assert "SAFE_WITNESS_EPISODES=\"0,1,2,3,4\"" in runner
+    assert "L3-B_bowl_order_v2r1_pi05_task" in runner
+    assert "pi05_smoke|pi05_formal" in runner
+    assert "openvla" not in runner.lower()
 
 
 def test_human_approval_inventory_is_stable_after_formal_videos(tmp_path):

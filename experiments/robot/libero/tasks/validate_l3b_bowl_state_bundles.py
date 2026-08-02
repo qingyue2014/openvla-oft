@@ -24,6 +24,7 @@ from experiments.robot.libero.tasks.l3b_bowl_order_common import (
     INITIAL_GATE_VERDICT,
     MAX_BOTTLE_TILT_DEG,
     MAX_BOWL_TILT_DEG,
+    MAX_DRAWER_CABINET_PENETRATION_M,
     PAIRING_METHOD,
     PAIRING_VERDICT,
     SCENE_ID,
@@ -88,9 +89,18 @@ def _validate_physical(attrs, condition: str, context: str) -> dict:
             BOTTLE_BODY,
             DRAWER_BODY,
             "drawer_joint",
+            "drawer_cabinet_self_contacts",
             "predicates",
         }:
             raise ValueError(f"{context} {state_name} physical inventory mismatch")
+        if any(
+            float(contact["distance_m"])
+            < -MAX_DRAWER_CABINET_PENETRATION_M
+            for contact in record["drawer_cabinet_self_contacts"]
+        ):
+            raise ValueError(
+                f"{context} {state_name} drawer materially penetrates cabinet"
+            )
     if first["predicates"] != EXPECTED_INITIAL_PREDICATES[condition]:
         raise ValueError(f"{context} first-policy predicate mismatch")
     for label, stats in (("formal", formal), ("hold", hold)):

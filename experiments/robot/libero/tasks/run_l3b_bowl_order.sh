@@ -45,6 +45,11 @@ SMOKE_REPORT="${SMOKE_REPORT:-${REVIEW_ROOT}/L3-B_bowl_smoke_report.json}"
 FORMAL_REPORT="${FORMAL_REPORT:-${REVIEW_ROOT}/L3-B_bowl_formal_report.json}"
 HUMAN_APPROVAL="${HUMAN_APPROVAL:-${REVIEW_ROOT}/L3-B_bowl_human_approval.json}"
 REVIEW_SHEET="${REVIEW_SHEET:-${REVIEW_ROOT}/L3-B_bowl_policy_view_review_sheet.png}"
+SAFE_WITNESS_EPISODES="${SAFE_WITNESS_EPISODES:-0,1,2}"
+SAFE_WITNESS_DIR="${SAFE_WITNESS_DIR:-${REVIEW_ROOT}/safe_witness}"
+SAFE_WITNESS_JSON="${SAFE_WITNESS_JSON:-${REVIEW_ROOT}/L3-B_executable_safe_witness.json}"
+SAFE_WITNESS_CSV="${SAFE_WITNESS_CSV:-${REVIEW_ROOT}/L3-B_executable_safe_witness.csv}"
+SAFE_WITNESS_REPORT="${SAFE_WITNESS_REPORT:-${REVIEW_ROOT}/L3-B_executable_safe_witness.md}"
 
 LIBERO_ROOT="${LIBERO_ROOT:-}"
 if [[ -z "${LIBERO_ROOT}" && -d "_deps/LIBERO/libero" ]]; then
@@ -121,6 +126,17 @@ validate_prepared() {
   done
 }
 
+run_safe_witness() {
+  validate_prepared >/dev/null
+  "${PYTHON_BIN}" "${TASKS_DIR}/validate_l3b_bowl_safe_witness.py" \
+    --state-path "${ER_STATES}" \
+    --episode-indices "${SAFE_WITNESS_EPISODES}" \
+    --seed "${SCENE_SEED}" --render-gpu-device-id "${RENDER_GPU_DEVICE_ID}" \
+    --output-dir "${SAFE_WITNESS_DIR}" \
+    --out-json "${SAFE_WITNESS_JSON}" --out-csv "${SAFE_WITNESS_CSV}" \
+    --out-report "${SAFE_WITNESS_REPORT}" --fail-on-invalid
+}
+
 run_prepare() {
   "${PYTHON_BIN}" "${TASKS_DIR}/validate_l3b_bowl_design.py" \
     --preregistration "${DESIGN_PREREGISTRATION}"
@@ -133,6 +149,7 @@ run_prepare() {
   validate_prepared
   "${PYTHON_BIN}" "${TASKS_DIR}/build_l3b_bowl_review_sheet.py" \
     --manifest "${INITIAL_GATE}" --output "${REVIEW_SHEET}" --rows 5
+  run_safe_witness
   echo "L3-B bowl prepare PASS; formal remains unauthorized."
 }
 
@@ -227,6 +244,7 @@ run_formal() {
 case "${MODE}" in
   prepare) run_prepare ;;
   check) validate_prepared ;;
+  safe-witness) run_safe_witness ;;
   smoke) run_smoke ;;
   summarize)
     "${PYTHON_BIN}" "${TASKS_DIR}/summarize_l3b_bowl_order.py" \
@@ -240,5 +258,5 @@ case "${MODE}" in
       --out-json "${SMOKE_REPORT}"
     ;;
   formal) run_formal ;;
-  *) echo "Usage: $0 prepare|check|smoke|summarize|formal" >&2; exit 2 ;;
+  *) echo "Usage: $0 prepare|check|safe-witness|smoke|summarize|formal" >&2; exit 2 ;;
 esac
