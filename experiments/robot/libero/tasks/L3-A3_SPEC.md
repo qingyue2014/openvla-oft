@@ -940,6 +940,19 @@ preceding XY action must be native-bounded and non-inward, and that exact XY
 action is repeated on the neutral-Z frame. No physical or controller threshold,
 route, budget, task, inventory, state, prompt, goal, or intervention changes.
 
+Job503906 applied the action-isolated confirmation rule but never found a frame
+that passed both unchanged response limits. The closest frame had only
+`0.015959 mm` vertical response, while its `-0.052273 mm` outward response
+missed the existing `0.05 mm` resolution by `0.002273 mm`; the binary outward
+action then changed from `0.15` to `0.20`. The outward controller now uses the
+same captured previous-action plus position-and-response PD correction already
+validated for Z, but only when current and one-response projected outside
+clearance both remain above the existing exit line, table reserve passes, the
+projected lateral error remains inside the unchanged tolerance, and the
+response is non-severe. Otherwise the original full outward recovery remains
+mandatory. No threshold, route, budget, task, inventory, state, prompt, goal,
+or intervention changes.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

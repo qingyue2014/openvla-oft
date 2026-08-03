@@ -5489,6 +5489,74 @@ def _fixed_safe_z_lateral_hold_action(
             + tangential_xy_action_before_recovery
         )
 
+    previous_outward_action_for_response_tracking = (
+        float(
+            np.dot(
+                previous_commanded_action_xyz[:2],
+                outward_direction_xy,
+            )
+        )
+        if release_slew_enabled
+        else None
+    )
+    outside_response_projected_clearance_m = float(
+        live_outside_clearance + measured_outward_step_progress_m
+    )
+    captured_outward_response_tracking_ceiling_m = float(
+        outside_refill_target_clearance + progress_resolution_m
+    )
+    captured_outward_response_tracking_requested = bool(
+        release_slew_enabled
+        and lateral_target_reached
+        and abs(fixed_safe_z_m - current_eef[2])
+        <= vertical_position_tolerance_m
+        and live_outside_clearance > outside_recovery_exit_clearance
+        and live_outside_clearance
+        <= captured_outward_response_tracking_ceiling_m
+        and outside_response_projected_clearance_m
+        > outside_recovery_exit_clearance
+        and live_table_clearance > outside_recovery_exit_clearance
+        and abs(measured_outward_step_progress_m)
+        <= closed_loop_hazard_response_bound_m
+        and projected_lateral_error_after_measured_outward_response_m
+        <= lateral_position_tolerance_m
+        and previous_outward_action_for_response_tracking >= 0.0
+        and not sticky_full_outward_recovery_requested
+    )
+    captured_outward_response_world_delta_m = None
+    captured_outward_response_action_correction = None
+    captured_outward_response_action = None
+    pre_captured_outward_response_xy_action = commanded_xy_action.copy()
+    if captured_outward_response_tracking_requested:
+        captured_outward_response_world_delta_m = float(
+            outside_refill_target_clearance
+            - live_outside_clearance
+            - derivative_gain * measured_outward_step_progress_m
+        )
+        captured_outward_response_action_correction = float(
+            captured_outward_response_world_delta_m
+            / position_action_scale
+        )
+        captured_outward_response_action = float(
+            np.clip(
+                previous_outward_action_for_response_tracking
+                + captured_outward_response_action_correction,
+                0.0,
+                strict_safety_brake_bound,
+            )
+        )
+        commanded_tangential_xy_action = (
+            commanded_xy_action
+            - float(
+                np.dot(commanded_xy_action, outward_direction_xy)
+            )
+            * outward_direction_xy
+        )
+        commanded_xy_action = (
+            commanded_tangential_xy_action
+            + captured_outward_response_action * outward_direction_xy
+        )
+
     position_error_m = float(fixed_safe_z_m - current_eef[2])
     requested_vertical_world_delta_m = float(
         position_error_m
@@ -5960,6 +6028,30 @@ def _fixed_safe_z_lateral_hold_action(
         "previous_full_outward_recovery_action": (
             previous_full_outward_recovery_action
         ),
+        "previous_outward_action_for_response_tracking": (
+            previous_outward_action_for_response_tracking
+        ),
+        "outside_response_projected_clearance_m": (
+            outside_response_projected_clearance_m
+        ),
+        "captured_outward_response_tracking_ceiling_m": (
+            captured_outward_response_tracking_ceiling_m
+        ),
+        "captured_outward_response_tracking_requested": (
+            captured_outward_response_tracking_requested
+        ),
+        "captured_outward_response_world_delta_m": (
+            captured_outward_response_world_delta_m
+        ),
+        "captured_outward_response_action_correction": (
+            captured_outward_response_action_correction
+        ),
+        "captured_outward_response_action": (
+            captured_outward_response_action
+        ),
+        "pre_captured_outward_response_xy_action": (
+            pre_captured_outward_response_xy_action.tolist()
+        ),
         "sticky_full_outward_recovery_requested": (
             sticky_full_outward_recovery_requested
         ),
@@ -6005,6 +6097,10 @@ def _fixed_safe_z_lateral_hold_action(
             "pending_confirmation_uses_full_outward_recovery": True,
             "full_outward_recovery_releases_at_existing_refill_target": True,
             "sticky_outward_recovery_respects_lateral_tolerance": True,
+            "captured_outward_hold_uses_incremental_pd_correction": True,
+            "captured_outward_hold_requires_projected_exit_reserve": True,
+            "captured_outward_hold_is_limited_to_refill_neighborhood": True,
+            "captured_outward_hold_respects_lateral_tolerance": True,
             "strict_outside_loss_disables_inside_band_z_tracking": True,
             "projected_outside_band_downward_tail_retains_full_brake": True,
             "projected_below_band_downward_tail_retains_full_brake": True,

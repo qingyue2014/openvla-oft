@@ -2258,7 +2258,7 @@ def test_fixed_safe_z_lateral_hold_rejects_job503904_coupled_confirmation():
     }
     action, evidence = _fixed_safe_z_lateral_hold_action(**kwargs)
     assert action[:3] == pytest.approx(
-        [0.20, 0.0, 0.1425043993318357]
+        [0.15120865294351569, 0.0, 0.1425043993318357]
     )
     assert evidence["measured_inward_response"] is True
     assert evidence["outside_recovery_active"] is True
@@ -2267,6 +2267,15 @@ def test_fixed_safe_z_lateral_hold_rejects_job503904_coupled_confirmation():
         "vertical_stability_confirmation_hold_eligible"
     ] is False
     assert evidence["captured_safe_z_response_hold_requested"] is True
+    assert evidence[
+        "captured_outward_response_tracking_requested"
+    ] is True
+    assert evidence[
+        "captured_outward_response_action_correction"
+    ] == pytest.approx(0.0012086529435157068)
+    assert evidence["proof"][
+        "captured_outward_hold_uses_incremental_pd_correction"
+    ] is True
     assert evidence["vertical_stability_confirmation_hold_applied"] is False
     assert evidence["proof"][
         "neutral_z_confirmation_requires_stable_outward_response"
@@ -2282,6 +2291,21 @@ def test_fixed_safe_z_lateral_hold_rejects_job503904_coupled_confirmation():
             **kwargs,
             vertical_stability_confirmation_hold=True,
         )
+
+    kwargs["measured_outward_step_progress_m"] = -0.0002
+    unsafe_action, unsafe_evidence = _fixed_safe_z_lateral_hold_action(
+        **kwargs
+    )
+    assert unsafe_action[0] == pytest.approx(np.nextafter(0.20, 0.0))
+    assert unsafe_evidence[
+        "outside_response_projected_clearance_m"
+    ] < unsafe_evidence["outside_recovery_exit_clearance_m"]
+    assert unsafe_evidence[
+        "captured_outward_response_tracking_requested"
+    ] is False
+    assert unsafe_evidence["proof"][
+        "captured_outward_hold_requires_projected_exit_reserve"
+    ] is True
 
 
 def test_fixed_safe_z_lateral_hold_confirms_job503649_with_neutral_z():
