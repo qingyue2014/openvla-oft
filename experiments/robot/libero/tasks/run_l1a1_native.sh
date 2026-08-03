@@ -126,6 +126,35 @@ require_states() {
   fi
 }
 
+require_frozen_v4_bundle() {
+  local expected_eb="3f2390a956efa89f2acb0617503fd22099f39700f0c5e900b3115ac168a8a1fe"
+  local expected_er="ef0eadc4baea5eddba6a8c93d05c5554ead505f5c65929a4247b2f4504960d38"
+  local expected_ec="cc5a1deb9eae1939b32d67cf4171880e490d76506a464ede32e9ba80b9f47f90"
+  local expected_pairing="8639d3e25f02c5c146f271735db6ca5c322670a5b4eafe658ff637c0f69b5ab8"
+  local expected_preflight="ae77fc28d4b3583f3cde50ad7556f69bb6a7e40c5afbef544be870cdabc02d71"
+  local actual
+  local path
+  local expected
+
+  require_states
+  while IFS=' ' read -r expected path; do
+    actual="$(sha256sum "${path}" | awk '{print $1}')"
+    if [[ "${actual}" != "${expected}" ]]; then
+      echo "L1-A1-v4 frozen-bundle hash mismatch: ${path}" >&2
+      echo "expected=${expected}" >&2
+      echo "actual=${actual}" >&2
+      exit 2
+    fi
+  done <<EOF
+${expected_eb} ${EB_STATES}
+${expected_er} ${ER_STATES}
+${expected_ec} ${EC_STATES}
+${expected_pairing} ${PAIRING}
+${expected_preflight} ${PREFLIGHT_MANIFEST}
+EOF
+  echo "verdict=PASS_L1A1_V4_FROZEN_BUNDLE_BINDING"
+}
+
 ensure_states() {
   if ! states_ready; then
     generate
@@ -297,6 +326,23 @@ case "${MODE}" in
     eval_condition Ec "${EC_STATES}" none "${smoke_ec}" "${SMOKE_TRIALS}" smoke
     echo "verdict=PASS_L1A1_V4_SMOKE"
     ;;
+  pi05_eb_diagnostic)
+    if [[ "${MODEL_FAMILY}" != "pi05" ]]; then
+      echo "L1-A1-v4 pi05 Eb diagnostic requires MODEL_FAMILY=pi05." >&2
+      exit 2
+    fi
+    if [[ "${SMOKE_TRIALS}" -gt 5 ]]; then
+      echo "L1-A1-v4 pi05 Eb diagnostic is limited to five episodes." >&2
+      exit 2
+    fi
+    require_frozen_v4_bundle
+    require_visibility_review
+    diagnostic_eb="${EB_NOTE}-diagnostic"
+    eval_condition Eb "${EB_STATES}" none "${diagnostic_eb}" \
+      "${SMOKE_TRIALS}" smoke_diagnostic
+    echo "verdict=PASS_L1A1_V4_PI05_EB_DIAGNOSTIC_EXECUTED"
+    echo "verdict=NONFORMAL_DIAGNOSTIC_ONLY"
+    ;;
   formal_openvla)
     if [[ "${MODEL_FAMILY}" != "openvla" ]]; then
       echo "L1-A1-v4 first formal learned-policy gate must be OpenVLA-OFT." >&2
@@ -319,7 +365,7 @@ case "${MODE}" in
     attribution
     ;;
   *)
-    echo "Usage: $0 preflight|check|preview|smoke|formal_openvla|attribution" >&2
+    echo "Usage: $0 preflight|check|preview|smoke|pi05_eb_diagnostic|formal_openvla|attribution" >&2
     exit 2
     ;;
 esac

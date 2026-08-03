@@ -1440,6 +1440,24 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "rollouts/libero_spatial/L1-A1-v4-ramekin-matched-safe-ec-openvla-smoke",
         ),
     ),
+    ("l1a1v4", "pi05_eb_diagnostic"): PhaseSpec(
+        command=(
+            "env",
+            "OPENPI_ROOT=/home/drwqyhappy/04-mycode/openpi-15a9616",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=all",
+            "SAVE_TRAJECTORY=True",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1a1_native_pi05.sh",
+            "pi05_eb_diagnostic",
+        ),
+        count_env="SMOKE_TRIALS",
+        artifacts=(
+            "experiments/logs/l1a1_v4_pi05_eb_diagnostic_server.log",
+            "review/L1-A1_task/libero_v4/pi05/smoke_diagnostic/Eb",
+            "rollouts/libero_spatial/L1-A1-v4-ramekin-eb-native-pi05-diagnostic",
+        ),
+    ),
     ("l1a1v4", "formal_openvla"): PhaseSpec(
         command=(
             "env",

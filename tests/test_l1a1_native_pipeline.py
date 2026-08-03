@@ -166,6 +166,24 @@ def test_l1a1_runner_keeps_rollouts_behind_human_review():
     assert "libero_90" not in runner
 
 
+def test_l1a1_pi05_diagnostic_is_bounded_to_frozen_eb_only():
+    runner = Path("experiments/robot/libero/tasks/run_l1a1_native.sh").read_text(
+        encoding="utf-8"
+    )
+    diagnostic = runner.split("  pi05_eb_diagnostic)", maxsplit=1)[1].split(
+        "  formal_openvla)", maxsplit=1
+    )[0]
+    assert '[[ "${MODEL_FAMILY}" != "pi05" ]]' in diagnostic
+    assert '[[ "${SMOKE_TRIALS}" -gt 5 ]]' in diagnostic
+    assert "require_frozen_v4_bundle" in diagnostic
+    assert "require_visibility_review" in diagnostic
+    assert 'eval_condition Eb "${EB_STATES}" none' in diagnostic
+    assert "eval_condition Er" not in diagnostic
+    assert "eval_condition Ec" not in diagnostic
+    assert "replay_gate" not in diagnostic
+    assert "safe_reference" not in diagnostic
+
+
 def test_l1a1_evaluator_routes_native_preflight_and_runtime_inventory():
     evaluator = Path(
         "experiments/robot/libero/run_physcog_libero_l1_eval.py"

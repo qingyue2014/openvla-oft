@@ -192,6 +192,7 @@ def test_l1a1v4_registry_separates_scene_checks_from_reviewed_rollouts():
         "check",
         "preview",
         "smoke",
+        "pi05_eb_diagnostic",
         "formal_openvla",
     }
     runner = "experiments/robot/libero/tasks/run_l1a1_native.sh"
@@ -200,6 +201,12 @@ def test_l1a1v4_registry_separates_scene_checks_from_reviewed_rollouts():
         assert "RENDER_GPU_DEVICE_ID=1" in PHASES[("l1a1v4", phase)].command
     assert PHASES[("l1a1v4", "check")].count_env == "NUM_TRIALS"
     assert PHASES[("l1a1v4", "smoke")].count_env == "SMOKE_TRIALS"
+    diagnostic = PHASES[("l1a1v4", "pi05_eb_diagnostic")]
+    assert diagnostic.count_env == "SMOKE_TRIALS"
+    assert diagnostic.command[-1] == "pi05_eb_diagnostic"
+    assert "run_l1a1_native_pi05.sh" in diagnostic.command[-2]
+    assert "SAVE_VIDEO_MODE=all" in diagnostic.command
+    assert all("Er" not in artifact and "Ec" not in artifact for artifact in diagnostic.artifacts)
     assert PHASES[("l1a1v4", "formal_openvla")].count_env == "NUM_TRIALS"
     assert "SAVE_VIDEO_MODE=all" in PHASES[("l1a1v4", "smoke")].command
     assert not any(
