@@ -6486,12 +6486,30 @@ def _fixed_safe_z_lateral_hold_action(
         minimum_released_outward_action = None
         minimum_released_positive_z_action = None
 
+    strict_target_refill_tangential_recovery_hold_requested = bool(
+        strict_target_refill_latched
+        and full_outward_recovery_active
+        and measured_inward_response
+        and lateral_target_reached
+        and live_outside_clearance > outside_recovery_exit_clearance
+        and outside_response_projected_clearance_m
+        > outside_recovery_exit_clearance
+        and live_table_clearance > outside_recovery_exit_clearance
+        and abs(measured_outward_step_progress_m)
+        <= closed_loop_hazard_response_bound_m
+        and previous_coupled_hold_tangential_xy_action_norm > 0.0
+        and not sticky_full_outward_recovery_requested
+    )
+    if strict_target_refill_tangential_recovery_hold_requested:
+        strict_target_refill_latched_after_action = True
+
     outward_xy_recovery_authority_isolation_projected_exit_entry = bool(
         full_outward_recovery_active
         and coupled_xy_unload_projected_exit_loss
     )
     outward_xy_recovery_authority_isolation_entry = bool(
         full_outward_recovery_active
+        and not strict_target_refill_tangential_recovery_hold_requested
         and (
             measured_inward_response
             or outward_xy_recovery_authority_isolation_projected_exit_entry
@@ -6509,7 +6527,12 @@ def _fixed_safe_z_lateral_hold_action(
         outward_xy_recovery_authority_isolation_entry
         or outward_xy_recovery_authority_isolation_latched
     )
-    if outward_xy_recovery_authority_isolation_requested:
+    if strict_target_refill_tangential_recovery_hold_requested:
+        commanded_xy_action = (
+            outward_direction_xy * strict_safety_brake_bound
+            + previous_coupled_hold_tangential_xy_action
+        )
+    elif outward_xy_recovery_authority_isolation_requested:
         commanded_xy_action = (
             outward_direction_xy * strict_safety_brake_bound
         )
@@ -6792,6 +6815,9 @@ def _fixed_safe_z_lateral_hold_action(
         ),
         "outward_xy_recovery_authority_isolation_requested": (
             outward_xy_recovery_authority_isolation_requested
+        ),
+        "strict_target_refill_tangential_recovery_hold_requested": (
+            strict_target_refill_tangential_recovery_hold_requested
         ),
         "outward_xy_recovery_authority_isolation_action_xyz": (
             action[:3].tolist()
@@ -7123,6 +7149,7 @@ def _fixed_safe_z_lateral_hold_action(
             "strict_target_refill_uses_strict_lateral_action_bound_with_"
             "repeat": True,
             "strict_target_refill_interleaves_exact_xy_repeat": True,
+            "strict_target_refill_recovery_holds_tangent_above_exit": True,
             "strict_target_refill_acquisition_holds_xy_until_stable": True,
             "strict_target_refill_transition_supports_saturated_outward_"
             "predecessor": True,

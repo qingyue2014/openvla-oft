@@ -1545,6 +1545,14 @@ therefore restored to the existing strict `0.005` lateral action bound while
 retaining the newly verified exact-repeat frame after every increment. This
 combines the pre-tail reserve acquisition observed in Job504208 with the
 post-acquisition hold and single-axis handoff added afterward.
+Job504215 raised live reserve to `2.221332 mm` before the repeat frame caught a
+`-0.146314 mm` inward response. Current and projected clearances were still
+above `1.55 mm`, but recovery simultaneously increased X and removed Y,
+reintroducing a coupled-axis transition. While the strict-refill latch is
+active and both clearances remain above the unchanged recovery-exit gate,
+measured inward response now applies full outward X while holding predecessor
+tangential Y exactly. If either clearance reaches that gate, the unchanged
+pure-X authority isolation immediately takes priority and clears the latch.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.

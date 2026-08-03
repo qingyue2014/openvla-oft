@@ -3127,6 +3127,44 @@ def test_fixed_safe_z_lateral_hold_scopes_and_latches_job504206_refill():
         "strict_target_refill_acquisition_holds_xy_until_stable"
     ] is True
 
+    recovery_action, recovery_evidence = _fixed_safe_z_lateral_hold_action(
+        **common,
+        current_eef=np.array(
+            [0.13336794782712352, -0.024559801444012534, 0.9204328036679548]
+        ),
+        measured_vertical_step_progress_m=-3.8953074510961194e-05,
+        measured_outward_step_progress_m=-0.00014631429588404798,
+        outside_side_guard={
+            "minimum_outside_clearance_m": 0.0020785870928087397,
+            "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+            "finger_table_vertical_clearance_m": 0.007706144386561475,
+            "required_finger_table_clearance_m": np.nextafter(
+                0.0, np.inf
+            ),
+        },
+        previous_commanded_action_xyz=np.array(
+            [0.1928052901590658, -0.004970463735855576, 0.15239215934203224]
+        ),
+        preceding_commanded_action_xyz=np.array(
+            [0.1928052901590658, -0.004970463735855576, 0.15171652155521861]
+        ),
+        strict_target_refill_latched=True,
+    )
+    assert recovery_action[:3] == pytest.approx(
+        [0.20, -0.004970463735855576, 0.15522204656009655]
+    )
+    assert recovery_evidence["outside_recovery_active"] is True
+    assert recovery_evidence[
+        "strict_target_refill_tangential_recovery_hold_requested"
+    ] is True
+    assert recovery_evidence[
+        "outward_xy_recovery_authority_isolation_requested"
+    ] is False
+    assert recovery_evidence["strict_target_refill_latched_after_action"] is True
+    assert recovery_evidence["proof"][
+        "strict_target_refill_recovery_holds_tangent_above_exit"
+    ] is True
+
 
 @pytest.mark.parametrize(
     "measured_outward_step_progress_m",
