@@ -2970,7 +2970,7 @@ def test_fixed_safe_z_lateral_hold_decrements_job504094_stable_step(
     ] is True
 
 
-def test_fixed_safe_z_lateral_hold_decrements_job504099_dynamic_envelope():
+def test_fixed_safe_z_lateral_hold_limits_job504104_dynamic_decrement():
     native_spec = {
         "source": "env.action_spec",
         "action_dimension": 7,
@@ -2980,7 +2980,7 @@ def test_fixed_safe_z_lateral_hold_decrements_job504099_dynamic_envelope():
     }
     action, evidence = _fixed_safe_z_lateral_hold_action(
         current_eef=np.array(
-            [0.13385956006365765, -0.023349843048491963, 0.9205811449525522]
+            [0.1336859782797789, -0.023519751480601307, 0.9203794110738601]
         ),
         lateral_target_xy=np.array(
             [0.13242106705090634, -0.02850777957668001]
@@ -2988,12 +2988,12 @@ def test_fixed_safe_z_lateral_hold_decrements_job504099_dynamic_envelope():
         lateral_position_tolerance_m=0.005,
         fixed_safe_z_m=0.920581288496378,
         vertical_position_tolerance_m=0.0004,
-        measured_vertical_step_progress_m=7.849395355918887e-08,
-        measured_outward_step_progress_m=2.4647674437550116e-07,
+        measured_vertical_step_progress_m=-2.868625796659252e-05,
+        measured_outward_step_progress_m=3.2612851954216815e-05,
         outside_side_guard={
-            "minimum_outside_clearance_m": 0.002565928713163898,
+            "minimum_outside_clearance_m": 0.002371443143309254,
             "required_outside_clearance_m": np.nextafter(0.0, np.inf),
-            "finger_table_vertical_clearance_m": 0.007878384352625223,
+            "finger_table_vertical_clearance_m": 0.007669197979373821,
             "required_finger_table_clearance_m": np.nextafter(
                 0.0, np.inf
             ),
@@ -3011,26 +3011,41 @@ def test_fixed_safe_z_lateral_hold_decrements_job504099_dynamic_envelope():
         derivative_gain=2.0,
         native_action_spec=native_spec,
         previous_commanded_action_xyz=np.array(
-            [0.184375, -0.004816243854719608, 0.152909765611303]
+            [0.184375, -0.004852762892700659, 0.15291601067498586]
         ),
         preceding_commanded_action_xyz=np.array(
-            [0.184375, -0.004816284138638314, 0.15290967529229657]
+            [0.184375, -0.004858917757850887, 0.14901624177751352]
         ),
         maximum_positive_safety_release_action=0.05,
     )
     assert action[:3] == pytest.approx(
-        [0.16875, -0.004816206543524967, 0.15290959756028685]
+        [0.18375, -0.0048465915668102376, 0.15615663490562406]
     )
     assert evidence["lateral_target_reached"] is False
     assert evidence["coupled_xy_transient_lateral_hold_accepted"] is True
     assert evidence["coupled_xy_neutralization_step_stable"] is True
+    assert evidence[
+        "coupled_xy_transient_lateral_decrement_requested"
+    ] is True
     assert evidence["coupled_xy_neutralization_requested"] is True
     assert evidence["coupled_xy_neutralization_action"] == pytest.approx(
-        0.16875
+        0.18375
+    )
+    assert evidence[
+        "coupled_xy_transient_neutral_release_action_step"
+    ] == pytest.approx(0.000625)
+    assert evidence[
+        "coupled_xy_selected_neutral_release_action_step"
+    ] == pytest.approx(0.000625)
+    assert evidence["coupled_xy_neutral_release_action_step"] == pytest.approx(
+        0.015625
     )
     assert evidence["proof"][
         "stable_transient_lateral_hold_can_qualify_one_coupled_xy_"
         "decrement"
+    ] is True
+    assert evidence["proof"][
+        "transient_dynamic_decrement_uses_response_resolution_action_step"
     ] is True
 
 

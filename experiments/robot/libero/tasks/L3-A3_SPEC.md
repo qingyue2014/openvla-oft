@@ -1283,6 +1283,22 @@ predecessor-repeat gate still permits at most one decrement per measured stable
 response. The `5.0 mm` final target, `5.05 mm` strict settled-hold band, stage
 completion, neutral-Z confirmation, contact seek, and every physical gate are
 unchanged.
+Job504104 showed that applying the strict-target `0.015625` action decrement
+inside the wider transient envelope created a bounded but nonconvergent limit
+cycle. After sample `236` reduced outward action from `0.184375` to `0.16875`,
+the next two outward responses were `-0.032877 mm` and `-0.055442 mm`; the
+second correctly crossed the unchanged `-0.050 mm` meaningful-inward boundary
+and selected pure `0.20` outward recovery. Equivalent cycles repeated, with
+all `321` structural and physical samples accepted, until the scoped budget
+expired. A decrement qualified only by the transient envelope while the strict
+`5.0 mm` target remains false therefore uses exactly
+`progress_resolution_m / position_action_scale`, or `0.000625` action. This is
+the existing `0.050 mm` measurement resolution converted through the existing
+`0.08 m/action` controller scale, not a new empirical threshold. The original
+`0.015625` decrement remains unchanged inside the strict target. Meaningful
+inward response recovery, predecessor response confirmation, all lateral and
+reserve envelopes, final confirmation, route budget, and every physical gate
+remain unchanged.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.
