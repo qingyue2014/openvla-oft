@@ -6109,6 +6109,10 @@ def _fixed_safe_z_lateral_hold_action(
             <= positive_z_release_slew_bypass_overshoot_threshold_m
         )
     )
+    bounded_projected_exit_safe_z_hold_requested = bool(
+        bounded_projected_exit_brake_requested
+        and captured_safe_z_response_tracking_band_active
+    )
     captured_safe_z_response_hold_requested = bool(
         release_slew_enabled
         and captured_safe_z_response_tracking_band_active
@@ -6117,7 +6121,8 @@ def _fixed_safe_z_lateral_hold_action(
         and not severe_vertical_response
         and not table_recovery_active
         and (
-            live_outside_clearance > outside_recovery_exit_clearance
+            bounded_projected_exit_safe_z_hold_requested
+            or live_outside_clearance > outside_recovery_exit_clearance
             or (
                 inside_safe_z_band
                 and inside_band_tracking_outside_reserve_accepted
@@ -6339,6 +6344,19 @@ def _fixed_safe_z_lateral_hold_action(
         "captured_safe_z_response_hold_action": (
             float(pre_release_slew_z_action)
             if captured_safe_z_response_hold_requested
+            else None
+        ),
+        "bounded_projected_exit_safe_z_hold_requested": (
+            bounded_projected_exit_safe_z_hold_requested
+        ),
+        "bounded_projected_exit_safe_z_hold_correction": (
+            captured_safe_z_response_hold_correction
+            if bounded_projected_exit_safe_z_hold_requested
+            else None
+        ),
+        "bounded_projected_exit_safe_z_hold_action": (
+            float(pre_release_slew_z_action)
+            if bounded_projected_exit_safe_z_hold_requested
             else None
         ),
         "previous_outward_action": previous_outward_action,
@@ -6661,6 +6679,7 @@ def _fixed_safe_z_lateral_hold_action(
             "eligibility": True,
             "healthy_dynamic_projected_exit_uses_incremental_pure_xy_"
             "brake": True,
+            "bounded_projected_exit_retains_captured_safe_z_hold": True,
             "strict_target_projected_exit_retains_full_recovery": True,
             "live_low_reserve_uses_full_outward_brake": True,
             "severe_vertical_response_uses_full_outward_brake": True,

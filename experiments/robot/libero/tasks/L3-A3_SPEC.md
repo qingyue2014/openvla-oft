@@ -1385,6 +1385,24 @@ active, and every added frame retains the same current, projected, and
 post-action physical gates. The `240`-action base route, completion tolerance,
 action bounds, response thresholds, reserves, stage transitions, and all
 fail-closed checks are unchanged.
+Job504154 used the longer observation window and exposed a later failure at
+sample `337`. The second bounded projected-exit brake correctly selected pure
+XY `[0.164375, 0.0]`, but live outside clearance was only `0.000019555 mm`
+below the existing exit target. Outside recovery suppressed the small negative
+Z correction to zero, and the generic release slew then reduced the previously
+stable `+0.132452` Z command by `0.05` to `+0.082452`. The next vertical
+response was `-0.291615 mm`, correctly forcing full recovery and beginning a
+coupled limit cycle; the unchanged corridor gate stopped at sample `362` with
+`0.051335 mm` post-action outside clearance. While—and only while—the complete
+existing bounded projected-exit predicate is true, the fixed-safe-Z controller
+therefore retains the existing captured response-hold formula
+`clip(previous_z + requested_z_action, native_z_bounds)`. This uses the same
+safe-Z band, measured response, table reserve, native action bounds, and PD
+correction already applied on the immediately preceding stable frames. It does
+not apply to meaningful-inward, downward-tail, below-band, table-recovery,
+severe-response, strict-target, live-full-brake, or full-recovery cases. The
+pure-X increment, thresholds, route budget, and every current/projected/post-
+action hard gate remain unchanged.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.
