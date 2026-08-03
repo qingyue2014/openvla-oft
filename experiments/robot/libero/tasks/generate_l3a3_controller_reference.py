@@ -5364,6 +5364,9 @@ def _fixed_safe_z_lateral_hold_action(
     requested_xy_action = (
         lateral_target_xy - current_eef[:2]
     ) / position_action_scale
+    requested_outward_component = float(
+        np.dot(requested_xy_action, outward_direction_xy)
+    )
     requested_xy_norm = float(np.linalg.norm(requested_xy_action))
     lateral_error_m = float(
         np.linalg.norm(lateral_target_xy - current_eef[:2])
@@ -5617,13 +5620,21 @@ def _fixed_safe_z_lateral_hold_action(
     coupled_xy_neutralization_lateral_hold_tolerance_m = float(
         lateral_position_tolerance_m + progress_resolution_m
     )
+    coupled_xy_dynamic_lateral_hold_tolerance_m = float(
+        lateral_position_tolerance_m
+        + closed_loop_hazard_response_bound_m
+    )
+    coupled_xy_lateral_return_requests_inward = bool(
+        requested_outward_component < 0.0
+    )
     coupled_xy_full_outward_settle_hold_requested = bool(
         previous_full_outward_recovery_action
         and coupled_xy_neutralization_height_tracking_accepted
         and lateral_error_m
-        <= coupled_xy_neutralization_lateral_hold_tolerance_m
+        <= coupled_xy_dynamic_lateral_hold_tolerance_m
         and projected_lateral_error_after_measured_outward_response_m
-        <= coupled_xy_neutralization_lateral_hold_tolerance_m
+        <= coupled_xy_dynamic_lateral_hold_tolerance_m
+        and coupled_xy_lateral_return_requests_inward
         and live_outside_clearance > outside_recovery_exit_clearance
         and outside_response_projected_clearance_m
         > outside_recovery_exit_clearance
@@ -5634,18 +5645,15 @@ def _fixed_safe_z_lateral_hold_action(
         <= closed_loop_hazard_response_bound_m
         and not sticky_full_outward_recovery_requested
     )
-    coupled_xy_positive_response_projected_lateral_tolerance_m = float(
-        coupled_xy_neutralization_lateral_hold_tolerance_m
-        + progress_resolution_m
-    )
     coupled_xy_positive_outward_response_damping_requested = bool(
         coupled_xy_neutralization_in_progress
         and coupled_xy_preceding_action_repeated
         and coupled_xy_neutralization_height_tracking_accepted
         and lateral_error_m
-        <= coupled_xy_neutralization_lateral_hold_tolerance_m
+        <= coupled_xy_dynamic_lateral_hold_tolerance_m
         and projected_lateral_error_after_measured_outward_response_m
-        <= coupled_xy_positive_response_projected_lateral_tolerance_m
+        <= coupled_xy_dynamic_lateral_hold_tolerance_m
+        and coupled_xy_lateral_return_requests_inward
         and measured_outward_step_progress_m > progress_resolution_m
         and measured_outward_step_progress_m
         <= closed_loop_hazard_response_bound_m
@@ -5662,9 +5670,9 @@ def _fixed_safe_z_lateral_hold_action(
         coupled_xy_neutralization_in_progress
         and coupled_xy_neutralization_height_tracking_accepted
         and lateral_error_m
-        <= coupled_xy_positive_response_projected_lateral_tolerance_m
+        <= coupled_xy_dynamic_lateral_hold_tolerance_m
         and projected_lateral_error_after_measured_outward_response_m
-        <= coupled_xy_positive_response_projected_lateral_tolerance_m
+        <= coupled_xy_dynamic_lateral_hold_tolerance_m
         and live_outside_clearance > outside_recovery_exit_clearance
         and outside_response_projected_clearance_m
         > outside_recovery_exit_clearance
@@ -5684,6 +5692,7 @@ def _fixed_safe_z_lateral_hold_action(
             and lateral_error_m
             <= coupled_xy_neutralization_lateral_hold_tolerance_m
         )
+        or coupled_xy_full_outward_settle_hold_requested
         or coupled_xy_transient_lateral_hold_accepted
     )
     coupled_xy_neutralization_projected_lateral_hold_accepted = bool(
@@ -5696,6 +5705,7 @@ def _fixed_safe_z_lateral_hold_action(
             )
             else lateral_position_tolerance_m
         )
+        or coupled_xy_full_outward_settle_hold_requested
         or coupled_xy_positive_outward_response_damping_requested
         or coupled_xy_transient_lateral_hold_accepted
     )
@@ -5723,11 +5733,10 @@ def _fixed_safe_z_lateral_hold_action(
     )
     coupled_xy_full_outward_coupled_release_requested = bool(
         coupled_xy_full_outward_settle_hold_requested
-        and lateral_target_reached
         and abs(coupled_xy_neutralization_position_error_m)
         <= vertical_position_tolerance_m
         and abs(measured_vertical_step_progress_m)
-        <= progress_resolution_m
+        <= closed_loop_hazard_response_bound_m
         and measured_outward_step_progress_m > progress_resolution_m
         and live_outside_clearance > outside_refill_target_clearance
         and outside_response_projected_clearance_m
@@ -5738,11 +5747,9 @@ def _fixed_safe_z_lateral_hold_action(
         and (
             (
                 lateral_target_reached
-                and (
-                    coupled_xy_neutralization_step_stable
-                    or coupled_xy_full_outward_coupled_release_requested
-                )
+                and coupled_xy_neutralization_step_stable
             )
+            or coupled_xy_full_outward_coupled_release_requested
             or coupled_xy_positive_outward_response_damping_requested
         )
     )
@@ -6327,8 +6334,11 @@ def _fixed_safe_z_lateral_hold_action(
         "coupled_xy_positive_outward_response_damping_requested": (
             coupled_xy_positive_outward_response_damping_requested
         ),
-        "coupled_xy_positive_response_projected_lateral_tolerance_m": (
-            coupled_xy_positive_response_projected_lateral_tolerance_m
+        "coupled_xy_dynamic_lateral_hold_tolerance_m": (
+            coupled_xy_dynamic_lateral_hold_tolerance_m
+        ),
+        "coupled_xy_lateral_return_requests_inward": (
+            coupled_xy_lateral_return_requests_inward
         ),
         "coupled_xy_transient_lateral_hold_accepted": (
             coupled_xy_transient_lateral_hold_accepted
@@ -6459,9 +6469,10 @@ def _fixed_safe_z_lateral_hold_action(
             "full_outward_coupled_handoff_requires_refill_reserve": True,
             "positive_response_damping_uses_single_coupled_step": True,
             "positive_response_damping_requires_repeated_preceding_xy": True,
-            "positive_response_projection_uses_one_resolution_margin": True,
-            "transient_lateral_hold_uses_existing_projection_envelope": True,
+            "transient_lateral_hold_uses_dynamic_lateral_envelope": True,
             "transient_lateral_hold_preserves_reduced_outward_action": True,
+            "dynamic_lateral_hold_uses_existing_hazard_response_bound": True,
+            "dynamic_lateral_handoff_requires_inward_return_request": True,
             "coupled_xy_neutralization_preserves_bounded_progress": True,
             "coupled_xy_lateral_hysteresis_preserves_outward_progress": True,
             "coupled_xy_lateral_hysteresis_uses_strict_tangential_bound": True,

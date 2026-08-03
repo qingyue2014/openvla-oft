@@ -1110,6 +1110,21 @@ lateral acceptance unless the repeated-frame positive-response damping rule
 applies. No physical threshold, route, budget, task, inventory, state, prompt,
 goal, or intervention changes.
 
+Job503942 confirmed that the `5.10 mm` transient envelope retained the reduced
+action at sample 234. The next response was genuinely inward by
+`-0.104236 mm`, so full recovery remained mandatory and restored clearance.
+At sample 236 the recovered state had current/projected lateral errors of
+`5.127609/5.155111 mm` and a nonhazardous `+0.134538 mm` outward response, but
+it lay outside the narrow transient envelope and again used the generic
+`0.05` release. The dynamic coupled envelope is now derived solely from the
+unchanged `5 mm` lateral tolerance plus the existing `1.1 mm` closed-loop
+hazard-response bound. Within that `6.1 mm` envelope, a full-recovery positive
+response that is safely requesting inward return hands off by one existing
+`0.015625` coupled step even outside strict lateral acceptance; repeated-frame
+positive damping follows the same envelope. Stable decrements still require
+the original `5 mm` acceptance. No physical threshold, route, budget, task,
+inventory, state, prompt, goal, or intervention changes.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

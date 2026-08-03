@@ -2211,11 +2211,18 @@ def test_fixed_safe_z_lateral_hold_retains_job503903_recovery_to_refill_target()
     released_action, released_evidence = (
         _fixed_safe_z_lateral_hold_action(**kwargs)
     )
-    assert released_action[0] == pytest.approx(0.15)
+    assert released_action[0] == pytest.approx(0.20)
     assert released_evidence[
         "projected_lateral_error_after_measured_outward_response_m"
     ] > 0.005
     assert released_evidence["sticky_full_outward_recovery_requested"] is False
+    assert released_evidence[
+        "coupled_xy_full_outward_settle_hold_requested"
+    ] is True
+    assert released_evidence[
+        "coupled_xy_full_outward_coupled_release_requested"
+    ] is False
+    assert released_evidence["coupled_xy_neutralization_hold_requested"] is True
     assert released_evidence["proof"][
         "sticky_outward_recovery_respects_lateral_tolerance"
     ] is True
@@ -2901,7 +2908,7 @@ def test_fixed_safe_z_lateral_hold_damps_job503938_positive_response():
     assert evidence[
         "projected_lateral_error_after_measured_outward_response_m"
     ] <= evidence[
-        "coupled_xy_positive_response_projected_lateral_tolerance_m"
+        "coupled_xy_dynamic_lateral_hold_tolerance_m"
     ]
     assert evidence["proof"][
         "positive_response_damping_uses_single_coupled_step"
@@ -2910,7 +2917,7 @@ def test_fixed_safe_z_lateral_hold_damps_job503938_positive_response():
         "positive_response_damping_requires_repeated_preceding_xy"
     ] is True
     assert evidence["proof"][
-        "positive_response_projection_uses_one_resolution_margin"
+        "dynamic_lateral_hold_uses_existing_hazard_response_bound"
     ] is True
 
 
@@ -2979,14 +2986,90 @@ def test_fixed_safe_z_lateral_hold_retains_job503939_transient_envelope():
         "coupled_xy_neutralization_lateral_hold_tolerance_m"
     ]
     assert evidence["lateral_error_m"] <= evidence[
-        "coupled_xy_positive_response_projected_lateral_tolerance_m"
+        "coupled_xy_dynamic_lateral_hold_tolerance_m"
     ]
     assert evidence["outward_release_slew_applied"] is False
     assert evidence["proof"][
-        "transient_lateral_hold_uses_existing_projection_envelope"
+        "transient_lateral_hold_uses_dynamic_lateral_envelope"
     ] is True
     assert evidence["proof"][
         "transient_lateral_hold_preserves_reduced_outward_action"
+    ] is True
+
+
+def test_fixed_safe_z_lateral_hold_handoffs_job503942_dynamic_recovery():
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": (-np.ones(7, dtype=float)).tolist(),
+        "high": np.ones(7, dtype=float).tolist(),
+        "runtime_resolved": True,
+    }
+    action, evidence = _fixed_safe_z_lateral_hold_action(
+        current_eef=np.array(
+            [0.13340476344321434, -0.023475412631758823, 0.9205104758786942]
+        ),
+        lateral_target_xy=np.array(
+            [0.13242106705090634, -0.02850777957668001]
+        ),
+        lateral_position_tolerance_m=0.005,
+        fixed_safe_z_m=0.920581288496378,
+        vertical_position_tolerance_m=0.0004,
+        measured_vertical_step_progress_m=0.00047493829642186736,
+        measured_outward_step_progress_m=0.00013453807028798725,
+        outside_side_guard={
+            "minimum_outside_clearance_m": 0.002101845693478349,
+            "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+            "finger_table_vertical_clearance_m": 0.007806358637750588,
+            "required_finger_table_clearance_m": np.nextafter(
+                0.0, np.inf
+            ),
+        },
+        outward_direction_xy=np.array([1.0, 0.0]),
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_lateral_translation_action=0.005,
+        maximum_safety_brake_action=0.20,
+        strict_outside_clearance_m=0.0004,
+        strict_table_clearance_m=0.0004,
+        closed_loop_hazard_response_bound_m=0.0011,
+        full_outward_brake_clearance_m=0.00095,
+        progress_resolution_m=0.00005,
+        derivative_gain=2.0,
+        native_action_spec=native_spec,
+        previous_commanded_action_xyz=np.array(
+            [0.20, -0.004929392118113365, 0.20]
+        ),
+        preceding_commanded_action_xyz=np.array(
+            [0.16875, -0.004910331822454228, 0.20]
+        ),
+        maximum_positive_safety_release_action=0.05,
+    )
+    assert action[:3] == pytest.approx(
+        [0.184375, -0.004907128050761536, 0.1890117003105011]
+    )
+    assert evidence["lateral_target_reached"] is False
+    assert evidence["coupled_xy_lateral_return_requests_inward"] is True
+    assert evidence[
+        "coupled_xy_dynamic_lateral_hold_tolerance_m"
+    ] == pytest.approx(0.0061)
+    assert evidence[
+        "coupled_xy_full_outward_settle_hold_requested"
+    ] is True
+    assert evidence[
+        "coupled_xy_full_outward_coupled_release_requested"
+    ] is True
+    assert evidence["coupled_xy_neutralization_hold_requested"] is True
+    assert evidence["coupled_xy_neutralization_requested"] is True
+    assert evidence["coupled_xy_neutralization_action"] == pytest.approx(
+        0.184375
+    )
+    assert evidence["outward_release_slew_applied"] is False
+    assert evidence["proof"][
+        "dynamic_lateral_hold_uses_existing_hazard_response_bound"
+    ] is True
+    assert evidence["proof"][
+        "dynamic_lateral_handoff_requires_inward_return_request"
     ] is True
 
 
