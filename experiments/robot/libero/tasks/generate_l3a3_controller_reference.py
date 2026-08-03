@@ -5988,7 +5988,16 @@ def _fixed_safe_z_lateral_hold_action(
     strict_target_refill_current_repeat_stable = bool(
         strict_target_refill_reserve_pending
         and strict_target_axis_transition_exact_repeat
-        and coupled_xy_neutralization_step_stable
+        and abs(coupled_xy_neutralization_position_error_m)
+        <= vertical_position_tolerance_m
+        and abs(measured_vertical_step_progress_m)
+        <= progress_resolution_m
+        and abs(measured_outward_step_progress_m)
+        <= progress_resolution_m
+        and live_outside_clearance > outside_recovery_exit_clearance
+        and outside_response_projected_clearance_m
+        > outside_recovery_exit_clearance
+        and live_table_clearance > outside_recovery_exit_clearance
     )
     strict_target_refill_stable_repeat_count_after_action = int(
         min(

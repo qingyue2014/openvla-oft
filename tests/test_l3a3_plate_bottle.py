@@ -3228,6 +3228,7 @@ def test_fixed_safe_z_lateral_hold_waits_for_two_stable_repeats_job504218():
     assert wait_evidence[
         "strict_target_refill_current_repeat_stable"
     ] is True
+    assert wait_evidence["coupled_xy_neutralization_step_stable"] is True
     assert wait_evidence[
         "strict_target_refill_stable_repeat_count_after_action"
     ] == 1
@@ -3273,6 +3274,55 @@ def test_fixed_safe_z_lateral_hold_waits_for_two_stable_repeats_job504218():
         "strict_target_refill_stable_repeat_confirmed"
     ] is False
     assert unstable_action[0] == pytest.approx(0.20)
+
+    low_reserve_action, low_reserve_evidence = (
+        _fixed_safe_z_lateral_hold_action(
+            **{
+                **kwargs,
+                "current_eef": np.array(
+                    [
+                        0.13296525455741104,
+                        -0.023545604546983845,
+                        0.9205729360815693,
+                    ]
+                ),
+                "measured_vertical_step_progress_m": -8.284510298883774e-07,
+                "measured_outward_step_progress_m": -1.161255714171583e-06,
+                "outside_side_guard": {
+                    **kwargs["outside_side_guard"],
+                    "minimum_outside_clearance_m": 0.0016232777005584648,
+                    "finger_table_vertical_clearance_m": 0.007807946463134097,
+                },
+                "previous_commanded_action_xyz": np.array(
+                    [
+                        0.164375,
+                        -0.004970463735855576,
+                        0.1331111149539916,
+                    ]
+                ),
+                "preceding_commanded_action_xyz": np.array(
+                    [
+                        0.164375,
+                        -0.004970463735855576,
+                        0.1331111149539916,
+                    ]
+                ),
+            },
+            strict_target_refill_stable_repeat_count=0,
+        )
+    )
+    assert low_reserve_evidence[
+        "coupled_xy_neutralization_step_stable"
+    ] is False
+    assert low_reserve_evidence[
+        "strict_target_refill_current_repeat_stable"
+    ] is True
+    assert low_reserve_evidence[
+        "strict_target_refill_stable_repeat_count_after_action"
+    ] == 1
+    assert low_reserve_action[:2] == pytest.approx(
+        [0.164375, -0.004970463735855576]
+    )
 
 
 @pytest.mark.parametrize(
