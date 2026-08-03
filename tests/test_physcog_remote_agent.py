@@ -436,6 +436,8 @@ def test_batch_script_uses_worktree_local_triton_cache():
         'mkdir -p "$NUMBA_CACHE_DIR" "$XDG_CACHE_HOME" "$MPLCONFIGDIR" '
         '"$TRITON_CACHE_DIR"' in script
     )
+    assert "export CC=/usr/bin/gcc" in script
+    assert "export CXX=/usr/bin/g++" in script
 
 
 def test_batch_script_can_exclude_unstable_render_nodes():
