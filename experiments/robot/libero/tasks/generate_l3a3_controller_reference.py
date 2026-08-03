@@ -5265,6 +5265,16 @@ def _fixed_safe_z_lateral_hold_action(
         release_slew_enabled
         and np.all(previous_commanded_action_xyz[:2] == 0.0)
     )
+    previous_xy_action_repeat_safe = bool(
+        release_slew_enabled
+        and float(
+            np.dot(
+                previous_commanded_action_xyz[:2],
+                outward_direction_xy,
+            )
+        )
+        >= 0.0
+    )
     live_outside_clearance = float(
         outside_side_guard["minimum_outside_clearance_m"]
     )
@@ -5507,8 +5517,7 @@ def _fixed_safe_z_lateral_hold_action(
         <= progress_resolution_m
         and live_outside_clearance > outside_recovery_exit_clearance
         and live_table_clearance > outside_recovery_exit_clearance
-        and not outside_recovery_active
-        and previous_xy_action_neutral
+        and previous_xy_action_repeat_safe
     )
     if (
         vertical_stability_confirmation_hold
@@ -5731,6 +5740,7 @@ def _fixed_safe_z_lateral_hold_action(
         vertical_stability_confirmation_hold
     )
     if vertical_stability_confirmation_hold_applied:
+        commanded_xy_action = previous_commanded_action_xyz[:2].copy()
         commanded_z_action = 0.0
 
     action = np.zeros(7, dtype=float)
@@ -5866,6 +5876,7 @@ def _fixed_safe_z_lateral_hold_action(
             vertical_stability_confirmation_hold_eligible
         ),
         "previous_xy_action_neutral": previous_xy_action_neutral,
+        "previous_xy_action_repeat_safe": previous_xy_action_repeat_safe,
         "vertical_stability_confirmation_hold_applied": (
             vertical_stability_confirmation_hold_applied
         ),
@@ -6010,8 +6021,8 @@ def _fixed_safe_z_lateral_hold_action(
             "outside_recovery_preserves_bounded_tangential_return": True,
             "first_stable_frame_uses_neutral_z_confirmation": True,
             "neutral_z_confirmation_requires_stable_outward_response": True,
-            "neutral_z_confirmation_requires_neutral_preceding_xy": True,
-            "neutral_z_confirmation_excludes_active_outside_recovery": True,
+            "neutral_z_confirmation_repeats_preceding_xy_action": True,
+            "neutral_z_confirmation_requires_noninward_preceding_xy": True,
             "noninward_refill_band_uses_exact_nominal_action": True,
             "recovery_release_requires_exit_headroom": True,
             "outside_recovery_suspends_negative_z": True,
@@ -17838,10 +17849,13 @@ def _seek_stable_plate_contact(
                 )
                 and fixed_safe_z_previous_commanded_action_xyz
                 is not None
-                and np.all(
-                    fixed_safe_z_previous_commanded_action_xyz[:2]
-                    == 0.0
+                and float(
+                    np.dot(
+                        fixed_safe_z_previous_commanded_action_xyz[:2],
+                        corridor_outward_direction,
+                    )
                 )
+                >= 0.0
             )
             fixed_safe_z_stable_count = (
                 fixed_safe_z_stable_count + 1

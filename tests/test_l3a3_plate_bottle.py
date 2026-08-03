@@ -1231,7 +1231,7 @@ def test_fixed_safe_z_lateral_hold_brakes_job503646_below_band_refill():
     ] is True
 
 
-def test_fixed_safe_z_lateral_hold_slews_job503647_xy_while_holding_z():
+def test_fixed_safe_z_lateral_hold_slews_job503647_positive_release():
     native_spec = {
         "source": "env.action_spec",
         "action_dimension": 7,
@@ -1271,12 +1271,12 @@ def test_fixed_safe_z_lateral_hold_slews_job503647_xy_while_holding_z():
         previous_commanded_action_xyz=previous,
         maximum_positive_safety_release_action=0.05,
     )
-    assert action[:3].tolist() == pytest.approx([0.15, 0.0, 0.20])
+    assert action[:3].tolist() == pytest.approx([0.15, 0.0, 0.15])
     assert evidence["release_slew_enabled"] is True
     assert evidence["outward_release_slew_applied"] is True
     assert evidence["previous_xy_action_neutral"] is False
-    assert evidence["captured_safe_z_response_hold_requested"] is True
-    assert evidence["positive_z_release_slew_applied"] is False
+    assert evidence["captured_safe_z_response_hold_requested"] is False
+    assert evidence["positive_z_release_slew_applied"] is True
     assert evidence["proof"][
         "positive_safety_brake_release_is_rate_limited_unless_"
         "safe_z_unload_is_required"
@@ -2272,7 +2272,7 @@ def test_fixed_safe_z_lateral_hold_rejects_job503904_coupled_confirmation():
         "neutral_z_confirmation_requires_stable_outward_response"
     ] is True
     assert evidence["proof"][
-        "neutral_z_confirmation_requires_neutral_preceding_xy"
+        "neutral_z_confirmation_repeats_preceding_xy_action"
     ] is True
     with pytest.raises(
         RuntimeError,
@@ -2324,18 +2324,22 @@ def test_fixed_safe_z_lateral_hold_confirms_job503649_with_neutral_z():
         progress_resolution_m=0.00005,
         derivative_gain=2.0,
         native_action_spec=native_spec,
-        previous_commanded_action_xyz=np.array([0.0, 0.0, 0.20]),
+        previous_commanded_action_xyz=np.array([0.15, 0.0, 0.20]),
         maximum_positive_safety_release_action=0.05,
         vertical_stability_confirmation_hold=True,
     )
-    assert action[:3].tolist() == pytest.approx([0.0, 0.0, 0.0])
+    assert action[:3].tolist() == pytest.approx([0.15, 0.0, 0.0])
     assert evidence["measured_inward_response"] is False
     assert evidence["outside_recovery_active"] is False
-    assert evidence["previous_xy_action_neutral"] is True
+    assert evidence["previous_xy_action_neutral"] is False
+    assert evidence["previous_xy_action_repeat_safe"] is True
     assert evidence["vertical_stability_confirmation_hold_eligible"] is True
     assert evidence["vertical_stability_confirmation_hold_applied"] is True
     assert evidence["proof"][
         "first_stable_frame_uses_neutral_z_confirmation"
+    ] is True
+    assert evidence["proof"][
+        "neutral_z_confirmation_repeats_preceding_xy_action"
     ] is True
 
 

@@ -923,11 +923,22 @@ preceding XY action was still `+0.15` and its outward response was a meaningful
 outward recovery at the same instant that Z changed from `0.145627` to exact
 zero, producing a `-0.797109 mm` vertical response. Neutral Z confirmation now
 additionally requires the same existing `0.05 mm` response resolution on the
-outward axis, no active outside recovery, and an exactly neutral preceding XY
-command. Captured Z tracking remains active until those stricter decoupling
-conditions pass. The neutral Z action itself and every threshold, route,
-budget, task, inventory, state, prompt, goal, and intervention remain
-unchanged.
+outward axis and a native-bounded non-inward preceding XY command. The
+confirmation frame repeats that preceding XY command exactly and changes only
+Z to zero, so it cannot combine Z neutralization with an XY action transition.
+Captured Z tracking remains active until those stricter decoupling conditions
+pass. The neutral Z action itself and every threshold, route, budget, task,
+inventory, state, prompt, goal, and intervention remain unchanged.
+
+Job503905 confirmed that requiring the preceding XY command itself to be zero
+was not an attainable decoupling condition: none of 57 fixed-stage frames had
+a neutral preceding XY action because outside recovery and bounded tangential
+correction remained active near the unchanged `5 mm` lateral boundary. The
+confirmation requirement now concerns action isolation rather than action
+magnitude: the outward response must pass the existing resolution, the
+preceding XY action must be native-bounded and non-inward, and that exact XY
+action is repeated on the neutral-Z frame. No physical or controller threshold,
+route, budget, task, inventory, state, prompt, goal, or intervention changes.
 
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
