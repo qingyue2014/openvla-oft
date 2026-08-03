@@ -1,0 +1,37 @@
+{
+  "scenario": "L3-B3-MICROWAVE-PRECONDITION",
+  "design_version": 5,
+  "status": "INVALIDATED_BY_FORMAL_STABILIZATION_AUDIT",
+  "discovered_at_stage": "pi0.5 moved-cup Eb diagnostic exact runtime-state audit",
+  "reason": "The v5 serialized target and distractor mugs at z=0.97 m without table support. During the evaluator's ten-step controller wait they fell approximately 0.071-0.074 m and reached approximately 0.97 m/s before becoming supported. The v5 validator preregistered permissive spawn-settle limits and therefore passed a state that was still changing support and falling during the mandatory stabilization window.",
+  "observed_invalid_runtime_state": {
+    "job_id": "504111",
+    "commit": "4a357f875a9f6e882d964a1e26e0e09c9a0740f5",
+    "target_max_translation_drift_m": 0.07146406316675759,
+    "target_max_linear_speed_mps": 0.9735190634222886,
+    "distractor_max_translation_drift_m": 0.07410200244270997,
+    "distractor_max_linear_speed_mps": 0.971197385026346,
+    "pre_wait_table_support": false,
+    "first_policy_table_support": true
+  },
+  "invalid_artifacts": [
+    "v5 serialized states",
+    "job 504111",
+    "job 504111 metrics",
+    "job 504111 videos",
+    "job 504111 reports and HTML entries"
+  ],
+  "invalid_scope": [
+    "serialized states",
+    "jobs",
+    "metrics",
+    "videos",
+    "tables",
+    "reports",
+    "HTML entries"
+  ],
+  "successor_requirement": "v6 must serialize both native mugs already supported on the table and enforce translation, orientation, velocity, support, and forbidden-contact limits throughout the complete formal wait and post-wait hold",
+  "do_not_interpret_or_publish": true,
+  "human_review_approved": false,
+  "formal_authorized": false
+}

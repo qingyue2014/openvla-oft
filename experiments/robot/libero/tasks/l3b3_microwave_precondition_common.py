@@ -9,18 +9,22 @@ changes only serialized state that already belongs to the native task:
 * Ec / ``open_control``: the empty microwave is fully open and both mugs keep
   the same shared project layout.
 
-Version 5 moves the target mug, using its unmodified native free joint, to a
+Version 6 moves the target mug, using its unmodified native free joint, to a
 common table location that is both outside the microwave-door swept volume and
-closer to the robot's post-opening OSC workspace.  That layout delta is
-identical in Eb, Er, and Ec; the door joint remains the only cross-condition
-intervention.  Version 1 used the official mug position and was invalidated
+closer to the robot's post-opening OSC workspace.  Before serialization, both
+native mugs are lowered with native MuJoCo physics to their supported table
+heights; those native free-joint z values are shared identically by Eb, Er,
+and Ec.  The door joint remains the only cross-condition intervention.
+Version 1 used the official mug position and was invalidated
 when the opening door knocked the mug over.  Version 2 cleared the door but
 placed the grasp-high endpoint outside the effective post-opening workspace.
 Version 3 moved closer, but its exact distractor-avoiding tangent grasp point
 remained beyond the controller's waypoint tolerance.
 Version 4 moved left but had no collision-free nominal grasp at the robot's
-actual partial-open door angle.  Version 5 is selected only after the complete
-reference-angle grasp corridor compiles with positive clearance.
+actual partial-open door angle.  Version 5 selected the current geometry but
+incorrectly allowed both mugs to fall roughly seven centimetres during the
+formal evaluator wait.  Version 6 preserves that geometry while requiring the
+serialized state itself to be supported and stable throughout the wait.
 
 The primary Er diagnostic is whether opening occurs before insertion.  Because
 the selected native task also requires ``Close(microwave_1)``, a successful Er
@@ -43,7 +47,7 @@ import numpy as np
 
 
 SCENE_ID = "L3-B3-MICROWAVE-PRECONDITION"
-DESIGN_VERSION = 5
+DESIGN_VERSION = 6
 SUITE = "libero_10"
 TASK_ID = 9
 TASK_FILE = (
@@ -103,6 +107,7 @@ EXPECTED_INITIAL_PREDICATES = {
 DUMMY_ACTION = np.asarray([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
 FORMAL_WAIT_STEPS = 10
 CONSTRUCTION_SETTLE_STEPS = 100
+COMMON_OBJECT_SETTLE_STEPS = 100
 POST_WAIT_HOLD_STEPS = 100
 DOOR_CLOSED_QPOS = 0.0
 DOOR_FULLY_OPEN_QPOS = -2.094
@@ -115,6 +120,8 @@ PROJECT_TARGET_WORLD_XY = (-0.30, -0.15)
 PROJECT_TARGET_LAYOUT_FIELDS = (
     "white_yellow_mug_1.free_joint.qpos.x",
     "white_yellow_mug_1.free_joint.qpos.y",
+    "white_yellow_mug_1.free_joint.qpos.z",
+    "porcelain_mug_1.free_joint.qpos.z",
 )
 PROJECT_TARGET_DOOR_SWEEP_CLEARANCE_M = 0.09399607812830028
 PROJECT_TARGET_DISTRACTOR_XY_SEPARATION_M = 0.20258972097602151
@@ -158,12 +165,12 @@ TARGET_HANDLE_GRASP_CONTROLLER_INVALIDATION_SHA256 = (
 # semantic upright limit required by the repository policy.
 MAX_TARGET_MUG_TILT_DEG = 1.0
 MAX_DISTRACTOR_MUG_TILT_DEG = 1.0
-# Official LIBERO states spawn both mugs above the table.  The evaluator's
-# native ten-step wait includes a roughly 7.5 cm fall and roughly 0.98 m/s
-# transient speed.  Strict limits apply after that native settling window.
-MAX_NATIVE_WINDOW_TRANSLATION_M = 0.080
-MAX_NATIVE_TRANSIENT_LINEAR_SPEED_MPS = 1.10
-MAX_NATIVE_TRANSIENT_ANGULAR_SPEED_RADPS = 0.10
+# Official LIBERO states spawn both mugs above the table.  Version 6 settles
+# their native free-joint z values before serialization, so the formal wait is
+# a stability check rather than an unrecorded construction phase.
+MAX_NATIVE_WINDOW_TRANSLATION_M = 0.003
+MAX_NATIVE_TRANSIENT_LINEAR_SPEED_MPS = 0.015
+MAX_NATIVE_TRANSIENT_ANGULAR_SPEED_RADPS = 0.05
 MAX_PLACED_WINDOW_TRANSLATION_M = 0.003
 MAX_PLACED_TRANSIENT_LINEAR_SPEED_MPS = 0.015
 MAX_PLACED_TRANSIENT_ANGULAR_SPEED_RADPS = 0.05

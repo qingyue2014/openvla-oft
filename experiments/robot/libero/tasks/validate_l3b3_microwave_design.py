@@ -7,9 +7,13 @@ import json
 from pathlib import Path
 
 from experiments.robot.libero.tasks.l3b3_microwave_precondition_common import (
+    COMMON_OBJECT_SETTLE_STEPS,
     DESIGN_VERDICT,
     DESIGN_VERSION,
     MAX_DISTRACTOR_MUG_TILT_DEG,
+    MAX_NATIVE_TRANSIENT_ANGULAR_SPEED_RADPS,
+    MAX_NATIVE_TRANSIENT_LINEAR_SPEED_MPS,
+    MAX_NATIVE_WINDOW_TRANSLATION_M,
     MAX_TARGET_MUG_TILT_DEG,
     INTERVENTION_ALLOWLIST,
     PAIRING_METHOD,
@@ -94,10 +98,11 @@ def validate_spec(path: str | Path) -> dict[str, object]:
             raise ValueError(f"L3-B3 {unchanged} delta must be none")
     layout = record.get("common_layout_intervention")
     expected_layout = {
-        "object": "white_yellow_mug_1",
-        "registered_class": "white_yellow_mug",
+        "objects": ["white_yellow_mug_1", "porcelain_mug_1"],
+        "registered_classes": ["white_yellow_mug", "porcelain_mug"],
         "fields": list(PROJECT_TARGET_LAYOUT_FIELDS),
         "project_target_world_xy": list(PROJECT_TARGET_WORLD_XY),
+        "pre_serialization_native_settle_steps": COMMON_OBJECT_SETTLE_STEPS,
         "identical_across_conditions": True,
         "asset_modified": False,
     }
@@ -112,10 +117,21 @@ def validate_spec(path: str | Path) -> dict[str, object]:
     ):
         raise ValueError("L3-B3 must identify its immediately invalidated predecessor")
     expected_invalidation = (
-        f"l3b3_microwave_v{DESIGN_VERSION - 1}_invalidation.json"
+        f"l3b3_microwave_v{DESIGN_VERSION - 1}_state_invalidation.json"
     )
     if invalidation.get("artifact") != expected_invalidation:
         raise ValueError("L3-B3 predecessor invalidation artifact mismatch")
+    invalidation_path = path.with_name(expected_invalidation).resolve(strict=True)
+    if invalidation.get("artifact_sha256") != sha256_path(invalidation_path):
+        raise ValueError("L3-B3 predecessor invalidation hash mismatch")
+    invalidation_record = json.loads(
+        invalidation_path.read_text(encoding="utf-8")
+    )
+    if (
+        invalidation_record.get("do_not_interpret_or_publish") is not True
+        or invalidation_record.get("formal_authorized") is not False
+    ):
+        raise ValueError("L3-B3 predecessor invalidation is not fail-closed")
     if invalidation.get("formal_authorized") is not False:
         raise ValueError("L3-B3 predecessor invalidation must remain fail-closed")
     selection = record.get("candidate_selection")
@@ -158,6 +174,28 @@ def validate_spec(path: str | Path) -> dict[str, object]:
         raise ValueError("L3-B3 target mug must use the 1.0-degree upright gate")
     if thresholds.get("distractor_mug_max_tilt_deg_throughout") != MAX_DISTRACTOR_MUG_TILT_DEG:
         raise ValueError("L3-B3 distractor mug must use the 1.0-degree upright gate")
+    if (
+        thresholds.get("pre_serialization_native_object_settle_steps")
+        != COMMON_OBJECT_SETTLE_STEPS
+    ):
+        raise ValueError("L3-B3 must settle native object support before serialization")
+    if (
+        thresholds.get("formal_wait_max_translation_m")
+        != MAX_NATIVE_WINDOW_TRANSLATION_M
+    ):
+        raise ValueError("L3-B3 formal-wait translation limit mismatch")
+    if (
+        thresholds.get("formal_wait_max_linear_speed_mps")
+        != MAX_NATIVE_TRANSIENT_LINEAR_SPEED_MPS
+    ):
+        raise ValueError("L3-B3 formal-wait linear-speed limit mismatch")
+    if (
+        thresholds.get("formal_wait_max_angular_speed_radps")
+        != MAX_NATIVE_TRANSIENT_ANGULAR_SPEED_RADPS
+    ):
+        raise ValueError("L3-B3 formal-wait angular-speed limit mismatch")
+    if thresholds.get("support_required_throughout_formal_wait") is not True:
+        raise ValueError("L3-B3 requires table support throughout formal wait")
     if thresholds.get("post_wait_hold_steps") != 100:
         raise ValueError("L3-B3 must validate a 100-step post-wait hold")
     if thresholds.get("door_construction_settle_steps") != 100:
@@ -230,7 +268,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--spec",
-        default=str(Path(__file__).with_name("l3b3_microwave_v5_design_prereg.json")),
+        default=str(Path(__file__).with_name("l3b3_microwave_v6_design_prereg.json")),
     )
     parser.add_argument("--native-bddl", required=True)
     parser.add_argument("--output")

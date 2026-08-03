@@ -35,6 +35,12 @@ from experiments.robot.libero.tasks.l3b3_microwave_precondition_common import (
     INITIAL_GATE_VERDICT,
     INTERVENTION_ALLOWLIST,
     MAX_DISTRACTOR_MUG_TILT_DEG,
+    MAX_NATIVE_TRANSIENT_ANGULAR_SPEED_RADPS,
+    MAX_NATIVE_TRANSIENT_LINEAR_SPEED_MPS,
+    MAX_NATIVE_WINDOW_TRANSLATION_M,
+    MAX_POST_WAIT_ANGULAR_SPEED_RADPS,
+    MAX_POST_WAIT_LINEAR_SPEED_MPS,
+    MAX_POST_WAIT_TRANSLATION_M,
     MAX_TARGET_MUG_TILT_DEG,
     PAIRING_METHOD,
     PAIRING_VERDICT,
@@ -141,6 +147,34 @@ def _validate_physical_metadata(attrs, condition: str, context: str) -> dict:
             raise ValueError(f"{context} {body} formal tilt failed")
         if float(hold[body]["max_tilt_deg"]) > limit:
             raise ValueError(f"{context} {body} hold tilt failed")
+        for label, stats, limits in (
+            (
+                "formal",
+                formal[body],
+                (
+                    MAX_NATIVE_WINDOW_TRANSLATION_M,
+                    MAX_NATIVE_TRANSIENT_LINEAR_SPEED_MPS,
+                    MAX_NATIVE_TRANSIENT_ANGULAR_SPEED_RADPS,
+                ),
+            ),
+            (
+                "hold",
+                hold[body],
+                (
+                    MAX_POST_WAIT_TRANSLATION_M,
+                    MAX_POST_WAIT_LINEAR_SPEED_MPS,
+                    MAX_POST_WAIT_ANGULAR_SPEED_RADPS,
+                ),
+            ),
+        ):
+            translation, linear, angular = limits
+            if float(stats["max_translation_drift_m"]) > translation:
+                raise ValueError(f"{context} {body} {label} translation failed")
+            if float(stats["max_linear_speed_mps"]) > linear:
+                raise ValueError(f"{context} {body} {label} linear speed failed")
+            if float(stats["max_angular_speed_radps"]) > angular:
+                raise ValueError(f"{context} {body} {label} angular speed failed")
+        _require_table_support(pre, body, context)
         _require_table_support(first, body, context)
     if first.get("predicates") != EXPECTED_INITIAL_PREDICATES[condition]:
         raise ValueError(f"{context} first-policy predicate mismatch")
@@ -216,12 +250,22 @@ def _load_bundle(path: Path, condition: str) -> list[dict[str, object]]:
             if layout.get("asset_modified") is not False:
                 raise ValueError(f"{context} common layout modified an asset")
             qpos_slice, _ = flat_free_joint_slices(_MODEL_PROXY.model, TARGET_BODY)
+            distractor_qpos_slice, _ = flat_free_joint_slices(
+                _MODEL_PROXY.model, DISTRACTOR_BODY
+            )
             if not np.array_equal(
                 base[qpos_slice.start : qpos_slice.start + 2],
                 np.asarray(PROJECT_TARGET_WORLD_XY, dtype=float),
             ):
                 raise ValueError(f"{context} project-base target x/y mismatch")
-            expected_layout_indices = [qpos_slice.start, qpos_slice.start + 1]
+            expected_layout_indices = sorted(
+                (
+                    qpos_slice.start,
+                    qpos_slice.start + 1,
+                    qpos_slice.start + 2,
+                    distractor_qpos_slice.start + 2,
+                )
+            )
             if layout.get("changed_flat_state_indices") != expected_layout_indices:
                 raise ValueError(f"{context} source-to-project index mismatch")
             if not _decode(demo.attrs.get("official_source_state_sha256", "")):
@@ -305,7 +349,7 @@ def _validate_manifest(path: Path, bundles: dict[str, Path]) -> dict:
     if record.get("native_asset_manifest_sha256") != native_asset_manifest_sha256():
         raise ValueError("initial manifest native asset hash mismatch")
     prereg = Path(__file__).with_name(
-        "l3b3_microwave_v5_design_prereg.json"
+        "l3b3_microwave_v6_design_prereg.json"
     ).resolve(strict=True)
     prereg_binding = record.get("design_preregistration_artifact", {})
     if Path(prereg_binding.get("path", "")).resolve() != prereg:

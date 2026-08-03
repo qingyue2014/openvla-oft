@@ -17,6 +17,7 @@ import numpy as np
 
 from experiments.robot.libero.tasks.l3b3_microwave_precondition_common import (
     CONDITIONS,
+    COMMON_OBJECT_SETTLE_STEPS,
     CONDITION_INTERVENTION_BODY,
     CONDITION_INTERVENTION_KIND,
     CONDITION_LABEL,
@@ -91,7 +92,7 @@ MIN_VISIBLE_MEAN_ABS_ERROR = 0.5
 
 
 def _apply_common_project_layout(model, official_state: np.ndarray):
-    """Relocate the native target identically in all three conditions."""
+    """Relocate the native target before native-physics support settling."""
     official = np.asarray(official_state, dtype=float)
     project = official.copy()
     qpos_slice, _ = flat_free_joint_slices(model, TARGET_BODY)
@@ -105,18 +106,7 @@ def _apply_common_project_layout(model, official_state: np.ndarray):
             "common target layout delta must change exactly target qpos x/y: "
             f"changed={sorted(changed)} expected={sorted(allowed)}"
         )
-    return project, {
-        "kind": "common_native_target_free_joint_translation",
-        "object": "white_yellow_mug_1",
-        "body": TARGET_BODY,
-        "fields": list(PROJECT_TARGET_LAYOUT_FIELDS),
-        "changed_flat_state_indices": sorted(changed),
-        "official_free_joint_qpos_xyz_wxyz": before.tolist(),
-        "project_free_joint_qpos_xyz_wxyz": project[qpos_slice].tolist(),
-        "project_target_world_xy": list(PROJECT_TARGET_WORLD_XY),
-        "identical_across_conditions": True,
-        "asset_modified": False,
-    }
+    return project, before
 
 
 def _refresh_observation(env):
@@ -179,6 +169,78 @@ def _reset_to(env, state, names, positions, quaternions):
     env.reset()
     _restore_fixtures(env, names, positions, quaternions)
     return env.set_init_state(np.asarray(state, dtype=float))
+
+
+def _stabilize_common_project_layout(
+    env,
+    official_state: np.ndarray,
+    project_state: np.ndarray,
+    official_target_qpos: np.ndarray,
+    fixture_names,
+    fixture_positions,
+    fixture_quaternions,
+):
+    """Serialize supported mug heights shared by every paired condition.
+
+    The official task places both mugs above the table.  Construction may use
+    native dynamics to identify their support heights, but the evaluator must
+    not receive a state that is still falling.  Only the native free-joint z
+    coordinates are copied from the settled state; target x/y remain the
+    preregistered moved layout and every other source-state field stays exact.
+    """
+    official = np.asarray(official_state, dtype=float)
+    project = np.asarray(project_state, dtype=float)
+    _reset_to(
+        env,
+        project,
+        fixture_names,
+        fixture_positions,
+        fixture_quaternions,
+    )
+    _fast_noop_steps(env, COMMON_OBJECT_SETTLE_STEPS)
+    settled = np.asarray(env.sim.get_state().flatten(), dtype=float)
+    candidate = project.copy()
+    support_z = {}
+    expected_changed = set()
+    for body in (TARGET_BODY, DISTRACTOR_BODY):
+        qpos_slice, qvel_slice = flat_free_joint_slices(env.sim.model, body)
+        if np.any(project[qvel_slice] != 0.0):
+            raise ValueError(f"{body} official free-joint velocity is nonzero")
+        z_index = qpos_slice.start + 2
+        candidate[z_index] = settled[z_index]
+        support_z[body] = float(settled[z_index])
+        expected_changed.add(z_index)
+    target_qpos_slice, _ = flat_free_joint_slices(env.sim.model, TARGET_BODY)
+    candidate[target_qpos_slice.start] = PROJECT_TARGET_WORLD_XY[0]
+    candidate[target_qpos_slice.start + 1] = PROJECT_TARGET_WORLD_XY[1]
+    expected_changed.update(
+        (target_qpos_slice.start, target_qpos_slice.start + 1)
+    )
+    changed = set(np.flatnonzero(candidate != official).tolist())
+    if changed != expected_changed:
+        raise ValueError(
+            "common stabilized layout must change exactly target x/y and both "
+            f"mug z coordinates: changed={sorted(changed)} "
+            f"expected={sorted(expected_changed)}"
+        )
+    return candidate, {
+        "kind": "common_native_mug_free_joint_layout_and_support_state",
+        "objects": ["white_yellow_mug_1", "porcelain_mug_1"],
+        "bodies": [TARGET_BODY, DISTRACTOR_BODY],
+        "fields": list(PROJECT_TARGET_LAYOUT_FIELDS),
+        "changed_flat_state_indices": sorted(changed),
+        "official_target_free_joint_qpos_xyz_wxyz": (
+            official_target_qpos.tolist()
+        ),
+        "project_target_free_joint_qpos_xyz_wxyz": (
+            candidate[target_qpos_slice].tolist()
+        ),
+        "project_target_world_xy": list(PROJECT_TARGET_WORLD_XY),
+        "settled_support_qpos_z": support_z,
+        "pre_serialization_native_settle_steps": COMMON_OBJECT_SETTLE_STEPS,
+        "identical_across_conditions": True,
+        "asset_modified": False,
+    }
 
 
 def _policy_images(observation) -> dict[str, np.ndarray]:
@@ -374,22 +436,27 @@ def _gate_failures(
             > MAX_FINAL_ANGULAR_SPEED_RADPS
         ):
             failures.append(f"{body}:first_policy_angular_speed")
-    if not _support_ok(first[TARGET_BODY], "table"):
-        failures.append("target:missing_expected_support")
-    if not _support_ok(first[DISTRACTOR_BODY], "table"):
-        failures.append("distractor:missing_table_support")
-    if _forbidden_contacts(
-        first[TARGET_BODY], allow_microwave=False
-    ):
-        failures.append("target:forbidden_contact")
-    distractor_contacts = [
-        str(value) for value in first[DISTRACTOR_BODY].get("contacts", [])
-    ]
+    if any(not _support_ok(sample[TARGET_BODY], "table") for sample in samples):
+        failures.append("target:missing_expected_support_during_window")
     if any(
-        name.startswith(("robot0_", "white_yellow_mug_1", "microwave_1"))
-        for name in distractor_contacts
+        not _support_ok(sample[DISTRACTOR_BODY], "table") for sample in samples
     ):
-        failures.append("distractor:forbidden_contact")
+        failures.append("distractor:missing_table_support_during_window")
+    if any(
+        _forbidden_contacts(sample[TARGET_BODY], allow_microwave=False)
+        for sample in samples
+    ):
+        failures.append("target:forbidden_contact_during_window")
+    if any(
+        any(
+            str(name).startswith(
+                ("robot0_", "white_yellow_mug_1", "microwave_1")
+            )
+            for name in sample[DISTRACTOR_BODY].get("contacts", [])
+        )
+        for sample in samples
+    ):
+        failures.append("distractor:forbidden_contact_during_window")
     if float(stats["door_joint"]["max_qpos_drift"]) > MAX_DOOR_WINDOW_QPOS_DRIFT:
         failures.append("door:qpos_drift")
     if float(first["door_joint"]["speed"]) > MAX_DOOR_FINAL_SPEED:
@@ -496,12 +563,21 @@ def generate(args) -> dict[str, object]:
             official_base = np.asarray(
                 native_states[native_index], dtype=float
             ).copy()
-            base, common_layout_delta = _apply_common_project_layout(
+            project, official_target_qpos = _apply_common_project_layout(
                 env.sim.model, official_base
             )
             env.reset()
             fixture_names, fixture_positions, fixture_quaternions = (
                 _fixture_snapshot(env)
+            )
+            base, common_layout_delta = _stabilize_common_project_layout(
+                env,
+                official_base,
+                project,
+                official_target_qpos,
+                fixture_names,
+                fixture_positions,
+                fixture_quaternions,
             )
             states = {"native": base.copy()}
             interventions = {
@@ -723,7 +799,7 @@ def main() -> None:
     parser.add_argument(
         "--design-preregistration",
         default=str(
-            Path(__file__).with_name("l3b3_microwave_v2_design_prereg.json")
+            Path(__file__).with_name("l3b3_microwave_v6_design_prereg.json")
         ),
     )
     parser.add_argument("--seed", type=int, default=42)

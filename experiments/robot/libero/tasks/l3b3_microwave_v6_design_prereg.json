@@ -1,0 +1,182 @@
+{
+  "preregistration_id": "l3b3-microwave-precondition-v6-stabilized-native20-20260803",
+  "scenario": "L3-B3-MICROWAVE-PRECONDITION",
+  "design_version": 6,
+  "native_suite": "libero_10",
+  "native_task_id": 9,
+  "native_bddl": "KITCHEN_SCENE6_put_the_yellow_and_white_mug_in_the_microwave_and_close_it.bddl",
+  "native_prompt": "put the yellow and white mug in the microwave and close it",
+  "native_goal": "(And (In white_yellow_mug_1 microwave_1_heating_region) (Close microwave_1))",
+  "evaluated_bddl": "KITCHEN_SCENE6_put_the_yellow_and_white_mug_in_the_microwave_and_close_it.bddl",
+  "official_state_indices": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19
+  ],
+  "conditions": {
+    "Eb": "native open-microwave baseline after the shared target relocation and native-physics table-support stabilization",
+    "Er": "the same stabilized project layout with only the native microwave door joint changed so the empty microwave is closed before insertion",
+    "Ec": "the same stabilized project layout with only the same native microwave door joint changed so the empty microwave is fully open",
+    "Safe": "real robot actions open the microwave, insert the target mug, and reclose it from exact Er"
+  },
+  "common_layout_intervention": {
+    "objects": [
+      "white_yellow_mug_1",
+      "porcelain_mug_1"
+    ],
+    "registered_classes": [
+      "white_yellow_mug",
+      "porcelain_mug"
+    ],
+    "fields": [
+      "white_yellow_mug_1.free_joint.qpos.x",
+      "white_yellow_mug_1.free_joint.qpos.y",
+      "white_yellow_mug_1.free_joint.qpos.z",
+      "porcelain_mug_1.free_joint.qpos.z"
+    ],
+    "project_target_world_xy": [
+      -0.3,
+      -0.15
+    ],
+    "pre_serialization_native_settle_steps": 100,
+    "identical_across_conditions": true,
+    "asset_modified": false
+  },
+  "candidate_selection": {
+    "status": "CALIBRATION_ONLY_PENDING_EXACT_ER_DYNAMIC_SAFE_REFERENCE",
+    "artifact": "review/L3-B3_task/L3-B3_v5_exact_target_candidate_calibration.json",
+    "artifact_sha256": "f235eb80f1c24761bbbd65a425e13f6399975e391df7a4bc13f7c6a080629730",
+    "selected_project_target_world_xy": [
+      -0.3,
+      -0.15
+    ],
+    "compiled_continuous_door_sweep_clearance_m": 0.09399607812830028,
+    "target_to_distractor_xy_separation_m": 0.20258972097602151,
+    "nominal_grasp_reference_open_fixture_clearance_m": 0.024466257681075423,
+    "exact_grasp_corridor_compiled": true,
+    "exact_grasp_high_eef": [
+      -0.3600994383578994,
+      -0.3355075672555301,
+      1.1200908477404536
+    ],
+    "selection_rule": "require positive complete-fixture nominal grasp clearance and a successfully compiled exact no-contact grasp corridor at the actual post-robot-open door angle; this calibration cannot qualify Safe",
+    "dynamic_safe_reference_required": true
+  },
+  "primary_er_event": "the closed microwave must transition Close true-to-false before target-mug In becomes true; unchanged native success then requires Close false-to-true",
+  "primary_metric": "fraction of Er episodes with open-before-insert and stable native task success",
+  "secondary_metrics": [
+    "native task success",
+    "door-opening recognition rate",
+    "post-opening insertion rate",
+    "post-insertion reclose rate",
+    "open-control task success"
+  ],
+  "physical_thresholds": {
+    "target_mug_max_tilt_deg_throughout": 1.0,
+    "distractor_mug_max_tilt_deg_throughout": 1.0,
+    "pre_serialization_native_object_settle_steps": 100,
+    "formal_wait_max_translation_m": 0.003,
+    "formal_wait_max_linear_speed_mps": 0.015,
+    "formal_wait_max_angular_speed_radps": 0.05,
+    "support_required_throughout_formal_wait": true,
+    "post_wait_hold_max_translation_m": 0.003,
+    "post_wait_hold_max_linear_speed_mps": 0.015,
+    "post_wait_hold_steps": 100,
+    "door_construction_settle_steps": 100,
+    "safe_reference_step_budget": 2000,
+    "safe_opening_object_max_translation_m": 0.01,
+    "safe_open_vertical_retreat_m": 0.15,
+    "safe_open_outward_retreat_m": 0.12,
+    "er_door_target_qpos": 0.0,
+    "ec_door_target_qpos": -2.094
+  },
+  "pairing_method": "same_project_layout_from_same_official_native_state_door_joint_intervention",
+  "intervention_allowlist": {
+    "Eb": [],
+    "Er": [
+      "microwave_1_microjoint.qpos",
+      "microwave_1_microjoint.qvel"
+    ],
+    "Ec": [
+      "microwave_1_microjoint.qpos",
+      "microwave_1_microjoint.qvel"
+    ]
+  },
+  "source_to_project_delta": {
+    "bddl": "none; evaluated BDDL is the selected native BDDL",
+    "prompt": "none",
+    "goal": "none",
+    "fixture_inventory": "none",
+    "object_inventory": "none",
+    "asset_files": "none",
+    "serialized_layout": "all conditions share the same target free-joint qpos x/y relocation to [-0.3, -0.15] m and the same native-physics-settled target and distractor free-joint qpos z support heights; after that common delta, Er and Ec may change only the native microwave door hinge qpos/qvel relative to Eb"
+  },
+  "predecessor_invalidation": {
+    "version": 5,
+    "artifact": "l3b3_microwave_v5_state_invalidation.json",
+    "artifact_sha256": "a83202c12e0f3511f958b4d92bf8414fbc1ff113c035a2684a1ff53e1e11f0d7",
+    "reason": "v5 serialized both mugs above the table and permitted a roughly seven-centimetre fall during the formal evaluator wait",
+    "formal_authorized": false
+  },
+  "collision_oracle": false,
+  "policy_visibility_gate": {
+    "primary_preprocessing": "OpenVLA-OFT exact 224x224 center crop",
+    "er_reference_condition": "Eb/native",
+    "ec_reference_condition": "Er/closed_microwave",
+    "minimum_changed_pixels_abs_gt_10_at_224": 100,
+    "minimum_full_frame_mean_absolute_error": 0.5,
+    "reason": "Er and Ec are the paired closed/open door states; comparing Ec only with the already-open Eb does not test whether the task-relevant door state is visible"
+  },
+  "custom_bddl": false,
+  "custom_assets": false,
+  "prompt_changed": false,
+  "asset_inventory_changed": false,
+  "scene_overlap": {
+    "source_task_shared_with": "L3-B2-MICROWAVE-ORDER",
+    "independent_scene_sample": false,
+    "pooling_rule": "B2 and B3 may not be pooled or counted as independent scenes; B3 reports the narrower open-before-insert precondition metric"
+  },
+  "single_state_feasibility": {
+    "official_state_index": 0,
+    "er_first_policy_predicates": {
+      "close": true,
+      "in": false
+    },
+    "er_changed_flat_state_indices": [
+      24
+    ],
+    "ec_expected_first_policy_predicates": {
+      "close": false,
+      "in": false
+    },
+    "ec_permitted_changed_flat_state_indices": [
+      24,
+      46
+    ],
+    "interpretation": "design-level expectation only; it does not qualify the preregistered 20-state scene",
+    "provenance": "v6 is a fresh stabilized project-layout construction; no v1/v2/v3/v4/v5 state, rollout, or metric is reused as evidence"
+  },
+  "state_generation_complete": false,
+  "safe_reference_complete": false,
+  "policy_view_review_complete": false,
+  "smoke_complete": false,
+  "human_review_approved": false,
+  "formal_authorized": false
+}

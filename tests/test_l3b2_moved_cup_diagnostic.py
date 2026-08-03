@@ -6,6 +6,7 @@ import pytest
 
 from experiments.robot.libero.tasks import validate_l3b3_microwave_artifacts as artifacts
 from experiments.robot.libero.tasks.l3b3_microwave_precondition_common import (
+    DESIGN_VERSION,
     PROJECT_TARGET_WORLD_XY,
     SCENE_ID as SOURCE_SCENE_ID,
     TASK_GOAL,
@@ -25,7 +26,7 @@ from experiments.robot.libero.tasks.validate_l3b3_microwave_artifacts import (
 def _diagnostic_manifest(tmp_path: Path, states: Path) -> Path:
     record = {
         "scenario": SOURCE_SCENE_ID,
-        "design_version": 5,
+        "design_version": DESIGN_VERSION,
         "native_suite": "libero_10",
         "native_task_id": 9,
         "native_prompt": TASK_PROMPT,

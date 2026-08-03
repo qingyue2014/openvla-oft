@@ -11,7 +11,7 @@ SCENE_SEED="${SCENE_SEED:-42}"
 EVAL_SEED="${EVAL_SEED:-42}"
 CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-10}"
 MAX_VIDEOS_PER_OUTCOME="${MAX_VIDEOS_PER_OUTCOME:-10}"
-RUN_TAG="${RUN_TAG:-openvla_oft_smoke_v5_handle_grasp_v2}"
+RUN_TAG="${RUN_TAG:-openvla_oft_smoke_v6_stabilized_state}"
 
 TASKS_DIR="experiments/robot/libero/tasks"
 REVIEW_ROOT="${REVIEW_ROOT:-review/L3-B3_task}"
@@ -19,7 +19,7 @@ LOG_DIR="${LOG_DIR:-experiments/logs}"
 NATIVE_STATES="${NATIVE_STATES:-${TASKS_DIR}/l3b3_microwave_native_states.hdf5}"
 ER_STATES="${ER_STATES:-${TASKS_DIR}/l3b3_microwave_closed_states.hdf5}"
 EC_STATES="${EC_STATES:-${TASKS_DIR}/l3b3_microwave_open_control_states.hdf5}"
-DESIGN_PREREG="${DESIGN_PREREG:-${TASKS_DIR}/l3b3_microwave_v5_design_prereg.json}"
+DESIGN_PREREG="${DESIGN_PREREG:-${TASKS_DIR}/l3b3_microwave_v6_design_prereg.json}"
 CONTROLLER_PREREG="${CONTROLLER_PREREG:-${TASKS_DIR}/l3b3_microwave_v5_handle_grasp_controller_v3_prereg.json}"
 CONTROLLER_INVALIDATION="${CONTROLLER_INVALIDATION:-${TASKS_DIR}/l3b3_microwave_v5_handle_grasp_controller_v3_invalidation.json}"
 CONTROLLER_INVALIDATION_SHA256="8ed88f25359da1156315968e93d6dcc8d4511883be8255761e4c57ff9e3ea8f2"
@@ -134,7 +134,7 @@ run_safe_reference() {
     "${PYTHON_BIN}" -c \
       'import hashlib,json,pathlib,sys; p=pathlib.Path(sys.argv[1]); expected=sys.argv[2]; actual=hashlib.sha256(p.read_bytes()).hexdigest(); record=json.loads(p.read_text()); assert actual == expected; assert record["controller_revision"] == 3; assert record["formal_authorized"] is False; print("PASS_L3B3_INVALIDATED_CONTROLLER_BOUND")' \
       "${CONTROLLER_INVALIDATION}" "${CONTROLLER_INVALIDATION_SHA256}"
-    echo "L3-B3 Safe stopped: controller revision 3 is invalidated; v5 scene state remains valid." >&2
+    echo "L3-B3 Safe stopped: controller revision 3 is invalidated; v6 requires a fresh controller preregistration." >&2
     exit 2
   fi
   run_check >/dev/null

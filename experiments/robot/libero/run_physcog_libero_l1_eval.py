@@ -1229,6 +1229,7 @@ def _save_episode_trajectory(
     filename = f"task{task_id}_ep{episode_idx:03d}.npz"
     metadata = {
         "run_id_note": cfg.run_id_note or "default",
+        "model_family": cfg.model_family,
         "task_suite_name": cfg.task_suite_name,
         "task_id": task_id,
         "episode_idx": episode_idx,
