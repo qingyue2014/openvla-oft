@@ -52,6 +52,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _center_high_reacquire_budget_evidence,
     _center_high_reacquire_step_gate,
     _fixed_safe_z_lateral_hold_action,
+    _validated_fixed_safe_z_settle_extension_steps,
     _center_high_target_from_live_plate,
     _derive_horizon_safe_push_increment,
     _derive_overhead_staging_from_compiled_pairs,
@@ -7088,7 +7089,7 @@ def test_500137_timeout_trace_is_replaced_by_auditable_overhead_state_machine():
     assert "samples={json.dumps(samples, sort_keys=True)}" in bounded_seek
     assert "overhead_geometry={json.dumps(" in bounded_seek
     assert (
-        "for guard_step in range(1, structural_waypoint_budget + 1)"
+        "for guard_step in range(1, effective_structural_waypoint_budget + 1)"
         in bounded_seek
     )
     assert "_overhead_corridor_entry_evidence(" in bounded_seek
@@ -7867,7 +7868,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         post_action_buffer_refresh
     )
     pre_action_buffer_refresh = bounded_seek.split(
-        "for guard_step in range(1, structural_waypoint_budget + 1):", 1
+        "for guard_step in range(1, effective_structural_waypoint_budget + 1):", 1
     )[1].split(
         'if (\n            structural_stage == "vertical_tail_brake"', 1
     )[0]
@@ -8139,11 +8140,15 @@ def test_500161_adaptive_descent_uses_native_bound_then_tightens_near_base8():
     )
     assert "compiled_overhead_one_step_vertical_reserve_lost" in bounded_seek
     assert (
-        "for guard_step in range(1, structural_waypoint_budget + 1)"
+        "for guard_step in range(1, effective_structural_waypoint_budget + 1)"
         in bounded_seek
     )
     assert (
         'parser.add_argument("--max_waypoint_steps", type=int, default=240)'
+        in CONTROLLER_REFERENCE.read_text()
+    )
+    assert (
+        '"--fixed_safe_z_settle_extension_steps", type=int, default=80'
         in CONTROLLER_REFERENCE.read_text()
     )
 
@@ -8154,6 +8159,25 @@ def test_adaptive_descent_fails_closed_without_runtime_native_action_spec():
         match="native OSC action bounds unavailable",
     ):
         _native_osc_action_spec_evidence(SimpleNamespace())
+
+
+def test_fixed_safe_z_settle_extension_is_finite_and_fail_closed():
+    assert _validated_fixed_safe_z_settle_extension_steps(
+        SimpleNamespace(fixed_safe_z_settle_extension_steps=80)
+    ) == 80
+    assert _validated_fixed_safe_z_settle_extension_steps(
+        SimpleNamespace()
+    ) == 0
+    for invalid in (-1, 81, 1.5, None):
+        with pytest.raises(
+            ValueError,
+            match="fixed-safe-Z settle extension must be an integer",
+        ):
+            _validated_fixed_safe_z_settle_extension_steps(
+                SimpleNamespace(
+                    fixed_safe_z_settle_extension_steps=invalid
+                )
+            )
 
 
 def test_500174_lateral_rebuffer_is_adaptive_and_skips_repeat_zero():
@@ -13192,7 +13216,7 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "measured_outward_step_progress_m=" not in high_plane_call
     assert "measured_outward_step_progress_m=" in fixed_safe_z_call
     assert (
-        "for guard_step in range(1, structural_waypoint_budget + 1)"
+        "for guard_step in range(1, effective_structural_waypoint_budget + 1)"
         in bounded_seek
     )
     assert '"outside_side_feedback"' in bounded_seek
@@ -13228,6 +13252,13 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "_overhead_lateral_buffer_evidence(" in bounded_seek
     assert '"vertical_tail_events"' in bounded_seek
     assert '"structural_waypoint_budget"' in bounded_seek
+    assert "guard_step > base_structural_waypoint_budget" in bounded_seek
+    assert 'structural_stage != "fixed_safe_z_lateral_approach"' in (
+        bounded_seek
+    )
+    assert '"extension_scope": "fixed_safe_z_lateral_approach_only"' in (
+        bounded_seek
+    )
     assert 'stage.startswith("outside_")' in bounded_seek
     assert "rollout.move(" not in bounded_seek
     assert "rollout.advance(action, \"task\")" in bounded_seek

@@ -1211,9 +1211,19 @@ then resumes the bounded coupled XY/Z descent with the already-halved cap; only
 a correction at the staging height may enter the vertical side corridor. Thus
 controller-coupled drift is corrected continuously while lateral authority
 remains available instead of being accumulated into a low-height correction.
-The complete precontact structural route has a finite default budget of `240`
-actions; native episode termination and horizon-reserve checks remain
-fail-closed and are not bypassed by this route budget.
+The complete precontact structural route retains its finite default base budget
+of `240` actions. Job503953 consumed the first `183` structural actions before
+the fixed-safe-Z stage, then eliminated the prior generic XY release and ended
+the remaining `57` actions on a correctly selected inward-response recovery;
+all structural, physical, collision, support, action, and response gates stayed
+accepted. A preregistered finite extension of at most `80` actions is therefore
+available only while the active stage remains
+`fixed_safe_z_lateral_approach`. The preceding stages retain the `240`-action
+cap, and the effective full-route hard cap is `320` actions. Every extension
+frame passes the same pre-action and post-action gates. Entry outside the fixed
+safe-Z stage, leaving that stage, loss of any gate, lack of confirmation by the
+effective cap, native episode termination, or lost horizon reserve fails
+closed; none is bypassed by this scoped settle extension.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.

@@ -16718,6 +16718,21 @@ class Rollout:
         )
 
 
+def _validated_fixed_safe_z_settle_extension_steps(args):
+    extension_steps = getattr(
+        args, "fixed_safe_z_settle_extension_steps", 0
+    )
+    if (
+        not isinstance(extension_steps, (int, np.integer))
+        or extension_steps < 0
+        or extension_steps > 80
+    ):
+        raise ValueError(
+            "fixed-safe-Z settle extension must be an integer in [0, 80]"
+        )
+    return int(extension_steps)
+
+
 def _seek_stable_plate_contact(
     rollout,
     env,
@@ -16745,6 +16760,17 @@ def _seek_stable_plate_contact(
             "structural waypoint budget must be in the unchanged configured range"
         )
     structural_waypoint_budget = int(structural_waypoint_budget)
+    fixed_safe_z_settle_extension_steps = (
+        _validated_fixed_safe_z_settle_extension_steps(args)
+    )
+    base_structural_waypoint_budget = structural_waypoint_budget
+    effective_structural_waypoint_budget = int(
+        base_structural_waypoint_budget
+        + fixed_safe_z_settle_extension_steps
+    )
+    structural_steps_before_contact_seek = int(
+        int(args.max_waypoint_steps) - base_structural_waypoint_budget
+    )
     plate_reference = body_pose(env, PLATE_BODY)[0].copy()
     samples = []
     native_action_spec = _native_osc_action_spec_evidence(env)
@@ -16763,6 +16789,29 @@ def _seek_stable_plate_contact(
         "contact_seek_plate_finger_allowed_body_pairs": [
             list(pair) for pair in plate_finger_allowed_body_pairs
         ],
+        "structural_waypoint_budget": {
+            "configured_route_base_maximum_steps": int(
+                args.max_waypoint_steps
+            ),
+            "base_remaining_steps_at_seek_entry": int(
+                base_structural_waypoint_budget
+            ),
+            "structural_steps_before_contact_seek": int(
+                structural_steps_before_contact_seek
+            ),
+            "fixed_safe_z_settle_extension_maximum_steps": int(
+                fixed_safe_z_settle_extension_steps
+            ),
+            "effective_route_maximum_steps": int(
+                args.max_waypoint_steps
+                + fixed_safe_z_settle_extension_steps
+            ),
+            "effective_remaining_steps_at_seek_entry": int(
+                effective_structural_waypoint_budget
+            ),
+            "extension_scope": "fixed_safe_z_lateral_approach_only",
+            "extension_fail_closed": True,
+        },
     }
 
     def capture(
@@ -17823,7 +17872,13 @@ def _seek_stable_plate_contact(
                 "correction are enforced at runtime by the configured finite structural hard loop"
             ),
             "maximum_structural_waypoint_steps": (
-                structural_waypoint_budget
+                effective_structural_waypoint_budget
+            ),
+            "base_structural_waypoint_steps": (
+                base_structural_waypoint_budget
+            ),
+            "fixed_safe_z_settle_extension_steps": (
+                fixed_safe_z_settle_extension_steps
             ),
         }
     )
@@ -18126,12 +18181,32 @@ def _seek_stable_plate_contact(
             ),
         },
     )
-    for guard_step in range(1, structural_waypoint_budget + 1):
+    for guard_step in range(1, effective_structural_waypoint_budget + 1):
         lateral_pre_action_interlock = None
         pre_action_guard = latest_outside_side_guard
         current_eef = np.asarray(
             rollout.obs["robot0_eef_pos"], dtype=float
         )
+        fixed_safe_z_settle_extension_active = bool(
+            guard_step > base_structural_waypoint_budget
+        )
+        if (
+            fixed_safe_z_settle_extension_active
+            and structural_stage != "fixed_safe_z_lateral_approach"
+        ):
+            raise RuntimeError(
+                "fixed-safe-Z settle extension was reached outside its "
+                "preregistered structural stage: "
+                f"source={source} guard_step={guard_step} "
+                f"base_max_steps={base_structural_waypoint_budget} "
+                f"extension_max_steps={fixed_safe_z_settle_extension_steps} "
+                f"effective_max_steps={effective_structural_waypoint_budget} "
+                f"stage={structural_stage} "
+                "stage_action_counts="
+                f"{json.dumps(structural_stage_action_counts, sort_keys=True)} "
+                f"samples={json.dumps(samples, sort_keys=True)} "
+                f"scene={json.dumps(diagnostics(), sort_keys=True)}"
+            )
         active_vertical_corridor_envelope = (
             _active_vertical_corridor_control_envelope(
                 active_vertical_corridor_geometric_height_action
@@ -19802,6 +19877,16 @@ def _seek_stable_plate_contact(
             raise RuntimeError(
                 f"unknown structural outside-side stage {structural_stage!r}"
             )
+        feedback["fixed_safe_z_settle_extension_active"] = bool(
+            fixed_safe_z_settle_extension_active
+        )
+        feedback["structural_budget_guard_step"] = int(guard_step)
+        feedback["base_structural_waypoint_budget"] = int(
+            base_structural_waypoint_budget
+        )
+        feedback["effective_structural_waypoint_budget"] = int(
+            effective_structural_waypoint_budget
+        )
         if pre_action_overhead_route_authorization is not None:
             feedback["pre_action_overhead_route_authorization"] = (
                 pre_action_overhead_route_authorization
@@ -21284,8 +21369,11 @@ def _seek_stable_plate_contact(
     else:
         raise RuntimeError(
             "structurally decoupled outside-side approach exhausted the "
-            "unchanged OSC waypoint budget: "
-            f"source={source} max_steps={structural_waypoint_budget} "
+            "finite OSC waypoint budget: "
+            f"source={source} "
+            f"base_max_steps={base_structural_waypoint_budget} "
+            f"extension_max_steps={fixed_safe_z_settle_extension_steps} "
+            f"effective_max_steps={effective_structural_waypoint_budget} "
             f"stage={structural_stage} "
             f"stage_action_counts={json.dumps(structural_stage_action_counts, sort_keys=True)} "
             f"guard={json.dumps(latest_outside_side_guard, sort_keys=True)} "
@@ -21344,7 +21432,7 @@ def _seek_stable_plate_contact(
                 stage_action_counts=structural_stage_action_counts,
                 used_steps=outside_side_motion_steps,
                 remaining_steps=(
-                    structural_waypoint_budget
+                    effective_structural_waypoint_budget
                     - outside_side_motion_steps
                 ),
             )
@@ -21604,11 +21692,52 @@ def _seek_stable_plate_contact(
             structural_stage_action_counts
         ),
         "structural_waypoint_budget": {
-            "maximum_steps": structural_waypoint_budget,
-            "used_steps": int(outside_side_motion_steps),
-            "remaining_steps": int(
-                structural_waypoint_budget - outside_side_motion_steps
+            "configured_route_base_maximum_steps": int(
+                args.max_waypoint_steps
             ),
+            "base_remaining_steps_at_seek_entry": int(
+                base_structural_waypoint_budget
+            ),
+            "structural_steps_before_contact_seek": int(
+                structural_steps_before_contact_seek
+            ),
+            "fixed_safe_z_settle_extension_maximum_steps": int(
+                fixed_safe_z_settle_extension_steps
+            ),
+            "effective_route_maximum_steps": int(
+                args.max_waypoint_steps
+                + fixed_safe_z_settle_extension_steps
+            ),
+            "effective_remaining_steps_at_seek_entry": int(
+                effective_structural_waypoint_budget
+            ),
+            "used_steps": int(outside_side_motion_steps),
+            "base_used_steps": int(
+                min(
+                    outside_side_motion_steps,
+                    base_structural_waypoint_budget,
+                )
+            ),
+            "extension_used_steps": int(
+                max(
+                    0,
+                    outside_side_motion_steps
+                    - base_structural_waypoint_budget,
+                )
+            ),
+            "base_remaining_steps": int(
+                max(
+                    0,
+                    base_structural_waypoint_budget
+                    - outside_side_motion_steps,
+                )
+            ),
+            "remaining_steps": int(
+                effective_structural_waypoint_budget
+                - outside_side_motion_steps
+            ),
+            "extension_scope": "fixed_safe_z_lateral_approach_only",
+            "extension_fail_closed": True,
         },
         "maximum_translation_action": (
             args.plate_contact_seek_max_translation_action
@@ -23291,6 +23420,9 @@ def main():
     parser.add_argument("--position_action_scale", type=float, default=0.08)
     parser.add_argument("--position_tolerance", type=float, default=0.005)
     parser.add_argument("--max_waypoint_steps", type=int, default=240)
+    parser.add_argument(
+        "--fixed_safe_z_settle_extension_steps", type=int, default=80
+    )
     parser.add_argument("--bottle_approach_height", type=float, default=0.235)
     parser.add_argument("--bottle_grasp_eef_height", type=float, default=0.125)
     parser.add_argument("--bottle_lift_height", type=float, default=0.130)
