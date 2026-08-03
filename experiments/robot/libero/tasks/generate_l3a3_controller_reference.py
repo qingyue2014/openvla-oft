@@ -5869,24 +5869,34 @@ def _fixed_safe_z_lateral_hold_action(
             or coupled_xy_positive_outward_response_damping_requested
         )
     )
-    strict_target_refill_neighborhood_decrement_requested = bool(
+    previous_coupled_hold_tangential_xy_action = (
+        previous_commanded_action_xyz[:2]
+        - previous_outward_action_for_response_tracking
+        * outward_direction_xy
+        if release_slew_enabled
+        else np.zeros(2, dtype=float)
+    )
+    strict_target_refill_neighborhood_scope_eligible = bool(
         coupled_xy_neutralization_requested
         and lateral_target_reached
         and live_outside_clearance
         <= captured_outward_response_tracking_ceiling_m
         and previous_outward_action_for_response_tracking
         < strict_safety_brake_bound
-        and np.linalg.norm(
-            previous_commanded_action_xyz[:2]
-            - previous_outward_action_for_response_tracking
-            * outward_direction_xy
-        )
-        > 0.0
+    )
+    strict_target_refill_tangential_unwind_requested = bool(
+        strict_target_refill_neighborhood_scope_eligible
+        and np.linalg.norm(previous_coupled_hold_tangential_xy_action) > 0.0
+    )
+    strict_target_refill_neighborhood_decrement_requested = bool(
+        strict_target_refill_neighborhood_scope_eligible
+        and np.linalg.norm(previous_coupled_hold_tangential_xy_action) == 0.0
     )
     coupled_xy_selected_neutral_release_action_step = (
         coupled_xy_transient_neutral_release_action_step
         if (
             coupled_xy_transient_lateral_decrement_requested
+            or strict_target_refill_tangential_unwind_requested
             or strict_target_refill_neighborhood_decrement_requested
         )
         else coupled_xy_neutral_release_action_step
@@ -5895,9 +5905,9 @@ def _fixed_safe_z_lateral_hold_action(
     pre_coupled_xy_neutralization_xy_action = commanded_xy_action.copy()
     if coupled_xy_neutralization_hold_requested:
         neutralization_tangential_xy_action = (
-            previous_commanded_action_xyz[:2]
-            - previous_outward_action_for_response_tracking
-            * outward_direction_xy
+            np.zeros(2, dtype=float)
+            if strict_target_refill_tangential_unwind_requested
+            else previous_coupled_hold_tangential_xy_action
             if lateral_target_reached
             else tangential_xy_action_before_recovery.copy()
         )
@@ -5909,7 +5919,10 @@ def _fixed_safe_z_lateral_hold_action(
                     - coupled_xy_selected_neutral_release_action_step,
                 )
             )
-            if coupled_xy_neutralization_requested
+            if (
+                coupled_xy_neutralization_requested
+                and not strict_target_refill_tangential_unwind_requested
+            )
             else previous_outward_action_for_response_tracking
         )
         commanded_xy_action = (
@@ -6577,6 +6590,20 @@ def _fixed_safe_z_lateral_hold_action(
         "strict_target_refill_neighborhood_decrement_requested": (
             strict_target_refill_neighborhood_decrement_requested
         ),
+        "strict_target_refill_neighborhood_scope_eligible": (
+            strict_target_refill_neighborhood_scope_eligible
+        ),
+        "previous_coupled_hold_tangential_xy_action": (
+            previous_coupled_hold_tangential_xy_action.tolist()
+        ),
+        "strict_target_refill_tangential_unwind_requested": (
+            strict_target_refill_tangential_unwind_requested
+        ),
+        "strict_target_refill_tangential_unwind_action_xyz": (
+            action[:3].tolist()
+            if strict_target_refill_tangential_unwind_requested
+            else None
+        ),
         "coupled_xy_neutralization_requested": (
             coupled_xy_neutralization_requested
         ),
@@ -6768,6 +6795,8 @@ def _fixed_safe_z_lateral_hold_action(
             "decrement_waits": True,
             "strict_target_refill_neighborhood_decrement_uses_strict_"
             "lateral_bound": True,
+            "strict_target_refill_unwinds_tangential_before_outward_"
+            "decrement": True,
             "coupled_xy_neutralization_uses_existing_action_bounds": True,
             "coupled_xy_neutralization_requires_projected_exit_reserve": True,
             "coupled_xy_projected_exit_loss_uses_full_recovery": True,

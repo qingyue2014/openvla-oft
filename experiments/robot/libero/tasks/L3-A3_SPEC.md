@@ -1451,6 +1451,18 @@ height, response, lateral, action, and sticky-recovery predicate must already
 be true. Outside this narrow refill-neighborhood tangential-hold scope, the
 `0.015625` strict-target decrement is unchanged. This creates no new decrement
 opportunity, threshold, or action magnitude.
+Job504182 applied the `0.005` X decrement but retained `-0.004970` tangential
+Y on the same frame. The next outward response was still `-0.115931 mm`, and
+the unchanged corridor gate stopped at sample `378`. The narrow
+refill-neighborhood transition is therefore split across axes. When its prior
+tangential component is nonzero, the first eligible frame keeps the previous
+outward action unchanged, sets tangential XY to zero, and retains guarded Z.
+Only a subsequent eligible frame whose previous tangential component is
+already exactly zero may apply the existing `0.005` pure-outward decrement.
+Both phases require the complete pre-existing neutralization eligibility and
+all post-action gates; any lost predicate fails closed instead of unwinding.
+The `0.015625` behavior outside the sub-full refill-neighborhood scope and all
+full-recovery behavior remain unchanged.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.
