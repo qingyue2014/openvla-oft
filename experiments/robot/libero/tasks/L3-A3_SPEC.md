@@ -1315,6 +1315,24 @@ continues to serve only as the predecessor action-repeat tolerance derived from
 measurement resolution. The route budget, meaningful-inward full recovery,
 dynamic and strict lateral envelopes, reserves, final confirmation, and every
 physical gate remain unchanged.
+Job504113 showed that the `0.005` decrement still crossed the unchanged inward
+response boundary after several safe steps. At sample `247`, outward action was
+`0.164375`, response was `-0.058764 mm`, live and response-projected outside
+clearances were `2.229 mm` and `2.170 mm`, table clearance was `7.933 mm`,
+lateral error was `5.204 mm`, and vertical response was `0.001302 mm`. The
+unconditional jump to pure `0.20` recovery remained physically valid but
+created six further refill/release cycles and prevented neutralization before
+budget exhaustion. A meaningful inward response may therefore use an
+incremental pure-outward brake only while live and response-projected clearance
+strictly exceed the existing refill target, the nominal lateral projection and
+table clearance retain their existing reserves, current and projected lateral
+error remain inside the existing dynamic envelope, safe-Z error remains inside
+its existing tolerance, vertical response is neither downward nor severe, and
+the preceding outward action is below full recovery. Each continuing inward
+response adds exactly the existing strict `0.005` lateral action bound, capped
+at `0.20`; guarded Z remains unchanged. Failure of any eligibility predicate
+retains immediate pure `0.20` full recovery. No response, reserve, lateral,
+height, action, route, or budget threshold changes.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.

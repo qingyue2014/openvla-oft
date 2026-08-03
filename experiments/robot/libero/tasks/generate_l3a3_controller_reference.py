@@ -5509,6 +5509,38 @@ def _fixed_safe_z_lateral_hold_action(
         and live_table_clearance > outside_recovery_exit_clearance
         and previous_commanded_action_xyz[2] >= 0.0
     )
+    bounded_inward_response_brake_projected_outside_clearance_m = float(
+        live_outside_clearance + measured_outward_step_progress_m
+    )
+    bounded_inward_response_brake_step = float(strict_lateral_bound)
+    bounded_inward_response_brake_requested = bool(
+        release_slew_enabled
+        and measured_inward_response
+        and previous_outward_action_for_recovery
+        > min(strict_safety_brake_bound, 2.0 * strict_lateral_bound)
+        and previous_outward_action_for_recovery
+        < strict_safety_brake_bound
+        and live_outside_clearance > outside_refill_target_clearance
+        and bounded_inward_response_brake_projected_outside_clearance_m
+        > outside_refill_target_clearance
+        and predicted_outside_after_lateral > outside_recovery_clearance
+        and live_table_clearance > outside_recovery_exit_clearance
+        and abs(fixed_safe_z_m - current_eef[2])
+        <= vertical_position_tolerance_m
+        and lateral_error_m
+        <= lateral_position_tolerance_m
+        + closed_loop_hazard_response_bound_m
+        and projected_lateral_error_after_measured_outward_response_m
+        <= lateral_position_tolerance_m
+        + closed_loop_hazard_response_bound_m
+        and not live_outside_recovery_active
+        and not live_full_outward_brake_active
+        and not downward_vertical_response
+        and not severe_vertical_response
+        and not stability_pending_outside_recovery_requested
+        and not sticky_full_outward_recovery_requested
+        and not coupled_xy_unload_projected_exit_loss
+    )
     outside_recovery_active = bool(
         measured_inward_response
         or live_outside_recovery_active
@@ -5532,7 +5564,13 @@ def _fixed_safe_z_lateral_hold_action(
             )
         )
         selected_outward_recovery_action = float(
-            strict_safety_brake_bound
+            min(
+                strict_safety_brake_bound,
+                previous_outward_action_for_recovery
+                + bounded_inward_response_brake_step,
+            )
+            if bounded_inward_response_brake_requested
+            else strict_safety_brake_bound
             if (
                 measured_inward_response
                 or live_full_outward_brake_active
@@ -5550,7 +5588,11 @@ def _fixed_safe_z_lateral_hold_action(
         )
         commanded_xy_action = (
             outward_direction_xy * selected_outward_recovery_action
-            + tangential_xy_action_before_recovery
+            if bounded_inward_response_brake_requested
+            else (
+                outward_direction_xy * selected_outward_recovery_action
+                + tangential_xy_action_before_recovery
+            )
         )
 
     previous_outward_action_for_response_tracking = (
@@ -6332,6 +6374,20 @@ def _fixed_safe_z_lateral_hold_action(
             if outside_recovery_active
             else None
         ),
+        "bounded_inward_response_brake_requested": (
+            bounded_inward_response_brake_requested
+        ),
+        "bounded_inward_response_brake_step": (
+            bounded_inward_response_brake_step
+        ),
+        "bounded_inward_response_brake_projected_outside_clearance_m": (
+            bounded_inward_response_brake_projected_outside_clearance_m
+        ),
+        "bounded_inward_response_brake_action_xyz": (
+            action[:3].tolist()
+            if bounded_inward_response_brake_requested
+            else None
+        ),
         "tangential_xy_action_before_recovery": (
             tangential_xy_action_before_recovery.tolist()
         ),
@@ -6545,6 +6601,13 @@ def _fixed_safe_z_lateral_hold_action(
             "unstable_vertical_response_suspends_inward_return": True,
             "healthy_outside_reserve_avoids_outward_saturation": True,
             "measured_inward_tail_uses_full_outward_brake": True,
+            "healthy_projected_reserve_uses_incremental_inward_response_"
+            "brake": True,
+            "bounded_inward_response_brake_is_pure_outward_xy": True,
+            "bounded_inward_response_brake_escalates_by_strict_lateral_"
+            "bound": True,
+            "full_outward_brake_retained_outside_bounded_brake_"
+            "eligibility": True,
             "live_low_reserve_uses_full_outward_brake": True,
             "severe_vertical_response_uses_full_outward_brake": True,
             "downward_vertical_response_uses_full_outward_brake": True,
