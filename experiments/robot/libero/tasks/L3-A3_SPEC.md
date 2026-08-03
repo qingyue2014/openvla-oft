@@ -1264,6 +1264,25 @@ world-space resolution through the registered controller scale:
 strict lateral, height, reserve, one-decrement-per-confirmed-response, action,
 route, budget, task, inventory, state, prompt, goal, and intervention gates
 remain unchanged; no empirical threshold is introduced.
+Job504099 confirmed both Job504094 corrections: seven coupled XY decrements
+were response-confirmed, including the formerly blocked sample `213`, and all
+`321` structural samples remained accepted. The final equilibrium had
+`2.566 mm` outside clearance, `7.878 mm` table clearance, responses below
+`0.0003 mm/frame`, and plate tilt below `0.002 deg`. Its `5.355 mm` lateral
+error passed the unchanged `6.1 mm` transient dynamic envelope and its
+response-projected check, but the decrement request independently required the
+`5.0 mm` final lateral target; the controller therefore held the safe
+`0.184375` outward action until budget exhaustion. For the coupled XY
+decrement request only, an already accepted transient lateral hold may qualify
+alongside the strict final lateral target, and it must still pass the complete
+`coupled_xy_neutralization_step_stable` predicate. This introduces no new
+threshold: the existing transient predicate already requires current and
+response-projected lateral error within `6.1 mm`, outside and table exit
+reserve, a noninward bounded response, and no severe vertical response. The
+predecessor-repeat gate still permits at most one decrement per measured stable
+response. The `5.0 mm` final target, `5.05 mm` strict settled-hold band, stage
+completion, neutral-Z confirmation, contact seek, and every physical gate are
+unchanged.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.

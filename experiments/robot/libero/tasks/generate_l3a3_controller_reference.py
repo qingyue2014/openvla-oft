@@ -5771,7 +5771,10 @@ def _fixed_safe_z_lateral_hold_action(
         coupled_xy_neutralization_hold_requested
         and (
             (
-                lateral_target_reached
+                (
+                    lateral_target_reached
+                    or coupled_xy_transient_lateral_hold_accepted
+                )
                 and coupled_xy_neutralization_step_stable
             )
             or coupled_xy_full_outward_coupled_release_requested
@@ -6562,6 +6565,8 @@ def _fixed_safe_z_lateral_hold_action(
             "transient_lateral_hold_uses_dynamic_lateral_envelope": True,
             "transient_lateral_hold_preserves_reduced_outward_action": True,
             "transient_xy_hold_is_independent_of_z_tracking_acceptance": True,
+            "stable_transient_lateral_hold_can_qualify_one_coupled_xy_"
+            "decrement": True,
             "dynamic_lateral_hold_uses_existing_hazard_response_bound": True,
             "dynamic_lateral_handoff_requires_inward_return_request": True,
             "coupled_xy_neutralization_preserves_bounded_progress": True,
