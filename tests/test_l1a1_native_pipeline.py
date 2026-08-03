@@ -1,4 +1,5 @@
 import json
+import shutil
 from pathlib import Path
 
 import h5py
@@ -137,6 +138,63 @@ def test_l1a1_state_artifacts_are_bound_by_hash(tmp_path, fake_provenance):
         len(evidence["sha256"]) == 64
         for evidence in bound["evaluated_conditions"].values()
     )
+
+
+def test_l1a1_bound_bundle_is_portable_across_worktree_paths(
+    tmp_path, fake_provenance, monkeypatch
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    bddl = _native_bddl(source)
+    record = contract.validate_native_task(bddl, bddl, contract.TASK_PROMPT)
+    manifest = source / "preflight.json"
+    manifest.write_text(json.dumps(record), encoding="utf-8")
+    pairing = source / "pairing.json"
+    pairing.write_text('{"verdict":"PASS_L1A1_PAIRED_SCENE_GATE"}\n', encoding="utf-8")
+
+    condition_paths = {}
+    for index, condition in enumerate(("eb", "er", "ec")):
+        state_path = source / f"{condition}.hdf5"
+        condition_paths[condition] = state_path
+        with h5py.File(state_path, "w") as handle:
+            metadata = {
+                "native_only": True,
+                "task_suite_name": contract.TASK_SUITE,
+                "task_id": contract.TASK_ID,
+                "task_file": contract.TASK_FILE,
+                "native_prompt": contract.TASK_PROMPT,
+                "native_bddl_sha256": record["bddl_sha256"],
+                "goal_signature_sha256": record["goal_signature_sha256"],
+                "asset_inventory_sha256": record["asset_inventory_sha256"],
+                "native_asset_manifest_sha256": record["native_asset_manifest_sha256"],
+                "libero_commit": record["libero_commit"],
+                "intervention_id": contract.INTERVENTION_ID,
+                "physical_gate_verdict": contract.PHYSICAL_GATE_VERDICT,
+                "formal_wait_steps": contract.FORMAL_WAIT_STEPS,
+                "max_receptacle_tilt_deg": contract.MAX_RECEPTACLE_TILT_DEG,
+            }
+            for key, value in metadata.items():
+                handle.attrs[key] = value
+            group = handle.create_group(contract.TASK_PROMPT.replace(" ", "_"))
+            group.create_dataset("demo_0/initial_state", data=np.full(8, index))
+    contract.bind_generated_artifacts(manifest, pairing, condition_paths)
+
+    portable = tmp_path / "portable"
+    portable.mkdir()
+    for artifact in (manifest, pairing, condition_paths["eb"]):
+        shutil.copy2(artifact, portable / artifact.name)
+    monkeypatch.setattr(contract, "resolve_native_bddl", lambda: bddl)
+
+    verified = contract.verify_evaluation_request(
+        str(portable / manifest.name),
+        task_suite_name=contract.TASK_SUITE,
+        task_id=contract.TASK_ID,
+        task_language=contract.TASK_PROMPT,
+        task_bddl=str(bddl),
+        policy_prompt=contract.TASK_PROMPT,
+        initial_states_path=str(portable / condition_paths["eb"].name),
+    )
+    assert verified["evaluated_conditions"]["eb"]["path"].startswith(str(source))
 
 
 def test_l1a1_relational_oracle_has_scene_specific_label():

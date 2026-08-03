@@ -416,14 +416,21 @@ def verify_evaluation_request(
     ):
         raise ValueError("L1-A1-v4 runtime task or prompt mismatch")
     states = Path(initial_states_path).resolve(strict=True)
+    states_sha256 = _file_sha256(states)
     matched = [
         evidence
         for evidence in (record.get("evaluated_conditions") or {}).values()
-        if Path(evidence["path"]) == states
+        if evidence.get("sha256") == states_sha256
     ]
-    if len(matched) != 1 or matched[0].get("sha256") != _file_sha256(states):
+    if len(matched) != 1:
         raise ValueError("L1-A1-v4 runtime state artifact is not bound to the preflight")
-    pairing = Path(record["pairing_manifest"]).resolve(strict=True)
+    # Artifact paths in the manifest are provenance records from the original
+    # gate.  Immutable bundles may be checked out into another worktree, so
+    # runtime binding is by unique content hash rather than machine-local
+    # absolute path.  The pairing filename is resolved beside the portable
+    # manifest and remains protected by its recorded content hash.
+    pairing_name = Path(record["pairing_manifest"]).name
+    pairing = (path.parent / pairing_name).resolve(strict=True)
     if _file_sha256(pairing) != record.get("pairing_manifest_sha256"):
         raise ValueError("L1-A1-v4 pairing manifest changed after preflight binding")
     verify_state_file(states, fresh)
