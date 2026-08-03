@@ -1095,6 +1095,21 @@ step. A further damping or stable decrement again requires a repeated XY frame.
 No physical threshold, route, budget, task, inventory, state, prompt, goal, or
 intervention changes.
 
+Job503939 exercised the repeated-frame damping at sample 231, reducing X from
+`0.184375` to `0.16875`; the following outward response fell from
+`+0.080354 mm` to `+0.024099 mm` with healthy refill reserve. At sample 234 the
+current and projected lateral errors were both `5.056839 mm`, just
+`0.006839 mm` beyond the `5.05 mm` coupled hysteresis. Leaving the coupled
+state invoked the generic release to `0.11875`, and the next response was
+`-0.301769 mm`. The already defined `5.10 mm` positive-response projection
+envelope now also serves as a transient current/projected coupled-hold envelope
+while responses are nonhazardous and exit reserve remains valid. Inside this
+envelope the preceding reduced outward action is retained with only the strict
+tangential correction. Stable decrements still require the unchanged `5 mm`
+lateral acceptance unless the repeated-frame positive-response damping rule
+applies. No physical threshold, route, budget, task, inventory, state, prompt,
+goal, or intervention changes.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

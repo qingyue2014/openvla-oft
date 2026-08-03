@@ -5658,6 +5658,22 @@ def _fixed_safe_z_lateral_hold_action(
         and not measured_inward_response
         and not sticky_full_outward_recovery_requested
     )
+    coupled_xy_transient_lateral_hold_accepted = bool(
+        coupled_xy_neutralization_in_progress
+        and coupled_xy_neutralization_height_tracking_accepted
+        and lateral_error_m
+        <= coupled_xy_positive_response_projected_lateral_tolerance_m
+        and projected_lateral_error_after_measured_outward_response_m
+        <= coupled_xy_positive_response_projected_lateral_tolerance_m
+        and live_outside_clearance > outside_recovery_exit_clearance
+        and outside_response_projected_clearance_m
+        > outside_recovery_exit_clearance
+        and live_table_clearance > outside_recovery_exit_clearance
+        and not measured_inward_response
+        and not severe_vertical_response
+        and abs(measured_outward_step_progress_m)
+        <= closed_loop_hazard_response_bound_m
+    )
     coupled_xy_neutralization_lateral_hold_accepted = bool(
         lateral_target_reached
         or (
@@ -5668,6 +5684,7 @@ def _fixed_safe_z_lateral_hold_action(
             and lateral_error_m
             <= coupled_xy_neutralization_lateral_hold_tolerance_m
         )
+        or coupled_xy_transient_lateral_hold_accepted
     )
     coupled_xy_neutralization_projected_lateral_hold_accepted = bool(
         projected_lateral_error_after_measured_outward_response_m
@@ -5680,6 +5697,7 @@ def _fixed_safe_z_lateral_hold_action(
             else lateral_position_tolerance_m
         )
         or coupled_xy_positive_outward_response_damping_requested
+        or coupled_xy_transient_lateral_hold_accepted
     )
     coupled_xy_neutralization_hold_requested = bool(
         release_slew_enabled
@@ -6312,6 +6330,9 @@ def _fixed_safe_z_lateral_hold_action(
         "coupled_xy_positive_response_projected_lateral_tolerance_m": (
             coupled_xy_positive_response_projected_lateral_tolerance_m
         ),
+        "coupled_xy_transient_lateral_hold_accepted": (
+            coupled_xy_transient_lateral_hold_accepted
+        ),
         "preceding_commanded_action_defaulted": (
             preceding_commanded_action_defaulted
         ),
@@ -6439,6 +6460,8 @@ def _fixed_safe_z_lateral_hold_action(
             "positive_response_damping_uses_single_coupled_step": True,
             "positive_response_damping_requires_repeated_preceding_xy": True,
             "positive_response_projection_uses_one_resolution_margin": True,
+            "transient_lateral_hold_uses_existing_projection_envelope": True,
+            "transient_lateral_hold_preserves_reduced_outward_action": True,
             "coupled_xy_neutralization_preserves_bounded_progress": True,
             "coupled_xy_lateral_hysteresis_preserves_outward_progress": True,
             "coupled_xy_lateral_hysteresis_uses_strict_tangential_bound": True,
