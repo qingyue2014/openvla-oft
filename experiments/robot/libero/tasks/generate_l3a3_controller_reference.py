@@ -5610,19 +5610,30 @@ def _fixed_safe_z_lateral_hold_action(
         and previous_outward_action_for_response_tracking
         < strict_safety_brake_bound
     )
+    coupled_xy_preceding_action_repeat_tolerance = float(
+        progress_resolution_m / position_action_scale
+    )
+    coupled_xy_preceding_action_delta = (
+        float(
+            np.linalg.norm(
+                previous_commanded_action_xyz[:2]
+                - preceding_commanded_action_xyz[:2]
+            )
+        )
+        if release_slew_enabled
+        else None
+    )
     coupled_xy_preceding_action_repeated = bool(
         release_slew_enabled
-        and np.array_equal(
-            previous_commanded_action_xyz[:2],
-            preceding_commanded_action_xyz[:2],
-        )
+        and coupled_xy_preceding_action_delta
+        <= coupled_xy_preceding_action_repeat_tolerance
     )
     coupled_xy_neutralization_step_stable = bool(
         abs(coupled_xy_neutralization_position_error_m)
         <= vertical_position_tolerance_m
         and abs(measured_vertical_step_progress_m)
         <= progress_resolution_m
-        and 0.0 <= measured_outward_step_progress_m
+        and abs(measured_outward_step_progress_m)
         <= progress_resolution_m
         and coupled_xy_preceding_action_repeated
         and live_outside_clearance > outside_refill_target_clearance
@@ -6410,6 +6421,18 @@ def _fixed_safe_z_lateral_hold_action(
         "coupled_xy_preceding_action_repeated": (
             coupled_xy_preceding_action_repeated
         ),
+        "coupled_xy_preceding_action_delta": (
+            coupled_xy_preceding_action_delta
+        ),
+        "coupled_xy_preceding_action_repeat_tolerance": (
+            coupled_xy_preceding_action_repeat_tolerance
+        ),
+        "coupled_xy_preceding_action_repeat_tolerance_formula": (
+            "progress_resolution_m / position_action_scale"
+        ),
+        "coupled_xy_stable_outward_response_deadband_m": (
+            progress_resolution_m
+        ),
         "coupled_xy_neutralization_entry_stable": (
             coupled_xy_neutralization_entry_stable
         ),
@@ -6525,6 +6548,10 @@ def _fixed_safe_z_lateral_hold_action(
             "response": True,
             "every_coupled_xy_followup_decrement_requires_repeated_"
             "preceding_xy": True,
+            "coupled_xy_predecessor_repeat_tolerance_is_derived_from_"
+            "response_resolution": True,
+            "coupled_xy_stable_outward_response_uses_symmetric_"
+            "measurement_deadband": True,
             "every_coupled_xy_decrement_requires_refill_reserve": True,
             "full_outward_recovery_uses_coupled_release_step": True,
             "positive_full_outward_response_uses_single_coupled_"

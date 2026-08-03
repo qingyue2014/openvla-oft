@@ -1245,6 +1245,25 @@ noninward response within the existing `0.050 mm` resolution together with
 restored refill reserve releases the latch back to the existing coupled XY
 law. No route, budget, action bound, physical threshold, response threshold,
 task, inventory, state, prompt, goal, or intervention changes.
+Job504094 then exhausted all `320` allowed structural actions without losing
+any physical, collision, support, action, response, or reserve gate. The tail
+held outside clearance at approximately `1.880 mm`, table clearance at
+approximately `7.844 mm`, and plate tilt below `0.002 deg`, while outward and
+vertical responses fell below `0.0002 mm/frame`. The first already-qualified
+strict-lateral frame at sample `213` was nevertheless denied the next coupled
+XY decrement because recomputed tangential actions differed by
+`0.000002334` action and the repeat test required bitwise equality. Later
+sub-resolution outward responses could also be slightly negative. For coupled
+XY decrement stability only, the existing `0.050 mm` response resolution is
+therefore applied symmetrically as
+`abs(measured_outward_step_progress_m) <= progress_resolution_m`; responses
+below `-0.050 mm` retain the unchanged full-recovery path. Predecessor XY
+repetition is measured with a tolerance derived only by converting that same
+world-space resolution through the registered controller scale:
+`progress_resolution_m / position_action_scale`, or `0.000625` action. All
+strict lateral, height, reserve, one-decrement-per-confirmed-response, action,
+route, budget, task, inventory, state, prompt, goal, and intervention gates
+remain unchanged; no empirical threshold is introduced.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.
