@@ -1531,6 +1531,13 @@ stable exact-repeat frame is observed. It remains active through the bounded
 tangential unwind and clears only after the first strict pure-X decrement. The
 measured-inward recovery and every current, projected, and post-action gate
 retain priority and clear the latch fail-closed.
+Job504211 kept the smaller increment but applied it on thirteen consecutive
+frames. A delayed `-0.101972 mm` inward response appeared before reserve
+acquisition. The exact-repeat observation rule now covers refill PD itself:
+every `0.000625` X increment is followed by a frame whose previous and
+preceding XY actions are exactly equal. That frame holds XY and updates only
+the independently guarded Z action. The latch remains active, and another
+refill increment is ineligible until this observation frame has completed.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.

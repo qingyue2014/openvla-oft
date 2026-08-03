@@ -5964,6 +5964,10 @@ def _fixed_safe_z_lateral_hold_action(
     strict_target_axis_transition_exact_repeat = bool(
         coupled_xy_preceding_action_delta == 0.0
     )
+    strict_target_refill_increment_repeat_wait_requested = bool(
+        strict_target_refill_reserve_pending
+        and not strict_target_axis_transition_exact_repeat
+    )
     strict_target_refill_post_acquisition_safety_eligible = bool(
         lateral_target_reached
         and live_outside_clearance > outside_recovery_exit_clearance
@@ -6134,6 +6138,7 @@ def _fixed_safe_z_lateral_hold_action(
         and coupled_xy_neutralization_hold_requested
         and not coupled_xy_neutralization_requested
         and strict_target_refill_reserve_pending
+        and not strict_target_refill_increment_repeat_wait_requested
         and strict_target_coupled_hold_refill_candidate_world_delta_m > 0.0
     )
     captured_outward_response_tracking_active_ceiling_m = float(
@@ -6869,6 +6874,9 @@ def _fixed_safe_z_lateral_hold_action(
         "strict_target_axis_transition_exact_repeat": (
             strict_target_axis_transition_exact_repeat
         ),
+        "strict_target_refill_increment_repeat_wait_requested": (
+            strict_target_refill_increment_repeat_wait_requested
+        ),
         "strict_target_axis_transition_repeat_wait_requested": (
             strict_target_axis_transition_repeat_wait_requested
         ),
@@ -7116,6 +7124,7 @@ def _fixed_safe_z_lateral_hold_action(
             "neighborhood": True,
             "strict_target_refill_latch_clears_on_any_lost_common_gate": True,
             "strict_target_refill_uses_predecessor_repeat_action_bound": True,
+            "strict_target_refill_interleaves_exact_xy_repeat": True,
             "strict_target_refill_acquisition_holds_xy_until_stable": True,
             "strict_target_refill_transition_supports_saturated_outward_"
             "predecessor": True,
