@@ -6233,7 +6233,16 @@ def _fixed_safe_z_lateral_hold_action(
     captured_outward_response_unbounded_action_correction = None
     captured_outward_response_action_correction = None
     strict_target_coupled_hold_refill_action_step_bound = float(
-        strict_lateral_bound
+        (
+            0.25 * strict_lateral_bound
+            if strict_target_refill_stable_repeat_state_enabled
+            else strict_lateral_bound
+        )
+    )
+    strict_target_coupled_hold_refill_action_step_bound_formula = (
+        "0.25 * strict_lateral_bound"
+        if strict_target_refill_stable_repeat_state_enabled
+        else "strict_lateral_bound"
     )
     strict_target_coupled_hold_refill_action_step_clipped = False
     captured_outward_response_action = None
@@ -7129,6 +7138,9 @@ def _fixed_safe_z_lateral_hold_action(
         ),
         "strict_target_coupled_hold_refill_action_step_bound": (
             strict_target_coupled_hold_refill_action_step_bound
+        ),
+        "strict_target_coupled_hold_refill_action_step_bound_formula": (
+            strict_target_coupled_hold_refill_action_step_bound_formula
         ),
         "captured_outward_response_tracking_active_ceiling_m": (
             captured_outward_response_tracking_active_ceiling_m

@@ -3261,7 +3261,7 @@ def test_fixed_safe_z_lateral_hold_waits_for_two_stable_repeats_job504218():
         strict_target_refill_stable_repeat_count=1,
     )
     assert confirmed_action[:2] == pytest.approx(
-        [0.19780529015906578, -0.004970463735855576]
+        [0.1940552901590658, -0.004970463735855576]
     )
     assert confirmed_evidence[
         "strict_target_refill_increment_repeat_wait_requested"
@@ -3272,6 +3272,12 @@ def test_fixed_safe_z_lateral_hold_waits_for_two_stable_repeats_job504218():
     assert confirmed_evidence[
         "strict_target_refill_stable_repeat_confirmed"
     ] is True
+    assert confirmed_evidence[
+        "strict_target_coupled_hold_refill_action_step_bound"
+    ] == pytest.approx(0.00125)
+    assert confirmed_evidence[
+        "strict_target_coupled_hold_refill_action_step_bound_formula"
+    ] == "0.25 * strict_lateral_bound"
 
     unstable_action, unstable_evidence = _fixed_safe_z_lateral_hold_action(
         **{
