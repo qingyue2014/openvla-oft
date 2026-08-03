@@ -126,6 +126,18 @@ require_states() {
   fi
 }
 
+sha256_file() {
+  local path="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "${path}" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "${path}" | awk '{print $1}'
+  else
+    echo "No SHA-256 utility is available." >&2
+    return 2
+  fi
+}
+
 require_frozen_v4_bundle() {
   local expected_eb="3f2390a956efa89f2acb0617503fd22099f39700f0c5e900b3115ac168a8a1fe"
   local expected_er="ef0eadc4baea5eddba6a8c93d05c5554ead505f5c65929a4247b2f4504960d38"
@@ -138,7 +150,7 @@ require_frozen_v4_bundle() {
 
   require_states
   while IFS=' ' read -r expected path; do
-    actual="$(sha256sum "${path}" | awk '{print $1}')"
+    actual="$(sha256_file "${path}")"
     if [[ "${actual}" != "${expected}" ]]; then
       echo "L1-A1-v4 frozen-bundle hash mismatch: ${path}" >&2
       echo "expected=${expected}" >&2
@@ -343,6 +355,35 @@ case "${MODE}" in
     echo "verdict=PASS_L1A1_V4_PI05_EB_DIAGNOSTIC_EXECUTED"
     echo "verdict=NONFORMAL_DIAGNOSTIC_ONLY"
     ;;
+  smoke_pi05)
+    if [[ "${MODEL_FAMILY}" != "pi05" ]]; then
+      echo "L1-A1-v4 pi0.5 primary smoke requires MODEL_FAMILY=pi05." >&2
+      exit 2
+    fi
+    require_frozen_v4_bundle
+    require_visibility_review
+    smoke_eb="${EB_NOTE}-smoke"
+    smoke_er="${ER_NOTE}-smoke"
+    smoke_ec="${EC_NOTE}-smoke"
+    smoke_replay_csv="${LOG_DIR}/l1a1_v4_${MODEL_TAG}_eb_to_er_replay_smoke.csv"
+    smoke_replay_report="${LOG_DIR}/l1a1_v4_${MODEL_TAG}_eb_to_er_replay_smoke.md"
+    eval_condition Eb "${EB_STATES}" none "${smoke_eb}" "${SMOKE_TRIALS}" smoke
+    replay_gate "${smoke_eb}" 3 \
+      "${smoke_replay_csv}" "${smoke_replay_report}"
+    if ! grep -q 'PASS_L1A1_V4_ACTION_SEPARATION' "${smoke_replay_report}"; then
+      echo "L1-A1-v4 pi0.5 smoke action-separation gate failed." >&2
+      exit 2
+    fi
+    safe_reference "${SMOKE_TRIALS}" \
+      "${LOG_DIR}/l1a1_v4_safe_reference_smoke.csv" \
+      "${LOG_DIR}/l1a1_v4_safe_reference_smoke.md" \
+      "${LOG_DIR}/l1a1_v4_safe_reference_smoke_trajectories" \
+      "${REVIEW_ROOT}/safe_reference_smoke"
+    eval_condition Er "${ER_STATES}" l1a1_relational "${smoke_er}" "${SMOKE_TRIALS}" smoke
+    eval_condition Ec "${EC_STATES}" none "${smoke_ec}" "${SMOKE_TRIALS}" smoke
+    echo "verdict=PASS_L1A1_V4_PI05_PRIMARY_SMOKE"
+    echo "verdict=NEEDS_HUMAN_L1A1_V4_PI05_SMOKE_VIDEO_REVIEW"
+    ;;
   formal_openvla)
     if [[ "${MODEL_FAMILY}" != "openvla" ]]; then
       echo "L1-A1-v4 first formal learned-policy gate must be OpenVLA-OFT." >&2
@@ -361,11 +402,28 @@ case "${MODE}" in
     echo "verdict=PASS_L1A1_V4_OPENVLA_FORMAL"
     echo "verdict=NEEDS_L1A1_V4_PI05_AND_COSMOS_CASCADE"
     ;;
+  formal_pi05)
+    if [[ "${MODEL_FAMILY}" != "pi05" ]]; then
+      echo "L1-A1-v4 pi0.5 formal override requires MODEL_FAMILY=pi05." >&2
+      exit 2
+    fi
+    require_frozen_v4_bundle
+    require_formal_review
+    eval_condition Eb "${EB_STATES}" none "${EB_NOTE}" "${NUM_TRIALS}" formal
+    replay_gate "${EB_NOTE}" 20 "${REPLAY_CSV}" "${REPLAY_REPORT}"
+    safe_reference "${SAFE_REF_STATES}" "${SAFE_REF_CSV}" "${SAFE_REF_REPORT}" \
+      "${SAFE_REF_TRAJ}" "${SAFE_REF_VIDEOS}"
+    require_causal_gates
+    eval_condition Er "${ER_STATES}" l1a1_relational "${ER_NOTE}" "${NUM_TRIALS}" formal
+    eval_condition Ec "${EC_STATES}" none "${EC_NOTE}" "${NUM_TRIALS}" formal
+    attribution
+    echo "verdict=PASS_L1A1_V4_PI05_PRIMARY_FORMAL"
+    ;;
   attribution)
     attribution
     ;;
   *)
-    echo "Usage: $0 preflight|check|preview|smoke|pi05_eb_diagnostic|formal_openvla|attribution" >&2
+    echo "Usage: $0 preflight|check|preview|smoke|pi05_eb_diagnostic|smoke_pi05|formal_openvla|formal_pi05|attribution" >&2
     exit 2
     ;;
 esac

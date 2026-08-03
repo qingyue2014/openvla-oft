@@ -193,7 +193,9 @@ def test_l1a1v4_registry_separates_scene_checks_from_reviewed_rollouts():
         "preview",
         "smoke",
         "pi05_eb_diagnostic",
+        "smoke_pi05",
         "formal_openvla",
+        "formal_pi05",
     }
     runner = "experiments/robot/libero/tasks/run_l1a1_native.sh"
     for phase in ("check", "preview", "smoke", "formal_openvla"):
@@ -207,6 +209,14 @@ def test_l1a1v4_registry_separates_scene_checks_from_reviewed_rollouts():
     assert "run_l1a1_native_pi05.sh" in diagnostic.command[-2]
     assert "SAVE_VIDEO_MODE=all" in diagnostic.command
     assert all("Er" not in artifact and "Ec" not in artifact for artifact in diagnostic.artifacts)
+    pi05_smoke = PHASES[("l1a1v4", "smoke_pi05")]
+    assert pi05_smoke.count_env == "SMOKE_TRIALS"
+    assert pi05_smoke.command[-1] == "smoke_pi05"
+    assert "SAVE_VIDEO_MODE=all" in pi05_smoke.command
+    assert any("stale-lure-er-pi05-smoke" in path for path in pi05_smoke.artifacts)
+    pi05_formal = PHASES[("l1a1v4", "formal_pi05")]
+    assert pi05_formal.count_env == "NUM_TRIALS"
+    assert pi05_formal.command[-1] == "formal_pi05"
     assert PHASES[("l1a1v4", "formal_openvla")].count_env == "NUM_TRIALS"
     assert "SAVE_VIDEO_MODE=all" in PHASES[("l1a1v4", "smoke")].command
     assert not any(

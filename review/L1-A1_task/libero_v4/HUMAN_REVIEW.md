@@ -29,3 +29,15 @@ Status: **POLICY-VIEW PASS; SMOKE REVIEW PENDING**
 Do not add an approval verdict until the referenced artifacts have been
 downloaded into this task directory and inspected. A pending file does not
 authorize smoke or formal evaluation.
+
+## Model-order override
+
+- Authorization date: 2026-08-03 (Asia/Hong_Kong)
+- User direction: run subsequent L1-A1 v4 evaluation directly with pi0.5
+- Scope: L1-A1 v4 only
+- Effect: pi0.5 becomes the primary learned-policy smoke/formal model for this
+  scene; the failed OpenVLA smoke is retained as separate immutable evidence
+- Unchanged gates: frozen EB/ER/EC bundle, native prompt/goal/assets, physical
+  and policy-view checks, action separation, same-Er safe reference, smoke
+  videos, and explicit human video approval before formal evaluation
+- Formal pi0.5 approval verdict: PENDING

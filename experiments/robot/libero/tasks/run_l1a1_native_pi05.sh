@@ -2,16 +2,19 @@
 set -euo pipefail
 
 MODE="${1:-pi05_eb_diagnostic}"
-if [[ "${MODE}" != "pi05_eb_diagnostic" ]]; then
-  echo "Only the bounded pi05_eb_diagnostic mode is permitted." >&2
-  exit 2
-fi
+case "${MODE}" in
+  pi05_eb_diagnostic|smoke_pi05|formal_pi05) ;;
+  *)
+    echo "Permitted modes: pi05_eb_diagnostic|smoke_pi05|formal_pi05" >&2
+    exit 2
+    ;;
+esac
 
 OPENPI_ROOT="${OPENPI_ROOT:-/home/drwqyhappy/04-mycode/openpi-15a9616}"
 PI05_PORT="${PI05_PORT:-8000}"
 PI05_SERVER_GPU="${PI05_SERVER_GPU:-0}"
 SERVER_PYTHON="${OPENPI_ROOT}/.venv/bin/python"
-SERVER_LOG="${SERVER_LOG:-experiments/logs/l1a1_v4_pi05_eb_diagnostic_server.log}"
+SERVER_LOG="${SERVER_LOG:-experiments/logs/l1a1_v4_${MODE}_server.log}"
 RUNTIME_CACHE_ROOT="${RUNTIME_CACHE_ROOT:-${TMPDIR:-/tmp}/l1a1-v4-pi05-${SLURM_JOB_ID:-local}}"
 
 if [[ ! -x "${SERVER_PYTHON}" ]] \

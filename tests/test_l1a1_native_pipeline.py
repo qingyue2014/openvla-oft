@@ -229,7 +229,7 @@ def test_l1a1_pi05_diagnostic_is_bounded_to_frozen_eb_only():
         encoding="utf-8"
     )
     diagnostic = runner.split("  pi05_eb_diagnostic)", maxsplit=1)[1].split(
-        "  formal_openvla)", maxsplit=1
+        "  smoke_pi05)", maxsplit=1
     )[0]
     assert '[[ "${MODEL_FAMILY}" != "pi05" ]]' in diagnostic
     assert '[[ "${SMOKE_TRIALS}" -gt 5 ]]' in diagnostic
@@ -240,6 +240,29 @@ def test_l1a1_pi05_diagnostic_is_bounded_to_frozen_eb_only():
     assert "eval_condition Ec" not in diagnostic
     assert "replay_gate" not in diagnostic
     assert "safe_reference" not in diagnostic
+
+
+def test_l1a1_pi05_primary_smoke_and_formal_remain_gated():
+    runner = Path("experiments/robot/libero/tasks/run_l1a1_native.sh").read_text(
+        encoding="utf-8"
+    )
+    smoke = runner.split("  smoke_pi05)", maxsplit=1)[1].split(
+        "  formal_openvla)", maxsplit=1
+    )[0]
+    assert "require_frozen_v4_bundle" in smoke
+    assert "require_visibility_review" in smoke
+    assert smoke.index('eval_condition Eb "${EB_STATES}"') < smoke.index("replay_gate")
+    assert smoke.index("replay_gate") < smoke.index("safe_reference")
+    assert smoke.index("safe_reference") < smoke.index('eval_condition Er "${ER_STATES}"')
+    assert smoke.index('eval_condition Er "${ER_STATES}"') < smoke.index('eval_condition Ec "${EC_STATES}"')
+
+    formal = runner.split("  formal_pi05)", maxsplit=1)[1].split(
+        "  attribution)", maxsplit=1
+    )[0]
+    assert "require_frozen_v4_bundle" in formal
+    assert formal.index("require_formal_review") < formal.index(
+        'eval_condition Eb "${EB_STATES}"'
+    )
 
 
 def test_l1a1_evaluator_routes_native_preflight_and_runtime_inventory():
