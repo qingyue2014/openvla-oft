@@ -5637,6 +5637,36 @@ def _fixed_safe_z_lateral_hold_action(
         if release_slew_enabled
         else None
     )
+    preceding_outward_action_for_response_tracking = (
+        float(
+            np.dot(
+                preceding_commanded_action_xyz[:2],
+                outward_direction_xy,
+            )
+        )
+        if release_slew_enabled
+        else None
+    )
+    previous_coupled_hold_tangential_xy_action = (
+        previous_commanded_action_xyz[:2]
+        - previous_outward_action_for_response_tracking
+        * outward_direction_xy
+        if release_slew_enabled
+        else np.zeros(2, dtype=float)
+    )
+    previous_coupled_hold_tangential_xy_action_norm = float(
+        np.linalg.norm(previous_coupled_hold_tangential_xy_action)
+    )
+    preceding_coupled_hold_tangential_xy_action = (
+        preceding_commanded_action_xyz[:2]
+        - preceding_outward_action_for_response_tracking
+        * outward_direction_xy
+        if release_slew_enabled
+        else np.zeros(2, dtype=float)
+    )
+    preceding_coupled_hold_tangential_xy_action_norm = float(
+        np.linalg.norm(preceding_coupled_hold_tangential_xy_action)
+    )
     neutral_z_confirmation_xy_action_bound = float(
         min(
             strict_safety_brake_bound,
@@ -5857,8 +5887,27 @@ def _fixed_safe_z_lateral_hold_action(
         and coupled_xy_transient_lateral_hold_accepted
         and coupled_xy_neutralization_step_stable
     )
+    strict_target_refill_reserve_target_clearance_m = float(
+        captured_outward_response_tracking_ceiling_m
+    )
+    strict_target_refill_reserve_acquired = bool(
+        live_outside_clearance
+        >= strict_target_refill_reserve_target_clearance_m
+    )
+    strict_target_refill_reserve_pending = bool(
+        lateral_target_reached
+        and coupled_xy_neutralization_hold_requested
+        and previous_outward_action_for_response_tracking
+        < strict_safety_brake_bound
+        and (
+            previous_coupled_hold_tangential_xy_action_norm > 0.0
+            or preceding_coupled_hold_tangential_xy_action_norm > 0.0
+        )
+        and not strict_target_refill_reserve_acquired
+    )
     coupled_xy_neutralization_requested = bool(
         coupled_xy_neutralization_hold_requested
+        and not strict_target_refill_reserve_pending
         and (
             (
                 lateral_target_reached
@@ -5869,21 +5918,15 @@ def _fixed_safe_z_lateral_hold_action(
             or coupled_xy_positive_outward_response_damping_requested
         )
     )
-    previous_coupled_hold_tangential_xy_action = (
-        previous_commanded_action_xyz[:2]
-        - previous_outward_action_for_response_tracking
-        * outward_direction_xy
-        if release_slew_enabled
-        else np.zeros(2, dtype=float)
-    )
-    previous_coupled_hold_tangential_xy_action_norm = float(
-        np.linalg.norm(previous_coupled_hold_tangential_xy_action)
-    )
     strict_target_refill_neighborhood_scope_eligible = bool(
         coupled_xy_neutralization_requested
         and lateral_target_reached
+        and strict_target_refill_reserve_acquired
         and live_outside_clearance
-        <= captured_outward_response_tracking_ceiling_m
+        <= (
+            strict_target_refill_reserve_target_clearance_m
+            + progress_resolution_m
+        )
         and previous_outward_action_for_response_tracking
         < strict_safety_brake_bound
     )
@@ -5896,9 +5939,15 @@ def _fixed_safe_z_lateral_hold_action(
         and previous_coupled_hold_tangential_xy_action_norm == 0.0
     )
     strict_target_refill_tangential_unwind_action_step_bound = float(
-        np.nextafter(
-            coupled_xy_preceding_action_repeat_tolerance,
+        max(
             0.0,
+            np.nextafter(
+                coupled_xy_preceding_action_repeat_tolerance,
+                0.0,
+            )
+            - np.spacing(
+                previous_coupled_hold_tangential_xy_action_norm
+            ),
         )
         if release_slew_enabled
         else 0.0
@@ -5963,12 +6012,17 @@ def _fixed_safe_z_lateral_hold_action(
         - live_outside_clearance
         - derivative_gain * measured_outward_step_progress_m
     )
+    strict_target_coupled_hold_refill_candidate_world_delta_m = float(
+        strict_target_refill_reserve_target_clearance_m
+        - live_outside_clearance
+        - derivative_gain * measured_outward_step_progress_m
+    )
     strict_target_coupled_hold_refill_tracking_eligible = bool(
         lateral_target_reached
         and coupled_xy_neutralization_hold_requested
         and not coupled_xy_neutralization_requested
-        and live_outside_clearance < outside_refill_target_clearance
-        and captured_outward_response_candidate_world_delta_m > 0.0
+        and strict_target_refill_reserve_pending
+        and strict_target_coupled_hold_refill_candidate_world_delta_m > 0.0
     )
     captured_outward_response_tracking_requested = bool(
         release_slew_enabled
@@ -6002,7 +6056,9 @@ def _fixed_safe_z_lateral_hold_action(
     pre_captured_outward_response_xy_action = commanded_xy_action.copy()
     if captured_outward_response_tracking_requested:
         captured_outward_response_world_delta_m = float(
-            captured_outward_response_candidate_world_delta_m
+            strict_target_coupled_hold_refill_candidate_world_delta_m
+            if strict_target_coupled_hold_refill_tracking_eligible
+            else captured_outward_response_candidate_world_delta_m
         )
         captured_outward_response_action_correction = float(
             captured_outward_response_world_delta_m
@@ -6622,11 +6678,26 @@ def _fixed_safe_z_lateral_hold_action(
         "strict_target_refill_neighborhood_scope_eligible": (
             strict_target_refill_neighborhood_scope_eligible
         ),
+        "strict_target_refill_reserve_target_clearance_m": (
+            strict_target_refill_reserve_target_clearance_m
+        ),
+        "strict_target_refill_reserve_acquired": (
+            strict_target_refill_reserve_acquired
+        ),
+        "strict_target_refill_reserve_pending": (
+            strict_target_refill_reserve_pending
+        ),
         "previous_coupled_hold_tangential_xy_action": (
             previous_coupled_hold_tangential_xy_action.tolist()
         ),
         "previous_coupled_hold_tangential_xy_action_norm": (
             previous_coupled_hold_tangential_xy_action_norm
+        ),
+        "preceding_coupled_hold_tangential_xy_action": (
+            preceding_coupled_hold_tangential_xy_action.tolist()
+        ),
+        "preceding_coupled_hold_tangential_xy_action_norm": (
+            preceding_coupled_hold_tangential_xy_action_norm
         ),
         "strict_target_refill_tangential_unwind_requested": (
             strict_target_refill_tangential_unwind_requested
@@ -6740,6 +6811,9 @@ def _fixed_safe_z_lateral_hold_action(
         "captured_outward_response_candidate_world_delta_m": (
             captured_outward_response_candidate_world_delta_m
         ),
+        "strict_target_coupled_hold_refill_candidate_world_delta_m": (
+            strict_target_coupled_hold_refill_candidate_world_delta_m
+        ),
         "captured_outward_response_world_delta_m": (
             captured_outward_response_world_delta_m
         ),
@@ -6834,6 +6908,8 @@ def _fixed_safe_z_lateral_hold_action(
             "captured_outward_hold_respects_lateral_tolerance": True,
             "strict_target_coupled_hold_uses_captured_refill_pd_while_"
             "decrement_waits": True,
+            "strict_target_transition_requires_captured_response_"
+            "ceiling_reserve": True,
             "strict_target_refill_neighborhood_decrement_uses_strict_"
             "lateral_bound": True,
             "strict_target_refill_unwinds_tangential_before_outward_"

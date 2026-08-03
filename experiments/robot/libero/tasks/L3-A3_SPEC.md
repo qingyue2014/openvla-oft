@@ -1474,6 +1474,17 @@ logic correctly operated and the hard gate stopped at sample `378`. The
 bounded tangential slew preserves that full-recovery gate and every physical
 threshold while limiting each isolated axis transition to an already
 registered action-repeat increment.
+Job504199 showed that the response was not proportional to tangential step
+size. A `0.000625` Y slew still preceded a `-0.095750 mm` outward-axis
+response, essentially matching the abrupt-unwind run. This identifies delayed
+controller coupling, not Y magnitude, as the operative risk. Strict-target
+neutralization is now held until live outside clearance reaches the existing
+captured-response tracking ceiling of `1.700000 mm`. The extra `0.050000 mm`
+over the existing refill target is exactly one already registered progress
+resolution. The same captured-response PD, tangential hold, guarded Z, action
+bounds, recovery thresholds, and post-action gates acquire that reserve. The
+tangential slew and pure-X decrement remain blocked until the ceiling is
+reached; measured inward response still invokes the unchanged full recovery.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.
