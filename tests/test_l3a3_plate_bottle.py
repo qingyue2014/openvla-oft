@@ -3450,7 +3450,7 @@ def test_fixed_safe_z_lateral_hold_continues_job504174_positive_pd_refill():
     )
 
 
-def test_fixed_safe_z_lateral_hold_unwinds_job504182_post_refill_tangent():
+def test_fixed_safe_z_lateral_hold_slews_job504189_post_refill_tangent():
     native_spec = {
         "source": "env.action_spec",
         "action_dimension": 7,
@@ -3499,7 +3499,11 @@ def test_fixed_safe_z_lateral_hold_unwinds_job504182_post_refill_tangent():
         maximum_positive_safety_release_action=0.05,
     )
     assert action[:3] == pytest.approx(
-        [0.1665880057493264, 0.0, 0.13311965950894547]
+        [
+            0.1665880057493264,
+            -0.004345463735855576,
+            0.13311965950894547,
+        ]
     )
     assert evidence["lateral_target_reached"] is True
     assert evidence["coupled_xy_neutralization_requested"] is True
@@ -3513,6 +3517,18 @@ def test_fixed_safe_z_lateral_hold_unwinds_job504182_post_refill_tangent():
         "strict_target_refill_tangential_unwind_action_xyz"
     ] == pytest.approx(action[:3])
     assert evidence[
+        "strict_target_refill_tangential_unwind_action_step_bound"
+    ] == pytest.approx(0.000625)
+    assert evidence[
+        "strict_target_refill_tangential_unwind_action_step_bound"
+    ] < 0.000625
+    assert evidence[
+        "strict_target_refill_tangential_unwind_action_step"
+    ] == pytest.approx(0.000625)
+    assert evidence[
+        "strict_target_refill_remaining_tangential_xy_action"
+    ] == pytest.approx([0.0, -0.004345463735855576])
+    assert evidence[
         "coupled_xy_selected_neutral_release_action_step"
     ] == pytest.approx(0.005)
     assert evidence["coupled_xy_neutralization_action"] == pytest.approx(
@@ -3521,6 +3537,81 @@ def test_fixed_safe_z_lateral_hold_unwinds_job504182_post_refill_tangent():
     assert evidence["proof"][
         "strict_target_refill_unwinds_tangential_before_outward_decrement"
     ] is True
+    assert evidence["proof"][
+        "strict_target_refill_tangential_unwind_uses_predecessor_"
+        "repeat_tolerance"
+    ] is True
+
+
+def test_fixed_safe_z_lateral_hold_continues_bounded_tangential_slew():
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": (-np.ones(7, dtype=float)).tolist(),
+        "high": np.ones(7, dtype=float).tolist(),
+        "runtime_resolved": True,
+    }
+    action, evidence = _fixed_safe_z_lateral_hold_action(
+        current_eef=np.array(
+            [0.13300116766922115, -0.02420528872048927, 0.9206249496479508]
+        ),
+        lateral_target_xy=np.array(
+            [0.13242106705090634, -0.02850777957668001]
+        ),
+        lateral_position_tolerance_m=0.005,
+        fixed_safe_z_m=0.920581288496378,
+        vertical_position_tolerance_m=0.0004,
+        measured_vertical_step_progress_m=0.0,
+        measured_outward_step_progress_m=0.0,
+        outside_side_guard={
+            "minimum_outside_clearance_m": 0.001656849233455368,
+            "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+            "finger_table_vertical_clearance_m": 0.007852431408738259,
+            "required_finger_table_clearance_m": np.nextafter(
+                0.0, np.inf
+            ),
+        },
+        outward_direction_xy=np.array([1.0, 0.0]),
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_lateral_translation_action=0.005,
+        maximum_safety_brake_action=0.20,
+        strict_outside_clearance_m=0.0004,
+        strict_table_clearance_m=0.0004,
+        closed_loop_hazard_response_bound_m=0.0011,
+        full_outward_brake_clearance_m=0.00095,
+        progress_resolution_m=0.00005,
+        derivative_gain=2.0,
+        native_action_spec=native_spec,
+        previous_commanded_action_xyz=np.array(
+            [
+                0.1665880057493264,
+                -0.004345463735855576,
+                0.13311965950894547,
+            ]
+        ),
+        preceding_commanded_action_xyz=np.array(
+            [
+                0.1665880057493264,
+                -0.004970463735855576,
+                0.1343305774024637,
+            ]
+        ),
+        maximum_positive_safety_release_action=0.05,
+    )
+    assert action[:2] == pytest.approx(
+        [0.1665880057493264, -0.003720463735855576]
+    )
+    assert evidence["coupled_xy_preceding_action_repeated"] is True
+    assert evidence[
+        "strict_target_refill_tangential_unwind_requested"
+    ] is True
+    assert evidence[
+        "strict_target_refill_tangential_unwind_action_step"
+    ] == pytest.approx(0.000625)
+    assert evidence[
+        "strict_target_refill_neighborhood_decrement_requested"
+    ] is False
 
 
 def test_fixed_safe_z_lateral_hold_decrements_job504182_pure_outward_followup():

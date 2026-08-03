@@ -5876,6 +5876,9 @@ def _fixed_safe_z_lateral_hold_action(
         if release_slew_enabled
         else np.zeros(2, dtype=float)
     )
+    previous_coupled_hold_tangential_xy_action_norm = float(
+        np.linalg.norm(previous_coupled_hold_tangential_xy_action)
+    )
     strict_target_refill_neighborhood_scope_eligible = bool(
         coupled_xy_neutralization_requested
         and lateral_target_reached
@@ -5886,11 +5889,37 @@ def _fixed_safe_z_lateral_hold_action(
     )
     strict_target_refill_tangential_unwind_requested = bool(
         strict_target_refill_neighborhood_scope_eligible
-        and np.linalg.norm(previous_coupled_hold_tangential_xy_action) > 0.0
+        and previous_coupled_hold_tangential_xy_action_norm > 0.0
     )
     strict_target_refill_neighborhood_decrement_requested = bool(
         strict_target_refill_neighborhood_scope_eligible
-        and np.linalg.norm(previous_coupled_hold_tangential_xy_action) == 0.0
+        and previous_coupled_hold_tangential_xy_action_norm == 0.0
+    )
+    strict_target_refill_tangential_unwind_action_step_bound = float(
+        np.nextafter(
+            coupled_xy_preceding_action_repeat_tolerance,
+            0.0,
+        )
+        if release_slew_enabled
+        else 0.0
+    )
+    strict_target_refill_tangential_unwind_action_step = float(
+        min(
+            previous_coupled_hold_tangential_xy_action_norm,
+            strict_target_refill_tangential_unwind_action_step_bound,
+        )
+        if strict_target_refill_tangential_unwind_requested
+        else 0.0
+    )
+    strict_target_refill_remaining_tangential_xy_action = (
+        previous_coupled_hold_tangential_xy_action
+        * (
+            1.0
+            - strict_target_refill_tangential_unwind_action_step
+            / previous_coupled_hold_tangential_xy_action_norm
+        )
+        if strict_target_refill_tangential_unwind_requested
+        else previous_coupled_hold_tangential_xy_action.copy()
     )
     coupled_xy_selected_neutral_release_action_step = (
         coupled_xy_transient_neutral_release_action_step
@@ -5905,7 +5934,7 @@ def _fixed_safe_z_lateral_hold_action(
     pre_coupled_xy_neutralization_xy_action = commanded_xy_action.copy()
     if coupled_xy_neutralization_hold_requested:
         neutralization_tangential_xy_action = (
-            np.zeros(2, dtype=float)
+            strict_target_refill_remaining_tangential_xy_action
             if strict_target_refill_tangential_unwind_requested
             else previous_coupled_hold_tangential_xy_action
             if lateral_target_reached
@@ -6596,8 +6625,20 @@ def _fixed_safe_z_lateral_hold_action(
         "previous_coupled_hold_tangential_xy_action": (
             previous_coupled_hold_tangential_xy_action.tolist()
         ),
+        "previous_coupled_hold_tangential_xy_action_norm": (
+            previous_coupled_hold_tangential_xy_action_norm
+        ),
         "strict_target_refill_tangential_unwind_requested": (
             strict_target_refill_tangential_unwind_requested
+        ),
+        "strict_target_refill_tangential_unwind_action_step_bound": (
+            strict_target_refill_tangential_unwind_action_step_bound
+        ),
+        "strict_target_refill_tangential_unwind_action_step": (
+            strict_target_refill_tangential_unwind_action_step
+        ),
+        "strict_target_refill_remaining_tangential_xy_action": (
+            strict_target_refill_remaining_tangential_xy_action.tolist()
         ),
         "strict_target_refill_tangential_unwind_action_xyz": (
             action[:3].tolist()
@@ -6797,6 +6838,8 @@ def _fixed_safe_z_lateral_hold_action(
             "lateral_bound": True,
             "strict_target_refill_unwinds_tangential_before_outward_"
             "decrement": True,
+            "strict_target_refill_tangential_unwind_uses_predecessor_"
+            "repeat_tolerance": True,
             "coupled_xy_neutralization_uses_existing_action_bounds": True,
             "coupled_xy_neutralization_requires_projected_exit_reserve": True,
             "coupled_xy_projected_exit_loss_uses_full_recovery": True,

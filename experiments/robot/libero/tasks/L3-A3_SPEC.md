@@ -1455,14 +1455,25 @@ Job504182 applied the `0.005` X decrement but retained `-0.004970` tangential
 Y on the same frame. The next outward response was still `-0.115931 mm`, and
 the unchanged corridor gate stopped at sample `378`. The narrow
 refill-neighborhood transition is therefore split across axes. When its prior
-tangential component is nonzero, the first eligible frame keeps the previous
-outward action unchanged, sets tangential XY to zero, and retains guarded Z.
-Only a subsequent eligible frame whose previous tangential component is
-already exactly zero may apply the existing `0.005` pure-outward decrement.
+tangential component is nonzero, eligible frames keep the previous outward
+action unchanged, slew tangential XY toward zero, and retain guarded Z. The
+per-frame slew is strictly below the existing predecessor-repeat tolerance,
+derived as progress resolution divided by position-action scale (`0.000625`
+action); it adds no threshold or action magnitude. Only a subsequent eligible
+frame whose previous tangential component is already exactly zero may apply
+the existing `0.005` pure-outward decrement.
 Both phases require the complete pre-existing neutralization eligibility and
 all post-action gates; any lost predicate fails closed instead of unwinding.
 The `0.015625` behavior outside the sub-full refill-neighborhood scope and all
 full-recovery behavior remain unchanged.
+Job504189 confirmed why the tangential phase must itself be slewed. Abruptly
+changing Y from `-0.004970` to zero while holding X produced a `-0.095580 mm`
+outward-axis response. Projected clearance fell to `1.478685 mm`, below the
+unchanged `1.55 mm` recovery-exit threshold, so the existing full-recovery
+logic correctly operated and the hard gate stopped at sample `378`. The
+bounded tangential slew preserves that full-recovery gate and every physical
+threshold while limiting each isolated axis transition to an already
+registered action-repeat increment.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.
