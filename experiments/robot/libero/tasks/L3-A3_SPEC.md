@@ -1423,6 +1423,20 @@ guarded Z remain those of the coupled hold. The override disables immediately
 when the decrement becomes eligible or any existing predicate fails. It does
 not change Job504122 strict-target full recovery, any threshold, or any hard
 gate.
+Job504174 exercised the refill override and raised outward action from
+`0.164375` to `0.165857`, but its response-sign-only scope paused whenever a
+frame moved outward. At sample `364`, live clearance remained
+`1.622711 mm`; although measured response was `+0.001188 mm`, the unchanged
+captured-response PD formula still predicted a positive `0.024912 mm` refill
+deficit, equal to `+0.000311` action. Pausing therefore left the refill
+incomplete and reproduced the delayed inward response at sample `375`. The
+strict-target coupled-hold refill scope now uses the sign of that existing PD
+prediction itself,
+`outside_refill_target - live_outside - derivative_gain * response`, instead
+of the raw response sign. A positive predicted deficit continues the same
+captured correction; zero or negative prediction preserves the validated hold
+behavior. This adds no threshold, gain, latch, or action increment and leaves
+all other eligibility predicates and hard gates unchanged.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.

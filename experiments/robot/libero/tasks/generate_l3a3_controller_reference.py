@@ -5899,12 +5899,17 @@ def _fixed_safe_z_lateral_hold_action(
             neutralization_tangential_xy_action
             + coupled_xy_neutralization_action * outward_direction_xy
         )
+    captured_outward_response_candidate_world_delta_m = float(
+        outside_refill_target_clearance
+        - live_outside_clearance
+        - derivative_gain * measured_outward_step_progress_m
+    )
     strict_target_coupled_hold_refill_tracking_eligible = bool(
         lateral_target_reached
         and coupled_xy_neutralization_hold_requested
         and not coupled_xy_neutralization_requested
         and live_outside_clearance < outside_refill_target_clearance
-        and measured_outward_step_progress_m < 0.0
+        and captured_outward_response_candidate_world_delta_m > 0.0
     )
     captured_outward_response_tracking_requested = bool(
         release_slew_enabled
@@ -5938,9 +5943,7 @@ def _fixed_safe_z_lateral_hold_action(
     pre_captured_outward_response_xy_action = commanded_xy_action.copy()
     if captured_outward_response_tracking_requested:
         captured_outward_response_world_delta_m = float(
-            outside_refill_target_clearance
-            - live_outside_clearance
-            - derivative_gain * measured_outward_step_progress_m
+            captured_outward_response_candidate_world_delta_m
         )
         captured_outward_response_action_correction = float(
             captured_outward_response_world_delta_m
@@ -6645,6 +6648,9 @@ def _fixed_safe_z_lateral_hold_action(
         ),
         "captured_outward_response_tracking_requested": (
             captured_outward_response_tracking_requested
+        ),
+        "captured_outward_response_candidate_world_delta_m": (
+            captured_outward_response_candidate_world_delta_m
         ),
         "captured_outward_response_world_delta_m": (
             captured_outward_response_world_delta_m
