@@ -1231,14 +1231,20 @@ Y action and resumed positive-Z tracking accompanied a persistent measured
 inward response that grew from `0.301632 mm` to `0.433836 mm`. Outside
 clearance fell from `2.272914 mm` to `0.141139 mm`, crossing the unchanged
 `0.400 mm` one-controller-step corridor reserve; the gate stopped before
-contact seek. A meaningful inward response that selects full recovery now
-isolates native OSC authority to the same existing `0.20` pure outward action:
-tangential XY and Z are exactly zero. This action repeats while the response is
-inward or live clearance has not strictly exceeded the unchanged refill target.
-Only a noninward response within the existing `0.050 mm` resolution together
-with restored refill reserve releases the latch back to the existing coupled
-fixed-safe-Z law. No route, budget, action bound, physical threshold, response
-threshold, task, inventory, state, prompt, goal, or intervention changes.
+contact seek. Job504074 showed that isolating all XYZ axes was unsafe earlier in
+the same fixed-height stage: releasing a prior `+0.346028` Z command directly
+to zero exposed a delayed downward tail of `-1.498004`, `-3.099392`, then
+`-3.311885 mm/frame`, and the unchanged table-reserve gates stopped at sample
+`187`. A meaningful inward response that selects full recovery therefore
+isolates only XY authority to the same existing `0.20` pure outward direction:
+the tangential XY component is exactly zero, while Z retains the unchanged
+captured-response tracking, table recovery, downward-tail brake, and positive
+release slew. This XY isolation repeats while the response is inward or live
+clearance has not strictly exceeded the unchanged refill target. Only a
+noninward response within the existing `0.050 mm` resolution together with
+restored refill reserve releases the latch back to the existing coupled XY
+law. No route, budget, action bound, physical threshold, response threshold,
+task, inventory, state, prompt, goal, or intervention changes.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.
