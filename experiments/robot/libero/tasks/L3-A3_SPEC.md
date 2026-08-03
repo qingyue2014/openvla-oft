@@ -1485,6 +1485,19 @@ resolution. The same captured-response PD, tangential hold, guarded Z, action
 bounds, recovery thresholds, and post-action gates acquire that reserve. The
 tangential slew and pure-X decrement remain blocked until the ceiling is
 reached; measured inward response still invokes the unchanged full recovery.
+Job504203 reached `1.711103 mm`, but then issued tangential slews on two
+consecutive frames while guarded Z action was also changing. The delayed
+outward response appeared only after the second frame at `-0.124393 mm`, and
+the single-resolution reserve did not cover the subsequent coupled tail. The
+strict-target transition reserve is therefore strengthened to the unchanged
+recovery-exit clearance plus the registered closed-loop hazard-response bound:
+`1.55 + 1.10 = 2.65 mm`. The existing refill PD acquires this reserve with
+each outward action increase capped by the existing strict `0.005` lateral
+step. In addition, every tangential slew or pure-X decrement must be followed
+by an observation frame whose previous and preceding XY actions are exactly
+equal before another axis transition can operate. That frame holds XY,
+retains independently guarded Z, and leaves the measured-inward full-recovery
+gate unchanged.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.
