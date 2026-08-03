@@ -5168,6 +5168,7 @@ def _fixed_safe_z_lateral_hold_action(
     preceding_commanded_action_xyz=None,
     maximum_positive_safety_release_action=None,
     vertical_stability_confirmation_hold=False,
+    strict_target_refill_latched=False,
 ):
     """Hold the captured safe Z throughout the final lateral return."""
     current_eef = np.asarray(current_eef, dtype=float)
@@ -5934,7 +5935,15 @@ def _fixed_safe_z_lateral_hold_action(
         coupled_xy_neutralization_step_stable
         or strict_target_refill_low_reserve_recovery_required
     )
-    strict_target_refill_reserve_pending = bool(
+    strict_target_refill_neighborhood_entry_eligible = bool(
+        strict_target_refill_stability_eligible
+        and (
+            live_outside_clearance
+            <= captured_outward_response_tracking_ceiling_m
+            or strict_target_refill_low_reserve_recovery_required
+        )
+    )
+    strict_target_refill_common_eligibility = bool(
         lateral_target_reached
         and coupled_xy_neutralization_hold_requested
         and (
@@ -5943,8 +5952,17 @@ def _fixed_safe_z_lateral_hold_action(
             or strict_target_refill_full_action_hold_provenance
         )
         and strict_target_refill_transition_history_active
-        and strict_target_refill_stability_eligible
         and not strict_target_refill_reserve_acquired
+    )
+    strict_target_refill_reserve_pending = bool(
+        strict_target_refill_common_eligibility
+        and (
+            strict_target_refill_neighborhood_entry_eligible
+            or strict_target_refill_latched
+        )
+    )
+    strict_target_refill_latched_after_action = bool(
+        strict_target_refill_reserve_pending
     )
     strict_target_axis_transition_exact_repeat = bool(
         coupled_xy_preceding_action_delta == 0.0
@@ -6774,6 +6792,15 @@ def _fixed_safe_z_lateral_hold_action(
         "strict_target_refill_stability_eligible": (
             strict_target_refill_stability_eligible
         ),
+        "strict_target_refill_neighborhood_entry_eligible": (
+            strict_target_refill_neighborhood_entry_eligible
+        ),
+        "strict_target_refill_latched_before_action": bool(
+            strict_target_refill_latched
+        ),
+        "strict_target_refill_latched_after_action": (
+            strict_target_refill_latched_after_action
+        ),
         "strict_target_axis_transition_exact_repeat": (
             strict_target_axis_transition_exact_repeat
         ),
@@ -7017,6 +7044,9 @@ def _fixed_safe_z_lateral_hold_action(
             "strict_target_transition_interleaves_exact_xy_repeat": True,
             "strict_target_refill_requires_stable_step_or_legacy_low_"
             "reserve": True,
+            "strict_target_refill_starts_only_in_captured_response_"
+            "neighborhood": True,
+            "strict_target_refill_latch_clears_on_any_lost_common_gate": True,
             "strict_target_reserve_pd_uses_strict_lateral_step_bound": True,
             "strict_target_refill_neighborhood_decrement_uses_strict_"
             "lateral_bound": True,
@@ -18527,6 +18557,7 @@ def _seek_stable_plate_contact(
     fixed_safe_z = None
     fixed_safe_z_previous_commanded_action_xyz = None
     fixed_safe_z_preceding_commanded_action_xyz = None
+    fixed_safe_z_strict_target_refill_latched = False
     fixed_safe_z_positive_safety_release_action = 0.05
     vertical_corridor_neutral_damping_release_action = 0.025
     vertical_corridor_hazard_outward_brake_action = float(
@@ -20434,6 +20465,14 @@ def _seek_stable_plate_contact(
                 vertical_stability_confirmation_hold=bool(
                     fixed_safe_z_stable_count > 0
                 ),
+                strict_target_refill_latched=(
+                    fixed_safe_z_strict_target_refill_latched
+                ),
+            )
+            fixed_safe_z_strict_target_refill_latched = bool(
+                path_control[
+                    "strict_target_refill_latched_after_action"
+                ]
             )
             fixed_safe_z_preceding_commanded_action_xyz = np.asarray(
                 fixed_safe_z_previous_commanded_action_xyz,
@@ -21625,6 +21664,7 @@ def _seek_stable_plate_contact(
                     action[:3], dtype=float
                 ).copy()
                 fixed_safe_z_preceding_commanded_action_xyz = None
+                fixed_safe_z_strict_target_refill_latched = False
             elif (
                 hazard_release_zero_coast_active_before_action
                 and zero_coast_stable_count >= 2

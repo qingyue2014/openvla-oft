@@ -1509,6 +1509,17 @@ legacy projected-clearance gate is already at or below `1.65 mm` and therefore
 requires recovery regardless of stability. This adds no action, threshold,
 route, state, or intervention change; it only prevents the strengthened target
 from activating during an unrelated unstable transient.
+Job504206 preserved the prior trajectory through sample `223`, then revealed
+that stability alone was still too broad: the strengthened target started at
+`1.951671 mm`, outside the unchanged `1.70 mm` captured-response neighborhood.
+It also stopped on every intervening response frame, so the strengthened
+target was never acquired. Initiation now additionally requires live clearance
+inside that original neighborhood (or the unchanged low-reserve recovery
+exception). A one-bit controller-local latch records only a legal initiation
+and keeps the same bounded PD active until the target is acquired; it clears
+immediately if any common lateral, projected-clearance, response, recovery, or
+action-provenance gate is lost. The latch is controller bookkeeping, not a
+scene state or EB/ER/EC intervention.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.
