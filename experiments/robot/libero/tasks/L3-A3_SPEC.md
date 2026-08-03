@@ -972,6 +972,27 @@ exactly and changes only Z. These are derived controller-action gates; no
 physical threshold, route, budget, task, inventory, state, prompt, goal, or
 intervention changes.
 
+Job503908 entered coupled neutralization four times but never reached a stable
+count before the unchanged 240-action budget. The first entry began while the
+incoming vertical response was `+0.359332 mm` and the outward response was
+`-0.199533 mm`; three consecutive unload steps then left the height band and
+reset X to full `+0.20` recovery. A later one-frame entry repeated the same
+failure, and the fixed-height stage exhausted its 57 available actions with
+zero confirmation frames. Neutralization entry now requires both vertical and
+outward response magnitudes to pass the existing `0.05 mm` resolution and
+current plus projected outside clearance to exceed the existing refill target.
+After entry, an action already below full outward recovery records bounded
+neutralization progress: its preceding tangential component is repeated, and
+the outward component continues decreasing only while the existing captured-Z
+tracking envelope and all current/projected outside, table, and lateral guards
+pass. During a temporary height recovery it holds, rather than discards, that
+preceding XY action; an inward response or lost reserve still restores the
+original fail-closed recovery path. The derived unload step is `0.010625`: twice
+the existing strict lateral bound plus the existing response resolution divided
+by the existing position scale, capped by the existing maximum release action.
+No physical threshold, route, budget, task, inventory, state, prompt, goal, or
+intervention changes.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

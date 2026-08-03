@@ -5509,7 +5509,7 @@ def _fixed_safe_z_lateral_hold_action(
         float(
             min(
                 maximum_positive_safety_release_action,
-                strict_lateral_bound
+                2.0 * strict_lateral_bound
                 + progress_resolution_m / position_action_scale,
             )
         )
@@ -5522,42 +5522,88 @@ def _fixed_safe_z_lateral_hold_action(
     captured_outward_response_tracking_ceiling_m = float(
         outside_refill_target_clearance + progress_resolution_m
     )
-    coupled_xy_neutralization_requested = bool(
+    coupled_xy_neutralization_position_error_m = float(
+        fixed_safe_z_m - current_eef[2]
+    )
+    coupled_xy_neutralization_projected_overshoot_m = float(
+        max(0.0, -coupled_xy_neutralization_position_error_m)
+        + max(0.0, measured_vertical_step_progress_m)
+    )
+    coupled_xy_neutralization_height_tracking_accepted = bool(
+        abs(coupled_xy_neutralization_position_error_m)
+        <= vertical_position_tolerance_m
+        or (
+            coupled_xy_neutralization_position_error_m
+            < -vertical_position_tolerance_m
+            and coupled_xy_neutralization_projected_overshoot_m
+            <= 3.0 * vertical_position_tolerance_m
+        )
+    )
+    coupled_xy_neutralization_in_progress = bool(
+        release_slew_enabled
+        and previous_outward_action_for_response_tracking
+        > neutral_z_confirmation_xy_action_bound
+        and previous_outward_action_for_response_tracking
+        < strict_safety_brake_bound
+    )
+    coupled_xy_neutralization_entry_stable = bool(
+        abs(coupled_xy_neutralization_position_error_m)
+        <= vertical_position_tolerance_m
+        and abs(measured_vertical_step_progress_m)
+        <= progress_resolution_m
+        and abs(measured_outward_step_progress_m)
+        <= progress_resolution_m
+        and live_outside_clearance > outside_refill_target_clearance
+        and outside_response_projected_clearance_m
+        > outside_refill_target_clearance
+    )
+    coupled_xy_neutralization_hold_requested = bool(
         release_slew_enabled
         and lateral_target_reached
-        and abs(fixed_safe_z_m - current_eef[2])
-        <= vertical_position_tolerance_m
         and live_outside_clearance > outside_recovery_exit_clearance
         and outside_response_projected_clearance_m
         > outside_recovery_exit_clearance
         and live_table_clearance > outside_recovery_exit_clearance
+        and not measured_inward_response
         and abs(measured_outward_step_progress_m)
         <= closed_loop_hazard_response_bound_m
         and projected_lateral_error_after_measured_outward_response_m
         <= lateral_position_tolerance_m
         and previous_outward_action_for_response_tracking
         > neutral_z_confirmation_xy_action_bound
+        and previous_outward_action_for_response_tracking
+        <= maximum_safety_brake_action
         and not sticky_full_outward_recovery_requested
+        and (
+            coupled_xy_neutralization_in_progress
+            or coupled_xy_neutralization_entry_stable
+        )
+    )
+    coupled_xy_neutralization_requested = bool(
+        coupled_xy_neutralization_hold_requested
+        and coupled_xy_neutralization_height_tracking_accepted
     )
     coupled_xy_neutralization_action = None
     pre_coupled_xy_neutralization_xy_action = commanded_xy_action.copy()
-    if coupled_xy_neutralization_requested:
-        coupled_xy_neutralization_action = float(
-            max(
-                neutral_z_confirmation_xy_action_bound,
-                previous_outward_action_for_response_tracking
-                - coupled_xy_neutral_release_action_step,
-            )
-        )
-        neutralization_tangential_xy_action = (
-            commanded_xy_action
-            - float(
-                np.dot(commanded_xy_action, outward_direction_xy)
-            )
+    if coupled_xy_neutralization_hold_requested:
+        previous_tangential_xy_action = (
+            previous_commanded_action_xyz[:2]
+            - previous_outward_action_for_response_tracking
             * outward_direction_xy
         )
+        coupled_xy_neutralization_action = (
+            float(
+                max(
+                    neutral_z_confirmation_xy_action_bound,
+                    previous_outward_action_for_response_tracking
+                    - coupled_xy_neutral_release_action_step,
+                )
+            )
+            if coupled_xy_neutralization_requested
+            else previous_outward_action_for_response_tracking
+        )
         commanded_xy_action = (
-            neutralization_tangential_xy_action
+            previous_tangential_xy_action
             + coupled_xy_neutralization_action * outward_direction_xy
         )
     captured_outward_response_tracking_requested = bool(
@@ -5577,7 +5623,7 @@ def _fixed_safe_z_lateral_hold_action(
         <= lateral_position_tolerance_m
         and previous_outward_action_for_response_tracking >= 0.0
         and not sticky_full_outward_recovery_requested
-        and not coupled_xy_neutralization_requested
+        and not coupled_xy_neutralization_hold_requested
     )
     captured_outward_response_world_delta_m = None
     captured_outward_response_action_correction = None
@@ -6098,6 +6144,24 @@ def _fixed_safe_z_lateral_hold_action(
         "coupled_xy_neutralization_requested": (
             coupled_xy_neutralization_requested
         ),
+        "coupled_xy_neutralization_hold_requested": (
+            coupled_xy_neutralization_hold_requested
+        ),
+        "coupled_xy_neutralization_in_progress": (
+            coupled_xy_neutralization_in_progress
+        ),
+        "coupled_xy_neutralization_entry_stable": (
+            coupled_xy_neutralization_entry_stable
+        ),
+        "coupled_xy_neutralization_height_tracking_accepted": (
+            coupled_xy_neutralization_height_tracking_accepted
+        ),
+        "coupled_xy_neutralization_position_error_m": (
+            coupled_xy_neutralization_position_error_m
+        ),
+        "coupled_xy_neutralization_projected_overshoot_m": (
+            coupled_xy_neutralization_projected_overshoot_m
+        ),
         "coupled_xy_neutralization_action": (
             coupled_xy_neutralization_action
         ),
@@ -6176,6 +6240,8 @@ def _fixed_safe_z_lateral_hold_action(
             "captured_outward_hold_respects_lateral_tolerance": True,
             "coupled_xy_neutralization_uses_existing_action_bounds": True,
             "coupled_xy_neutralization_requires_projected_exit_reserve": True,
+            "coupled_xy_neutralization_entry_requires_stable_responses": True,
+            "coupled_xy_neutralization_preserves_bounded_progress": True,
             "neutral_z_confirmation_requires_small_coupled_xy_action": True,
             "strict_outside_loss_disables_inside_band_z_tracking": True,
             "projected_outside_band_downward_tail_retains_full_brake": True,
