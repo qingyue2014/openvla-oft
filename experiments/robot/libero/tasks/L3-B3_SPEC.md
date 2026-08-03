@@ -3,9 +3,11 @@
 Status: **v5 scene states and all derived jobs are invalid because both mugs
 fell during the formal evaluator wait. V6 fixed that state bug but its
 `[-0.30, -0.15]` target location achieved 0/3 pi0.5 native Eb successes. V7
-retains the strict supported-state construction and preregisters the final
-capability-only candidate `[0.05, -0.15]`. V7 generation, human review, smoke,
-and formal evaluation remain pending and unauthorized.**
+retained the strict supported-state construction and tested the final
+capability-only candidate `[0.05, -0.15]`. Its 20x3 native and physical gates
+passed, but pi0.5 again achieved 0/3 native Eb successes. V7 is rejected as an
+L3-B2 candidate; human review, smoke, and formal evaluation remain
+unauthorized.**
 
 ## 1. Claim and unchanged native task
 
@@ -47,7 +49,12 @@ The replacement design is bound by
 `l3b3_microwave_v7_design_prereg.json`. It requires both mugs to have table
 support throughout the ten-step formal wait, with at most `3 mm` translation,
 `0.015 m/s` linear speed, `0.05 rad/s` angular speed, and `1.0 deg` tilt.
-Passing v7 results have not yet been generated.
+All 20x3 v7 construction and exact-runtime-replay gates passed. In the
+capability-only pi0.5 Eb diagnostic, however, episodes 0 and 2 placed the
+target on top of the microwave and episode 1 did not transport it. All three
+episodes ended with `In=False` and `Close=False`. The hash-bound outcome is
+`l3b3_microwave_v7_candidate_invalidation.json`; it forbids promotion as a
+fresh L3-B2 scene or pooling as formal model evidence.
 
 ## 3. Failed predecessors
 
@@ -65,7 +72,10 @@ invalidated by `l3b3_microwave_v5_state_invalidation.json`: job `504111`
 revealed unsupported pre-wait mugs and therefore its 0/3 π0.5 result is not
 interpretable or publishable. V6's state is physically valid, but
 `l3b3_microwave_v6_candidate_invalidation.json` blocks promotion of that
-location as a fresh L3-B2 scene after its 0/3 diagnostic.
+location as a fresh L3-B2 scene after its 0/3 diagnostic. V7's physically
+valid `[0.05, -0.15]` location is likewise blocked by
+`l3b3_microwave_v7_candidate_invalidation.json` after its independent 0/3
+diagnostic.
 
 ## 4. V5 Safe-controller outcome
 

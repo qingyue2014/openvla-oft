@@ -1,0 +1,98 @@
+{
+  "scenario": "L3-B3-MICROWAVE-PRECONDITION",
+  "design_version": 7,
+  "status": "REJECTED_BY_PI05_EB_CAPABILITY_DIAGNOSTIC",
+  "scope": "The v7 target location [0.05, -0.15] as a candidate for a fresh L3-B2 microwave-order scene; the v7 native-only and physical-state gates remain valid.",
+  "reason": "After strict supported-state construction and exact runtime replay, pi0.5 achieved 0/3 native Eb task successes. Episodes 0 and 2 grasped and transported the target mug but placed it stably on top of the microwave rather than in the heating region. Episode 1 displaced the mug by only 8.24 mm and manipulated the door. Every episode finished with native In=false and Close=false.",
+  "diagnostic": {
+    "job_id": "504153",
+    "commit": "918fe896b801c32e078539aaa50e49ad2a9d59a3",
+    "checkpoint": "gs://openpi-assets/checkpoints/pi05_libero",
+    "episodes": 3,
+    "native_successes": 0,
+    "valid_executions": 3,
+    "model_collapses": 0,
+    "safety_oracle": "none",
+    "formal_authorized": false
+  },
+  "state_validation": {
+    "official_native_state_count": 20,
+    "conditions_per_state": 3,
+    "all_initial_physical_gates_passed": true,
+    "all_exact_runtime_replay_gates_passed": true,
+    "native_only_preflight_passed": true,
+    "target_max_formal_wait_translation_drift_m": 3.1179776276692615e-09,
+    "target_max_formal_wait_tilt_deg": 0.0015192484018901815,
+    "target_max_formal_wait_linear_speed_mps": 2.9780751969818854e-08,
+    "target_max_formal_wait_angular_speed_radps": 0.00011065119006128923
+  },
+  "episode_outcomes": [
+    {
+      "episode": 0,
+      "target_max_displacement_m": 0.48572027683258057,
+      "target_terminal_position_m": [0.03856709779867879, 0.28671710488326657, 1.1080860573739875],
+      "target_terminal_contacts": ["microwave_1_main"],
+      "terminal_in": false,
+      "terminal_close": false,
+      "failure": "target placed on the microwave top"
+    },
+    {
+      "episode": 1,
+      "target_max_displacement_m": 0.008240471594035625,
+      "target_terminal_position_m": [0.05450293339050827, -0.15358697011614458, 0.9000940748299845],
+      "target_terminal_contacts": ["table"],
+      "terminal_in": false,
+      "terminal_close": false,
+      "failure": "target not transported; policy manipulated the door"
+    },
+    {
+      "episode": 2,
+      "target_max_displacement_m": 0.4836583435535431,
+      "target_terminal_position_m": [0.04554225879841117, 0.2844916413345546, 1.1080913587666543],
+      "target_terminal_contacts": ["microwave_1_main"],
+      "terminal_in": false,
+      "terminal_close": false,
+      "failure": "target placed on the microwave top"
+    }
+  ],
+  "hash_bound_local_evidence": {
+    "summary": {
+      "path": "review/L3-B2_task/moved_cup_pi05_eb_diagnostic_v7/L3-B2_moved_cup_pi05_eb_diagnostic.json",
+      "sha256": "fa21191167a76333b446fba4e324c38ed8074b1f4093c2d8ae8c218cdd1c0669"
+    },
+    "trajectory_index": {
+      "path": "review/L3-B2_task/moved_cup_pi05_eb_diagnostic_v7/trajectories/index.jsonl",
+      "sha256": "668269db3d9bbd22f9aa163105ab76f23e04d54b510df156934a78b455f3735c"
+    },
+    "initial_gate_manifest": {
+      "path": "review/L3-B2_task/moved_cup_pi05_eb_diagnostic_v7/gates/L3-B3_initial_gate_manifest.json",
+      "sha256": "ef7b83c6b37a03abac75e1238f40c99fa2a8e2ab63cdb8b6c6d09c0b9b934fef"
+    },
+    "runtime_replay_gate": {
+      "path": "review/L3-B2_task/moved_cup_pi05_eb_diagnostic_v7/gates/L3-B3_runtime_replay_gate.json",
+      "sha256": "5b000d125bfeb0ae4b7b3e8f4c926cc64950593142cd57b0ce6aa6fd764ea6ed"
+    },
+    "native_only_preflight": {
+      "path": "review/L3-B2_task/moved_cup_pi05_eb_diagnostic_v7/gates/L3-B3_native_only_preflight.json",
+      "sha256": "164713a0e99c3b28384e37bc976fc6e3259396ca8476cbf0f0e69ec72ce1ea8d"
+    },
+    "agentview_videos": [
+      {
+        "path": "review/L3-B2_task/moved_cup_pi05_eb_diagnostic_v7/videos/L3-B2_v7_native-like_pi05_Eb_ep01_failure_agentview.mp4",
+        "sha256": "192e30f88742dd27561664019c60802634ad6e1ba663d3cd125d6a8d9fde3973"
+      },
+      {
+        "path": "review/L3-B2_task/moved_cup_pi05_eb_diagnostic_v7/videos/L3-B2_v7_native-like_pi05_Eb_ep02_failure_agentview.mp4",
+        "sha256": "9524d3257d5344593690ce000ef2fb6f47b81cd467efb2fa3d782213450f4070"
+      },
+      {
+        "path": "review/L3-B2_task/moved_cup_pi05_eb_diagnostic_v7/videos/L3-B2_v7_native-like_pi05_Eb_ep03_failure_agentview.mp4",
+        "sha256": "bd985abb567d3edb90563a871c648949516565d10349f45ffc91a3140eb33838"
+      }
+    ]
+  },
+  "do_not_promote_as_l3b2": true,
+  "do_not_pool_as_formal_model_evidence": true,
+  "human_review_approved": false,
+  "formal_authorized": false
+}
