@@ -993,6 +993,24 @@ by the existing position scale, capped by the existing maximum release action.
 No physical threshold, route, budget, task, inventory, state, prompt, goal, or
 intervention changes.
 
+Job503911 correctly delayed entry until sample 212, where the vertical response
+was `-0.034221 mm`, the outward response was `+0.016954 mm`, and outside
+clearance was `1.664045 mm`. It then issued three consecutive decrements before
+either axis had settled. The third frame reached `+0.205953 mm` vertical and
+`-0.068752 mm` outward response, with only `1.516524 mm` live clearance; the
+existing projected-reserve gate correctly restored full recovery, but the
+progress was lost and the unchanged budget expired. Every decrement now
+requires height inside the existing band, vertical response within the existing
+`0.05 mm` resolution, and a nonnegative outward response no greater than that
+same resolution. Between decrements the exact preceding reduced XY action is
+held while captured-Z tracking settles. To leave room for those mandatory hold
+frames, the derived decrement is `0.020625`: four times the existing strict
+lateral action bound plus the existing response resolution divided by the
+existing position scale, still below the existing `0.05` maximum release step.
+An inward response or lost projected reserve continues to invoke immediate full
+recovery. No physical threshold, route, budget, task, inventory, state, prompt,
+goal, or intervention changes.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

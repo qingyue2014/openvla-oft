@@ -5509,7 +5509,7 @@ def _fixed_safe_z_lateral_hold_action(
         float(
             min(
                 maximum_positive_safety_release_action,
-                2.0 * strict_lateral_bound
+                4.0 * strict_lateral_bound
                 + progress_resolution_m / position_action_scale,
             )
         )
@@ -5546,13 +5546,16 @@ def _fixed_safe_z_lateral_hold_action(
         and previous_outward_action_for_response_tracking
         < strict_safety_brake_bound
     )
-    coupled_xy_neutralization_entry_stable = bool(
+    coupled_xy_neutralization_step_stable = bool(
         abs(coupled_xy_neutralization_position_error_m)
         <= vertical_position_tolerance_m
         and abs(measured_vertical_step_progress_m)
         <= progress_resolution_m
-        and abs(measured_outward_step_progress_m)
+        and 0.0 <= measured_outward_step_progress_m
         <= progress_resolution_m
+    )
+    coupled_xy_neutralization_entry_stable = bool(
+        coupled_xy_neutralization_step_stable
         and live_outside_clearance > outside_refill_target_clearance
         and outside_response_projected_clearance_m
         > outside_refill_target_clearance
@@ -5581,7 +5584,7 @@ def _fixed_safe_z_lateral_hold_action(
     )
     coupled_xy_neutralization_requested = bool(
         coupled_xy_neutralization_hold_requested
-        and coupled_xy_neutralization_height_tracking_accepted
+        and coupled_xy_neutralization_step_stable
     )
     coupled_xy_neutralization_action = None
     pre_coupled_xy_neutralization_xy_action = commanded_xy_action.copy()
@@ -6153,6 +6156,9 @@ def _fixed_safe_z_lateral_hold_action(
         "coupled_xy_neutralization_entry_stable": (
             coupled_xy_neutralization_entry_stable
         ),
+        "coupled_xy_neutralization_step_stable": (
+            coupled_xy_neutralization_step_stable
+        ),
         "coupled_xy_neutralization_height_tracking_accepted": (
             coupled_xy_neutralization_height_tracking_accepted
         ),
@@ -6241,6 +6247,7 @@ def _fixed_safe_z_lateral_hold_action(
             "coupled_xy_neutralization_uses_existing_action_bounds": True,
             "coupled_xy_neutralization_requires_projected_exit_reserve": True,
             "coupled_xy_neutralization_entry_requires_stable_responses": True,
+            "every_coupled_xy_decrement_requires_stable_responses": True,
             "coupled_xy_neutralization_preserves_bounded_progress": True,
             "neutral_z_confirmation_requires_small_coupled_xy_action": True,
             "strict_outside_loss_disables_inside_band_z_tracking": True,
