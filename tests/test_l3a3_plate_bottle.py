@@ -2806,22 +2806,30 @@ def test_fixed_safe_z_lateral_hold_settles_job503929_full_recovery():
         maximum_positive_safety_release_action=0.05,
     )
     assert action[:3] == pytest.approx(
-        [0.20, 0.0, 0.1337790173214807]
+        [0.184375, 0.0, 0.1337790173214807]
     )
     assert evidence["previous_full_outward_recovery_action"] is True
     assert evidence[
         "coupled_xy_full_outward_settle_hold_requested"
     ] is True
+    assert evidence[
+        "coupled_xy_full_outward_coupled_release_requested"
+    ] is True
     assert evidence["coupled_xy_neutralization_hold_requested"] is True
     assert evidence["coupled_xy_neutralization_step_stable"] is False
-    assert evidence["coupled_xy_neutralization_requested"] is False
-    assert evidence["coupled_xy_neutralization_action"] == pytest.approx(0.20)
+    assert evidence["coupled_xy_neutralization_requested"] is True
+    assert evidence["coupled_xy_neutralization_action"] == pytest.approx(
+        0.184375
+    )
     assert evidence["outward_release_slew_applied"] is False
     assert evidence["proof"][
-        "full_outward_recovery_waits_for_stable_response_before_release"
+        "positive_full_outward_response_uses_single_coupled_handoff"
     ] is True
     assert evidence["proof"][
         "full_outward_recovery_uses_coupled_release_step"
+    ] is True
+    assert evidence["proof"][
+        "full_outward_coupled_handoff_requires_refill_reserve"
     ] is True
 
 

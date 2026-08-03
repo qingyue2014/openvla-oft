@@ -1063,12 +1063,22 @@ after full recovery still changed X directly from `0.20` to `0.15` while the
 measured outward response was `+0.147235 mm`. After one repeated `X=0.15`
 frame, the response reversed to `-0.100956 mm`, projected clearance fell to
 `1.510088 mm`, and another full recovery cycle began. A full outward recovery
-action is now retained exactly while its response is unsettled. Only after the
-existing stable-response, repeated-predecessor, lateral, table, and refill
-gates all pass may X unload through the existing `0.015625` coupled decrement.
-An inward response or projected exit loss still invokes immediate full
-recovery. No physical threshold, route, budget, task, inventory, state, prompt,
-goal, or intervention changes.
+action was therefore retained exactly while its response was unsettled, with X
+unloading only through the existing `0.015625` coupled decrement. An inward
+response or projected exit loss continued to invoke immediate full recovery.
+
+Job503932 showed that retaining the full `X=0.20` recovery for three positive
+response frames (`+0.147235`, `+0.215968`, and `+0.157809 mm`) itself continued
+the outward motion. At sample 232, projected lateral error reached
+`5.061798 mm`, only `0.011798 mm` beyond the existing `5.05 mm` hysteresis, and
+the generic `0.05` release path reappeared. A nonhazardous positive outward
+response now hands off immediately from full recovery through exactly one
+existing `0.015625` coupled step when safe-Z error and vertical response are
+within their existing bounds and current/projected clearance both exceed the
+existing refill target. The reduced action must then pass the existing stable
+response and repeated-predecessor gates before any further decrement. No
+physical threshold, route, budget, task, inventory, state, prompt, goal, or
+intervention changes.
 
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only

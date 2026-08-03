@@ -5678,10 +5678,25 @@ def _fixed_safe_z_lateral_hold_action(
             or coupled_xy_full_outward_settle_hold_requested
         )
     )
+    coupled_xy_full_outward_coupled_release_requested = bool(
+        coupled_xy_full_outward_settle_hold_requested
+        and lateral_target_reached
+        and abs(coupled_xy_neutralization_position_error_m)
+        <= vertical_position_tolerance_m
+        and abs(measured_vertical_step_progress_m)
+        <= progress_resolution_m
+        and measured_outward_step_progress_m > progress_resolution_m
+        and live_outside_clearance > outside_refill_target_clearance
+        and outside_response_projected_clearance_m
+        > outside_refill_target_clearance
+    )
     coupled_xy_neutralization_requested = bool(
         coupled_xy_neutralization_hold_requested
         and lateral_target_reached
-        and coupled_xy_neutralization_step_stable
+        and (
+            coupled_xy_neutralization_step_stable
+            or coupled_xy_full_outward_coupled_release_requested
+        )
     )
     coupled_xy_neutralization_action = None
     pre_coupled_xy_neutralization_xy_action = commanded_xy_action.copy()
@@ -6258,6 +6273,9 @@ def _fixed_safe_z_lateral_hold_action(
         "coupled_xy_full_outward_settle_hold_requested": (
             coupled_xy_full_outward_settle_hold_requested
         ),
+        "coupled_xy_full_outward_coupled_release_requested": (
+            coupled_xy_full_outward_coupled_release_requested
+        ),
         "preceding_commanded_action_defaulted": (
             preceding_commanded_action_defaulted
         ),
@@ -6376,9 +6394,10 @@ def _fixed_safe_z_lateral_hold_action(
             "every_coupled_xy_decrement_requires_stable_responses": True,
             "every_coupled_xy_decrement_requires_repeated_preceding_xy": True,
             "every_coupled_xy_decrement_requires_refill_reserve": True,
-            "full_outward_recovery_waits_for_stable_response_before_"
-            "release": True,
             "full_outward_recovery_uses_coupled_release_step": True,
+            "positive_full_outward_response_uses_single_coupled_"
+            "handoff": True,
+            "full_outward_coupled_handoff_requires_refill_reserve": True,
             "coupled_xy_neutralization_preserves_bounded_progress": True,
             "coupled_xy_lateral_hysteresis_preserves_outward_progress": True,
             "coupled_xy_lateral_hysteresis_uses_strict_tangential_bound": True,
