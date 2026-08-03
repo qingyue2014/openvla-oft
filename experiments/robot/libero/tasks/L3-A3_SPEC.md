@@ -1498,6 +1498,17 @@ by an observation frame whose previous and preceding XY actions are exactly
 equal before another axis transition can operate. That frame holds XY,
 retains independently guarded Z, and leaves the measured-inward full-recovery
 gate unchanged.
+Job504204 exposed an over-broad entry into this strengthened reserve logic.
+At sample `214`, immediately after an early transient X-neutralization step,
+both the neutralization-step stability predicate and its entry predicate were
+false, while projected outside clearance remained above the unchanged
+`1.65 mm` legacy refill target. The new `2.65 mm` refill nevertheless started
+and changed the previously validated transient route. Strict-transition refill
+is now eligible only on a stable measured step, except when the unchanged
+legacy projected-clearance gate is already at or below `1.65 mm` and therefore
+requires recovery regardless of stability. This adds no action, threshold,
+route, state, or intervention change; it only prevents the strengthened target
+from activating during an unrelated unstable transient.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.

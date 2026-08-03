@@ -5926,6 +5926,14 @@ def _fixed_safe_z_lateral_hold_action(
             )
         )
     )
+    strict_target_refill_low_reserve_recovery_required = bool(
+        outside_response_projected_clearance_m
+        <= outside_refill_target_clearance
+    )
+    strict_target_refill_stability_eligible = bool(
+        coupled_xy_neutralization_step_stable
+        or strict_target_refill_low_reserve_recovery_required
+    )
     strict_target_refill_reserve_pending = bool(
         lateral_target_reached
         and coupled_xy_neutralization_hold_requested
@@ -5935,6 +5943,7 @@ def _fixed_safe_z_lateral_hold_action(
             or strict_target_refill_full_action_hold_provenance
         )
         and strict_target_refill_transition_history_active
+        and strict_target_refill_stability_eligible
         and not strict_target_refill_reserve_acquired
     )
     strict_target_axis_transition_exact_repeat = bool(
@@ -6759,6 +6768,12 @@ def _fixed_safe_z_lateral_hold_action(
         "strict_target_refill_full_action_hold_provenance": (
             strict_target_refill_full_action_hold_provenance
         ),
+        "strict_target_refill_low_reserve_recovery_required": (
+            strict_target_refill_low_reserve_recovery_required
+        ),
+        "strict_target_refill_stability_eligible": (
+            strict_target_refill_stability_eligible
+        ),
         "strict_target_axis_transition_exact_repeat": (
             strict_target_axis_transition_exact_repeat
         ),
@@ -7000,6 +7015,8 @@ def _fixed_safe_z_lateral_hold_action(
             "strict_target_transition_reserve_covers_hazard_response_"
             "bound": True,
             "strict_target_transition_interleaves_exact_xy_repeat": True,
+            "strict_target_refill_requires_stable_step_or_legacy_low_"
+            "reserve": True,
             "strict_target_reserve_pd_uses_strict_lateral_step_bound": True,
             "strict_target_refill_neighborhood_decrement_uses_strict_"
             "lateral_bound": True,

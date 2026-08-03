@@ -2637,6 +2637,10 @@ def test_fixed_safe_z_lateral_hold_preserves_job503908_unload_progress():
     assert evidence["coupled_xy_neutralization_entry_stable"] is False
     assert evidence["coupled_xy_neutralization_hold_requested"] is True
     assert evidence["coupled_xy_neutralization_step_stable"] is False
+    assert evidence[
+        "strict_target_refill_low_reserve_recovery_required"
+    ] is True
+    assert evidence["strict_target_refill_stability_eligible"] is True
     assert evidence["coupled_xy_neutralization_requested"] is False
     assert evidence["coupled_xy_neutralization_action"] == pytest.approx(0.15)
     assert evidence["captured_safe_z_response_hold_requested"] is True
@@ -2894,6 +2898,72 @@ def test_fixed_safe_z_lateral_hold_waits_for_job503927_refill_reserve():
     ]
     assert evidence["proof"][
         "every_coupled_xy_decrement_requires_refill_reserve"
+    ] is True
+
+
+def test_fixed_safe_z_lateral_hold_does_not_refill_job504204_unstable_transient():
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": (-np.ones(7, dtype=float)).tolist(),
+        "high": np.ones(7, dtype=float).tolist(),
+        "runtime_resolved": True,
+    }
+    action, evidence = _fixed_safe_z_lateral_hold_action(
+        current_eef=np.array(
+            [0.13303554316054977, -0.02356275576779338, 0.9205011429332672]
+        ),
+        lateral_target_xy=np.array(
+            [0.13242106705090634, -0.02850777957668001]
+        ),
+        lateral_position_tolerance_m=0.005,
+        fixed_safe_z_m=0.920581288496378,
+        vertical_position_tolerance_m=0.0004,
+        measured_vertical_step_progress_m=9.634765536636891e-05,
+        measured_outward_step_progress_m=1.447538130944226e-06,
+        outside_side_guard={
+            "minimum_outside_clearance_m": 0.0017258590385083178,
+            "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+            "finger_table_vertical_clearance_m": 0.007846327816734777,
+            "required_finger_table_clearance_m": np.nextafter(
+                0.0, np.inf
+            ),
+        },
+        outward_direction_xy=np.array([1.0, 0.0]),
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_lateral_translation_action=0.005,
+        maximum_safety_brake_action=0.20,
+        strict_outside_clearance_m=0.0004,
+        strict_table_clearance_m=0.0004,
+        closed_loop_hazard_response_bound_m=0.0011,
+        full_outward_brake_clearance_m=0.00095,
+        progress_resolution_m=0.00005,
+        derivative_gain=2.0,
+        native_action_spec=native_spec,
+        previous_commanded_action_xyz=np.array(
+            [0.18437499999999998, -0.004967510989078535, 0.16574961266676827]
+        ),
+        preceding_commanded_action_xyz=np.array(
+            [0.20, -0.004967510989078535, 0.1639277623084632]
+        ),
+        maximum_positive_safety_release_action=0.05,
+    )
+    assert action[:3] == pytest.approx(
+        [0.18437499999999998, -0.004967510989078535, 0.1643427408214935]
+    )
+    assert evidence["lateral_target_reached"] is True
+    assert evidence["coupled_xy_neutralization_hold_requested"] is True
+    assert evidence["coupled_xy_neutralization_step_stable"] is False
+    assert evidence[
+        "strict_target_refill_low_reserve_recovery_required"
+    ] is False
+    assert evidence["strict_target_refill_stability_eligible"] is False
+    assert evidence["strict_target_refill_reserve_pending"] is False
+    assert evidence["captured_outward_response_tracking_requested"] is False
+    assert evidence["coupled_xy_neutralization_requested"] is False
+    assert evidence["proof"][
+        "strict_target_refill_requires_stable_step_or_legacy_low_reserve"
     ] is True
 
 
