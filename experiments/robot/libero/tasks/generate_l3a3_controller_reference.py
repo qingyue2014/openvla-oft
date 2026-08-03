@@ -5985,15 +5985,18 @@ def _fixed_safe_z_lateral_hold_action(
         coupled_xy_preceding_action_delta == 0.0
     )
     strict_target_refill_stable_repeat_required_count = 2
+    strict_target_refill_stable_response_tolerance_m = float(
+        0.25 * progress_resolution_m
+    )
     strict_target_refill_current_repeat_stable = bool(
         strict_target_refill_reserve_pending
         and strict_target_axis_transition_exact_repeat
         and abs(coupled_xy_neutralization_position_error_m)
         <= vertical_position_tolerance_m
         and abs(measured_vertical_step_progress_m)
-        <= progress_resolution_m
+        <= strict_target_refill_stable_response_tolerance_m
         and abs(measured_outward_step_progress_m)
-        <= progress_resolution_m
+        <= strict_target_refill_stable_response_tolerance_m
         and live_outside_clearance > outside_recovery_exit_clearance
         and outside_response_projected_clearance_m
         > outside_recovery_exit_clearance
@@ -6969,6 +6972,12 @@ def _fixed_safe_z_lateral_hold_action(
         ),
         "strict_target_refill_stable_repeat_required_count": (
             strict_target_refill_stable_repeat_required_count
+        ),
+        "strict_target_refill_stable_response_tolerance_m": (
+            strict_target_refill_stable_response_tolerance_m
+        ),
+        "strict_target_refill_stable_response_tolerance_formula": (
+            "0.25 * progress_resolution_m"
         ),
         "strict_target_refill_current_repeat_stable": (
             strict_target_refill_current_repeat_stable

@@ -3184,7 +3184,7 @@ def test_fixed_safe_z_lateral_hold_waits_for_two_stable_repeats_job504218():
         lateral_position_tolerance_m=0.005,
         fixed_safe_z_m=0.920581288496378,
         vertical_position_tolerance_m=0.0004,
-        measured_vertical_step_progress_m=0.00001687692393478,
+        measured_vertical_step_progress_m=0.000005,
         measured_outward_step_progress_m=-0.0000005743135750857498,
         outside_side_guard={
             "minimum_outside_clearance_m": 0.0022213324612141566,
@@ -3235,6 +3235,26 @@ def test_fixed_safe_z_lateral_hold_waits_for_two_stable_repeats_job504218():
     assert wait_evidence[
         "strict_target_refill_stable_repeat_confirmed"
     ] is False
+    assert wait_evidence[
+        "strict_target_refill_stable_response_tolerance_m"
+    ] == pytest.approx(0.0000125)
+
+    moving_action, moving_evidence = _fixed_safe_z_lateral_hold_action(
+        **{
+            **kwargs,
+            "measured_outward_step_progress_m": 0.000019,
+        },
+        strict_target_refill_stable_repeat_count=1,
+    )
+    assert moving_evidence[
+        "strict_target_refill_current_repeat_stable"
+    ] is False
+    assert moving_evidence[
+        "strict_target_refill_stable_repeat_count_after_action"
+    ] == 0
+    assert moving_action[:2] == pytest.approx(
+        [0.1928052901590658, -0.004970463735855576]
+    )
 
     confirmed_action, confirmed_evidence = _fixed_safe_z_lateral_hold_action(
         **kwargs,
