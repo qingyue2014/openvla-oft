@@ -1538,6 +1538,13 @@ every `0.000625` X increment is followed by a frame whose previous and
 preceding XY actions are exactly equal. That frame holds XY and updates only
 the independently guarded Z action. The latch remains active, and another
 refill increment is ineligible until this observation frame has completed.
+Job504214 verified that the repeat frame catches the delayed inward response
+before any subsequent increment, but six `0.000625` increments had accumulated
+only `1.60 mm` clearance when that response arrived. The refill increment is
+therefore restored to the existing strict `0.005` lateral action bound while
+retaining the newly verified exact-repeat frame after every increment. This
+combines the pre-tail reserve acquisition observed in Job504208 with the
+post-acquisition hold and single-axis handoff added afterward.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.

@@ -2886,7 +2886,7 @@ def test_fixed_safe_z_lateral_hold_waits_for_job503927_refill_reserve():
         maximum_positive_safety_release_action=0.05,
     )
     assert action[:3] == pytest.approx(
-        [0.169375, -0.0049715101633057415, 0.13741085047865428]
+        [0.17375, -0.0049715101633057415, 0.13741085047865428]
     )
     assert evidence["strict_target_refill_reserve_pending"] is True
     assert evidence[
@@ -3082,7 +3082,7 @@ def test_fixed_safe_z_lateral_hold_scopes_and_latches_job504206_refill():
     ] is True
     assert continued_evidence[
         "strict_target_coupled_hold_refill_action_step_bound"
-    ] == pytest.approx(0.000625)
+    ] == pytest.approx(0.005)
 
     acquisition_action, acquisition_evidence = _fixed_safe_z_lateral_hold_action(
         **common,
@@ -3742,7 +3742,7 @@ def test_fixed_safe_z_lateral_hold_refills_job504199_before_tangent_slew():
         maximum_positive_safety_release_action=0.05,
     )
     assert action[:3] == pytest.approx(
-        [0.1672130057493264, -0.004970463735855576, 0.13311965950894547]
+        [0.1715880057493264, -0.004970463735855576, 0.13311965950894547]
     )
     assert evidence["lateral_target_reached"] is True
     assert evidence["strict_target_refill_reserve_pending"] is True

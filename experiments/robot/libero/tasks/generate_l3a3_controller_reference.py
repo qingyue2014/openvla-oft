@@ -6176,10 +6176,7 @@ def _fixed_safe_z_lateral_hold_action(
     captured_outward_response_unbounded_action_correction = None
     captured_outward_response_action_correction = None
     strict_target_coupled_hold_refill_action_step_bound = float(
-        min(
-            strict_lateral_bound,
-            coupled_xy_preceding_action_repeat_tolerance,
-        )
+        strict_lateral_bound
     )
     strict_target_coupled_hold_refill_action_step_clipped = False
     captured_outward_response_action = None
@@ -7123,7 +7120,8 @@ def _fixed_safe_z_lateral_hold_action(
             "strict_target_refill_starts_only_in_captured_response_"
             "neighborhood": True,
             "strict_target_refill_latch_clears_on_any_lost_common_gate": True,
-            "strict_target_refill_uses_predecessor_repeat_action_bound": True,
+            "strict_target_refill_uses_strict_lateral_action_bound_with_"
+            "repeat": True,
             "strict_target_refill_interleaves_exact_xy_repeat": True,
             "strict_target_refill_acquisition_holds_xy_until_stable": True,
             "strict_target_refill_transition_supports_saturated_outward_"
