@@ -5961,20 +5961,49 @@ def _fixed_safe_z_lateral_hold_action(
             or strict_target_refill_latched
         )
     )
-    strict_target_refill_latched_after_action = bool(
-        strict_target_refill_reserve_pending
-    )
     strict_target_axis_transition_exact_repeat = bool(
         coupled_xy_preceding_action_delta == 0.0
     )
-    strict_target_axis_transition_repeat_wait_requested = bool(
+    strict_target_refill_post_acquisition_safety_eligible = bool(
         lateral_target_reached
-        and coupled_xy_neutralization_hold_requested
-        and previous_outward_action_for_response_tracking
-        < strict_safety_brake_bound
-        and strict_target_refill_transition_history_active
+        and live_outside_clearance > outside_recovery_exit_clearance
+        and outside_response_projected_clearance_m
+        > outside_recovery_exit_clearance
+        and live_table_clearance > outside_recovery_exit_clearance
+        and not measured_inward_response
+        and abs(measured_outward_step_progress_m)
+        <= closed_loop_hazard_response_bound_m
+        and not sticky_full_outward_recovery_requested
+    )
+    strict_target_refill_post_acquisition_active = bool(
+        strict_target_refill_latched
         and strict_target_refill_reserve_acquired
-        and not strict_target_axis_transition_exact_repeat
+        and strict_target_refill_post_acquisition_safety_eligible
+    )
+    strict_target_refill_post_acquisition_transition_ready = bool(
+        strict_target_refill_post_acquisition_active
+        and coupled_xy_neutralization_hold_requested
+        and coupled_xy_neutralization_step_stable
+        and strict_target_axis_transition_exact_repeat
+    )
+    strict_target_refill_post_acquisition_hold_requested = bool(
+        strict_target_refill_post_acquisition_active
+        and not strict_target_refill_post_acquisition_transition_ready
+    )
+    strict_target_axis_transition_repeat_wait_requested = bool(
+        (
+            lateral_target_reached
+            and coupled_xy_neutralization_hold_requested
+            and previous_outward_action_for_response_tracking
+            < strict_safety_brake_bound
+            and strict_target_refill_transition_history_active
+            and strict_target_refill_reserve_acquired
+            and not strict_target_axis_transition_exact_repeat
+        )
+        or (
+            strict_target_refill_post_acquisition_active
+            and not strict_target_axis_transition_exact_repeat
+        )
     )
     coupled_xy_neutralization_requested = bool(
         coupled_xy_neutralization_hold_requested
@@ -5985,6 +6014,7 @@ def _fixed_safe_z_lateral_hold_action(
                 lateral_target_reached
                 and coupled_xy_neutralization_step_stable
             )
+            or strict_target_refill_post_acquisition_transition_ready
             or coupled_xy_transient_lateral_decrement_requested
             or coupled_xy_full_outward_coupled_release_requested
             or coupled_xy_positive_outward_response_damping_requested
@@ -6000,8 +6030,11 @@ def _fixed_safe_z_lateral_hold_action(
             strict_target_refill_reserve_target_clearance_m
             + progress_resolution_m
         )
-        and previous_outward_action_for_response_tracking
-        < strict_safety_brake_bound
+        and (
+            previous_outward_action_for_response_tracking
+            < strict_safety_brake_bound
+            or strict_target_refill_post_acquisition_active
+        )
     )
     strict_target_refill_tangential_unwind_requested = bool(
         strict_target_refill_neighborhood_scope_eligible
@@ -6054,12 +6087,18 @@ def _fixed_safe_z_lateral_hold_action(
     )
     coupled_xy_neutralization_action = None
     pre_coupled_xy_neutralization_xy_action = commanded_xy_action.copy()
-    if coupled_xy_neutralization_hold_requested:
+    if (
+        coupled_xy_neutralization_hold_requested
+        or strict_target_refill_post_acquisition_hold_requested
+    ):
         neutralization_tangential_xy_action = (
             strict_target_refill_remaining_tangential_xy_action
             if strict_target_refill_tangential_unwind_requested
             else previous_coupled_hold_tangential_xy_action
-            if lateral_target_reached
+            if (
+                lateral_target_reached
+                or strict_target_refill_post_acquisition_hold_requested
+            )
             else tangential_xy_action_before_recovery.copy()
         )
         coupled_xy_neutralization_action = (
@@ -6131,6 +6170,12 @@ def _fixed_safe_z_lateral_hold_action(
     captured_outward_response_world_delta_m = None
     captured_outward_response_unbounded_action_correction = None
     captured_outward_response_action_correction = None
+    strict_target_coupled_hold_refill_action_step_bound = float(
+        min(
+            strict_lateral_bound,
+            coupled_xy_preceding_action_repeat_tolerance,
+        )
+    )
     strict_target_coupled_hold_refill_action_step_clipped = False
     captured_outward_response_action = None
     pre_captured_outward_response_xy_action = commanded_xy_action.copy()
@@ -6147,7 +6192,7 @@ def _fixed_safe_z_lateral_hold_action(
         captured_outward_response_action_correction = float(
             min(
                 captured_outward_response_unbounded_action_correction,
-                strict_lateral_bound,
+                strict_target_coupled_hold_refill_action_step_bound,
             )
             if strict_target_coupled_hold_refill_tracking_eligible
             else captured_outward_response_unbounded_action_correction
@@ -6176,6 +6221,14 @@ def _fixed_safe_z_lateral_hold_action(
             commanded_tangential_xy_action
             + captured_outward_response_action * outward_direction_xy
         )
+
+    strict_target_refill_latched_after_action = bool(
+        strict_target_refill_reserve_pending
+        or (
+            strict_target_refill_post_acquisition_active
+            and not strict_target_refill_neighborhood_decrement_requested
+        )
+    )
 
     position_error_m = float(fixed_safe_z_m - current_eef[2])
     requested_vertical_world_delta_m = float(
@@ -6801,6 +6854,18 @@ def _fixed_safe_z_lateral_hold_action(
         "strict_target_refill_latched_after_action": (
             strict_target_refill_latched_after_action
         ),
+        "strict_target_refill_post_acquisition_safety_eligible": (
+            strict_target_refill_post_acquisition_safety_eligible
+        ),
+        "strict_target_refill_post_acquisition_active": (
+            strict_target_refill_post_acquisition_active
+        ),
+        "strict_target_refill_post_acquisition_transition_ready": (
+            strict_target_refill_post_acquisition_transition_ready
+        ),
+        "strict_target_refill_post_acquisition_hold_requested": (
+            strict_target_refill_post_acquisition_hold_requested
+        ),
         "strict_target_axis_transition_exact_repeat": (
             strict_target_axis_transition_exact_repeat
         ),
@@ -6946,6 +7011,9 @@ def _fixed_safe_z_lateral_hold_action(
         "strict_target_coupled_hold_refill_action_step_clipped": (
             strict_target_coupled_hold_refill_action_step_clipped
         ),
+        "strict_target_coupled_hold_refill_action_step_bound": (
+            strict_target_coupled_hold_refill_action_step_bound
+        ),
         "captured_outward_response_tracking_active_ceiling_m": (
             captured_outward_response_tracking_active_ceiling_m
         ),
@@ -7047,6 +7115,10 @@ def _fixed_safe_z_lateral_hold_action(
             "strict_target_refill_starts_only_in_captured_response_"
             "neighborhood": True,
             "strict_target_refill_latch_clears_on_any_lost_common_gate": True,
+            "strict_target_refill_uses_predecessor_repeat_action_bound": True,
+            "strict_target_refill_acquisition_holds_xy_until_stable": True,
+            "strict_target_refill_transition_supports_saturated_outward_"
+            "predecessor": True,
             "strict_target_reserve_pd_uses_strict_lateral_step_bound": True,
             "strict_target_refill_neighborhood_decrement_uses_strict_"
             "lateral_bound": True,

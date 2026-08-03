@@ -1520,6 +1520,17 @@ and keeps the same bounded PD active until the target is acquired; it clears
 immediately if any common lateral, projected-clearance, response, recovery, or
 action-provenance gate is lost. The latch is controller bookkeeping, not a
 scene state or EB/ER/EC intervention.
+Job504208 legally started the strengthened refill at `1.623278 mm`, but the
+`0.005` action cap drove X to saturation in seven frames. Acquisition at
+`2.688179 mm` then occurred during an unstable response; clearing the latch
+allowed a simultaneous `0.05` X unload and complete Y unwind. Refill increments
+are therefore limited by the smaller already-derived predecessor-repeat bound,
+`progress_resolution / position_action_scale = 0.000625`. After acquisition,
+the same latch holds predecessor XY exactly while guarded Z continues until a
+stable exact-repeat frame is observed. It remains active through the bounded
+tangential unwind and clears only after the first strict pure-X decrement. The
+measured-inward recovery and every current, projected, and post-action gate
+retain priority and clear the latch fail-closed.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.

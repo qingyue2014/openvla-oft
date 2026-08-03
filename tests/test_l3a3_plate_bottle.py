@@ -2886,7 +2886,7 @@ def test_fixed_safe_z_lateral_hold_waits_for_job503927_refill_reserve():
         maximum_positive_safety_release_action=0.05,
     )
     assert action[:3] == pytest.approx(
-        [0.17375, -0.0049715101633057415, 0.13741085047865428]
+        [0.169375, -0.0049715101633057415, 0.13741085047865428]
     )
     assert evidence["strict_target_refill_reserve_pending"] is True
     assert evidence[
@@ -3061,7 +3061,7 @@ def test_fixed_safe_z_lateral_hold_scopes_and_latches_job504206_refill():
         strict_target_refill_latched=True,
     )
     assert continued_action[:3] == pytest.approx(
-        [0.17875, -0.004967510989078535, 0.14558200807198698]
+        [0.174375, -0.004967510989078535, 0.14558200807198698]
     )
     assert continued_evidence[
         "strict_target_refill_neighborhood_entry_eligible"
@@ -3076,6 +3076,52 @@ def test_fixed_safe_z_lateral_hold_scopes_and_latches_job504206_refill():
     ] is True
     assert continued_evidence["proof"][
         "strict_target_refill_starts_only_in_captured_response_neighborhood"
+    ] is True
+    assert continued_evidence[
+        "strict_target_coupled_hold_refill_action_step_bound"
+    ] == pytest.approx(0.000625)
+
+    acquisition_action, acquisition_evidence = _fixed_safe_z_lateral_hold_action(
+        **common,
+        current_eef=np.array(
+            [0.13398118038624462, -0.02404869418051356, 0.921442730174669]
+        ),
+        measured_vertical_step_progress_m=0.0004687442411963616,
+        measured_outward_step_progress_m=0.00015411791151787035,
+        outside_side_guard={
+            "minimum_outside_clearance_m": 0.0026881789170233455,
+            "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+            "finger_table_vertical_clearance_m": 0.00872182406757116,
+            "required_finger_table_clearance_m": np.nextafter(
+                0.0, np.inf
+            ),
+        },
+        previous_commanded_action_xyz=np.array(
+            [0.20, -0.004970463735855576, 0.17759129844998314]
+        ),
+        preceding_commanded_action_xyz=np.array(
+            [0.20, -0.004970463735855576, 0.19572746272974986]
+        ),
+        strict_target_refill_latched=True,
+    )
+    assert acquisition_action[:3] == pytest.approx(
+        [0.20, -0.004970463735855576, -0.0224866270085472]
+    )
+    assert acquisition_evidence["strict_target_refill_reserve_acquired"] is True
+    assert acquisition_evidence[
+        "strict_target_refill_post_acquisition_active"
+    ] is True
+    assert acquisition_evidence[
+        "strict_target_refill_post_acquisition_transition_ready"
+    ] is False
+    assert acquisition_evidence[
+        "strict_target_refill_post_acquisition_hold_requested"
+    ] is True
+    assert acquisition_evidence[
+        "strict_target_refill_latched_after_action"
+    ] is True
+    assert acquisition_evidence["proof"][
+        "strict_target_refill_acquisition_holds_xy_until_stable"
     ] is True
 
 
@@ -3552,7 +3598,7 @@ def test_fixed_safe_z_lateral_hold_refills_job504171_strict_target_wait():
         maximum_positive_safety_release_action=0.05,
     )
     assert action[:3] == pytest.approx(
-        [0.169375, -0.004970463735855576, 0.1331111149539916]
+        [0.165, -0.004970463735855576, 0.1331111149539916]
     )
     assert evidence["lateral_target_reached"] is True
     assert evidence["coupled_xy_neutralization_hold_requested"] is True
@@ -3562,7 +3608,7 @@ def test_fixed_safe_z_lateral_hold_refills_job504171_strict_target_wait():
     ] is True
     assert evidence["captured_outward_response_tracking_requested"] is True
     assert evidence["captured_outward_response_action"] == pytest.approx(
-        0.169375
+        0.165
     )
     assert evidence[
         "strict_target_coupled_hold_refill_tracking_action_xyz"
@@ -3622,7 +3668,7 @@ def test_fixed_safe_z_lateral_hold_continues_job504174_positive_pd_refill():
         maximum_positive_safety_release_action=0.05,
     )
     assert action[:3] == pytest.approx(
-        [0.17009769954333565, -0.004970463735855576, 0.1332744957678598]
+        [0.16572269954333564, -0.004970463735855576, 0.1332744957678598]
     )
     assert evidence["measured_outward_step_progress_m"] > 0.0
     assert evidence[
@@ -3635,7 +3681,7 @@ def test_fixed_safe_z_lateral_hold_continues_job504174_positive_pd_refill():
         "strict_target_coupled_hold_refill_tracking_requested"
     ] is True
     assert evidence["captured_outward_response_action"] == pytest.approx(
-        0.17009769954333565
+        0.16572269954333564
     )
     assert evidence[
         "strict_target_coupled_hold_refill_action_step_clipped"
@@ -3691,7 +3737,7 @@ def test_fixed_safe_z_lateral_hold_refills_job504199_before_tangent_slew():
         maximum_positive_safety_release_action=0.05,
     )
     assert action[:3] == pytest.approx(
-        [0.1715880057493264, -0.004970463735855576, 0.13311965950894547]
+        [0.1672130057493264, -0.004970463735855576, 0.13311965950894547]
     )
     assert evidence["lateral_target_reached"] is True
     assert evidence["strict_target_refill_reserve_pending"] is True
@@ -3824,11 +3870,11 @@ def test_fixed_safe_z_lateral_hold_continues_bounded_tangential_slew():
                     **kwargs["outside_side_guard"],
                     "minimum_outside_clearance_m": 0.0025,
                 },
-                    "previous_commanded_action_xyz": saturated_previous,
-                    "preceding_commanded_action_xyz": saturated_previous,
-                    "strict_target_refill_latched": True,
-                }
-            )
+                "previous_commanded_action_xyz": saturated_previous,
+                "preceding_commanded_action_xyz": saturated_previous,
+                "strict_target_refill_latched": True,
+            }
+        )
     )
     assert saturated_action[:2] == pytest.approx(
         [np.nextafter(0.20, 0.0), -0.004345463735855576]
@@ -3838,6 +3884,50 @@ def test_fixed_safe_z_lateral_hold_continues_bounded_tangential_slew():
     ] is True
     assert saturated_evidence["strict_target_refill_reserve_pending"] is True
     assert saturated_evidence["coupled_xy_neutralization_requested"] is False
+
+    saturated_transition_action, saturated_transition_evidence = (
+        _fixed_safe_z_lateral_hold_action(
+            **{
+                **kwargs,
+                "previous_commanded_action_xyz": saturated_previous,
+                "preceding_commanded_action_xyz": saturated_previous,
+                "strict_target_refill_latched": True,
+            }
+        )
+    )
+    assert saturated_transition_action[:2] == pytest.approx(
+        [0.20, -0.003720463735855576]
+    )
+    assert saturated_transition_evidence[
+        "strict_target_refill_post_acquisition_transition_ready"
+    ] is True
+    assert saturated_transition_evidence[
+        "strict_target_refill_tangential_unwind_requested"
+    ] is True
+    assert saturated_transition_evidence[
+        "strict_target_refill_latched_after_action"
+    ] is True
+
+    saturated_zero_tangent = np.array(
+        [0.20, 0.0, 0.13311965950894547]
+    )
+    saturated_decrement_action, saturated_decrement_evidence = (
+        _fixed_safe_z_lateral_hold_action(
+            **{
+                **kwargs,
+                "previous_commanded_action_xyz": saturated_zero_tangent,
+                "preceding_commanded_action_xyz": saturated_zero_tangent,
+                "strict_target_refill_latched": True,
+            }
+        )
+    )
+    assert saturated_decrement_action[:2] == pytest.approx([0.195, 0.0])
+    assert saturated_decrement_evidence[
+        "strict_target_refill_neighborhood_decrement_requested"
+    ] is True
+    assert saturated_decrement_evidence[
+        "strict_target_refill_latched_after_action"
+    ] is False
 
 
 def test_fixed_safe_z_lateral_hold_decrements_job504182_pure_outward_followup():
