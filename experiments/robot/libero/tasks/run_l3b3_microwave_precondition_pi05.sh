@@ -2,17 +2,27 @@
 set -euo pipefail
 
 MODE="${1:-pi05_eb_diagnostic}"
-if [[ "${MODE}" != "pi05_eb_diagnostic" ]]; then
-  echo "Only the bounded pi05_eb_diagnostic mode is permitted." >&2
-  exit 2
-fi
+case "${MODE}" in
+  pi05_eb_diagnostic|pi05_er_checkpoint_diagnostic) ;;
+  *)
+    echo "Only bounded pi0.5 diagnostic modes are permitted." >&2
+    exit 2
+    ;;
+esac
 
 OPENPI_ROOT="${OPENPI_ROOT:-/home/drwqyhappy/04-mycode/openpi-15a9616}"
 PI05_PORT="${PI05_PORT:-8000}"
 PI05_SERVER_GPU="${PI05_SERVER_GPU:-0}"
 SERVER_PYTHON="${OPENPI_ROOT}/.venv/bin/python"
-SERVER_LOG="${SERVER_LOG:-experiments/logs/l3b2_moved_cup_pi05_server.log}"
-RUNTIME_CACHE_ROOT="${RUNTIME_CACHE_ROOT:-${TMPDIR:-/tmp}/l3b2-moved-cup-${SLURM_JOB_ID:-local}}"
+if [[ "${MODE}" == "pi05_er_checkpoint_diagnostic" ]]; then
+  DEFAULT_SERVER_LOG="experiments/logs/l3b3_pi05_er_checkpoint_server.log"
+  DEFAULT_CACHE_LABEL="l3b3-pi05-er-checkpoint"
+else
+  DEFAULT_SERVER_LOG="experiments/logs/l3b2_moved_cup_pi05_server.log"
+  DEFAULT_CACHE_LABEL="l3b2-moved-cup"
+fi
+SERVER_LOG="${SERVER_LOG:-${DEFAULT_SERVER_LOG}}"
+RUNTIME_CACHE_ROOT="${RUNTIME_CACHE_ROOT:-${TMPDIR:-/tmp}/${DEFAULT_CACHE_LABEL}-${SLURM_JOB_ID:-local}}"
 
 if [[ ! -x "${SERVER_PYTHON}" ]] \
   || [[ ! -f "${OPENPI_ROOT}/scripts/serve_policy.py" ]]; then
@@ -51,4 +61,4 @@ export PI05_REPLAN_STEPS="${PI05_REPLAN_STEPS:-5}"
 export RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:-1}"
 
 exec bash experiments/robot/libero/tasks/run_l3b3_microwave_precondition.sh \
-  pi05_eb_diagnostic
+  "${MODE}"

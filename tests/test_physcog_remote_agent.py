@@ -107,6 +107,15 @@ def test_robocasa_l2a3_registry_stops_before_policy_or_formal_evaluation():
         )
 
 
+def test_l3b3_pi05_er_checkpoint_diagnostic_is_bounded_and_nonformal():
+    spec = PHASES[("l3b3", "pi05_er_diagnostic")]
+    assert spec.count_env == "SMOKE_TRIALS"
+    assert spec.command[-1] == "pi05_er_checkpoint_diagnostic"
+    assert "OPENPI_ROOT=/home/drwqyhappy/04-mycode/openpi-15a9616" in spec.command
+    assert "review/L3-B3_task/pi05_er_checkpoint_diagnostic" in spec.artifacts
+    assert not any("formal" in value.lower() for value in spec.command)
+
+
 def test_l1c4_registry_separates_native_gates_from_model_smoke():
     phases = {phase for scenario, phase in PHASES if scenario == "l1c4"}
     assert phases == {

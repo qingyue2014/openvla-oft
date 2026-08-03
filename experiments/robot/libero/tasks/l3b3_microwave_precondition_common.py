@@ -915,6 +915,7 @@ class MicrowavePreconditionSequenceTracker:
         self.open_step: int | None = None
         self.insertion_step: int | None = None
         self.reclose_step: int | None = None
+        self.post_success_settle_samples: list[dict[str, object]] = []
 
     def observe(self, step: int) -> dict[str, bool]:
         current = predicate_state(self.env)
@@ -944,6 +945,11 @@ class MicrowavePreconditionSequenceTracker:
                 self.reclose_step = step
         self.previous = current
         return current
+
+    def observe_post_success_settle(self) -> None:
+        """Capture the exact no-op settle window after native task success."""
+
+        self.post_success_settle_samples.append(scene_measurement(self.env))
 
     def finalize(self, *, task_success: bool, final_step: int) -> dict[str, object]:
         final = predicate_state(self.env)
@@ -997,6 +1003,58 @@ class MicrowavePreconditionSequenceTracker:
             failure_stage = "native_success_without_terminal_stability"
         else:
             failure_stage = "full_open_insert_reclose"
+        settle_samples = self.post_success_settle_samples
+        if settle_samples:
+            settle_stats = {
+                body: body_window_stats(settle_samples, body)
+                for body in (TARGET_BODY, DISTRACTOR_BODY)
+            }
+            target_supported_throughout = all(
+                any(
+                    str(name).startswith("microwave_1")
+                    for name in sample[TARGET_BODY]["contacts"]
+                )
+                for sample in settle_samples
+            )
+            target_robot_contact_free = all(
+                not any(
+                    str(name).startswith("robot0_")
+                    for name in sample[TARGET_BODY]["contacts"]
+                )
+                for sample in settle_samples
+            )
+            predicates_stable = all(
+                sample["predicates"] == {"close": True, "in": True}
+                for sample in settle_samples
+            )
+            target = settle_stats[TARGET_BODY]
+            strict_settle_pass = bool(
+                float(target["max_tilt_deg"]) <= MAX_TARGET_MUG_TILT_DEG
+                and float(target["max_linear_speed_mps"] or 0.0)
+                <= MAX_POST_WAIT_LINEAR_SPEED_MPS
+                and float(target["max_angular_speed_radps"] or 0.0)
+                <= MAX_POST_WAIT_ANGULAR_SPEED_RADPS
+                and target_supported_throughout
+                and target_robot_contact_free
+                and predicates_stable
+            )
+            settle_record: dict[str, object] = {
+                "sample_count": len(settle_samples),
+                "body_stats": settle_stats,
+                "target_supported_throughout": target_supported_throughout,
+                "target_robot_contact_free_throughout": target_robot_contact_free,
+                "native_goal_predicates_stable_throughout": predicates_stable,
+                "strict_target_stability_pass": strict_settle_pass,
+            }
+        else:
+            settle_record = {
+                "sample_count": 0,
+                "body_stats": {},
+                "target_supported_throughout": False,
+                "target_robot_contact_free_throughout": False,
+                "native_goal_predicates_stable_throughout": False,
+                "strict_target_stability_pass": False,
+            }
         return {
             "scenario": SCENE_ID,
             "condition": self.condition,
@@ -1022,6 +1080,7 @@ class MicrowavePreconditionSequenceTracker:
             "terminal_stability_pass": terminal_stable,
             "terminal_stability_failures": sorted(set(terminal_failures)),
             "terminal_measurement": terminal,
+            "post_success_settle": settle_record,
             "defines_task_success": False,
             "collision_oracle_used": False,
         }

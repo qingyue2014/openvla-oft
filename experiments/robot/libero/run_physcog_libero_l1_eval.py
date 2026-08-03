@@ -625,6 +625,8 @@ def run_episode_with_safety(
                 dummy_action = get_libero_dummy_action(cfg.model_family)
                 for settle_step in range(cfg.post_success_settle_steps):
                     obs, reward, done, info = env.step(dummy_action)
+                    if microwave_sequence_tracker is not None:
+                        microwave_sequence_tracker.observe_post_success_settle()
                     if recorder is not None:
                         recorder.record(obs, dummy_action, t + 1 + settle_step, phase="settle")
                     if check_safety(obs, dummy_action, t + 1 + settle_step):
@@ -640,6 +642,8 @@ def run_episode_with_safety(
                 dummy_action = get_libero_dummy_action(cfg.model_family)
                 for settle_step in range(cfg.post_success_settle_steps):
                     obs, reward, done, info = env.step(dummy_action)
+                    if microwave_sequence_tracker is not None:
+                        microwave_sequence_tracker.observe_post_success_settle()
                     if recorder is not None:
                         recorder.record(obs, dummy_action, t + 1 + settle_step, phase="settle")
                     if check_safety(obs, dummy_action, t + 1 + settle_step):
@@ -957,44 +961,57 @@ def run_task_with_safety(
                         "L3-B3 requires the certified OpenVLA center crop"
                     )
             elif cfg.model_family == "pi05":
-                verify_evaluation_request = (
-                    l3b3_artifacts.verify_pi05_eb_diagnostic_evaluation_request
-                )
-                expected_note = "L3-B2-moved-cup-pi05-Eb-diagnostic"
-                if cfg.run_id_note != expected_note:
+                pi05_eb_note = "L3-B2-moved-cup-pi05-Eb-diagnostic"
+                pi05_er_note = "L3-B3-pi05-Er-checkpoint-diagnostic"
+                if cfg.run_id_note == pi05_eb_note:
+                    verify_evaluation_request = (
+                        l3b3_artifacts.verify_pi05_eb_diagnostic_evaluation_request
+                    )
+                    diagnostic_label = "L3-B2 moved-cup Eb"
+                    maximum_episodes = 5
+                    review_task = "L3-B2_task"
+                elif cfg.run_id_note == pi05_er_note:
+                    verify_evaluation_request = (
+                        l3b3_artifacts.verify_pi05_er_checkpoint_diagnostic_evaluation_request
+                    )
+                    diagnostic_label = "L3-B3 exact-Er checkpoint"
+                    maximum_episodes = 1
+                    review_task = "L3-B3_task"
+                else:
                     raise ValueError(
-                        "L3-B3 geometry may be used with pi0.5 only for the "
-                        "bounded L3-B2 moved-cup Eb diagnostic"
+                        "L3-B3 geometry may be used with pi0.5 only for a "
+                        "registered diagnostic-only run"
                     )
                 if cfg.pretrained_checkpoint != (
                     "gs://openpi-assets/checkpoints/pi05_libero"
                 ):
-                    raise ValueError("L3-B2 moved-cup diagnostic checkpoint mismatch")
-                if cfg.num_trials_per_task > 5:
+                    raise ValueError(f"{diagnostic_label} checkpoint mismatch")
+                if cfg.num_trials_per_task > maximum_episodes:
                     raise ValueError(
-                        "L3-B2 moved-cup pi0.5 diagnostic is limited to five episodes"
+                        f"{diagnostic_label} pi0.5 diagnostic is limited to "
+                        f"{maximum_episodes} episode(s)"
                     )
                 if cfg.safety_oracle != "none":
                     raise ValueError(
-                        "L3-B2 moved-cup Eb diagnostic must use native task success"
+                        f"{diagnostic_label} diagnostic must use native task success"
                     )
                 if cfg.num_steps_wait != 10:
                     raise ValueError(
-                        "L3-B2 moved-cup diagnostic requires the formal ten-step wait"
+                        f"{diagnostic_label} diagnostic requires the formal ten-step wait"
                     )
                 review_root = Path(cfg.review_video_dir).resolve()
                 expected_root = (
                     Path(__file__).resolve().parents[3]
                     / "review"
-                    / "L3-B2_task"
+                    / review_task
                 ).resolve()
                 if (
                     expected_root != review_root
                     and expected_root not in review_root.parents
                 ):
                     raise ValueError(
-                        "L3-B2 moved-cup diagnostic videos must stay under "
-                        "review/L3-B2_task/"
+                        f"{diagnostic_label} diagnostic videos must stay under "
+                        f"review/{review_task}/"
                     )
             else:
                 raise ValueError("unsupported L3-B3 learned-policy family")

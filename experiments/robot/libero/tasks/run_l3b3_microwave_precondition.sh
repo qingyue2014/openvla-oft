@@ -39,6 +39,10 @@ PI05_EB_DIAGNOSTIC_ROOT="${PI05_EB_DIAGNOSTIC_ROOT:-review/L3-B2_task/moved_cup_
 PI05_EB_DIAGNOSTIC_TRAJECTORIES="${PI05_EB_DIAGNOSTIC_TRAJECTORIES:-${PI05_EB_DIAGNOSTIC_ROOT}/trajectories}"
 PI05_EB_DIAGNOSTIC_VIDEOS="${PI05_EB_DIAGNOSTIC_VIDEOS:-${PI05_EB_DIAGNOSTIC_ROOT}/videos}"
 PI05_EB_DIAGNOSTIC_REPORT="${PI05_EB_DIAGNOSTIC_REPORT:-${PI05_EB_DIAGNOSTIC_ROOT}/L3-B2_moved_cup_pi05_eb_diagnostic.json}"
+PI05_ER_DIAGNOSTIC_ROOT="${PI05_ER_DIAGNOSTIC_ROOT:-${REVIEW_ROOT}/pi05_er_checkpoint_diagnostic}"
+PI05_ER_DIAGNOSTIC_TRAJECTORIES="${PI05_ER_DIAGNOSTIC_TRAJECTORIES:-${PI05_ER_DIAGNOSTIC_ROOT}/trajectories}"
+PI05_ER_DIAGNOSTIC_VIDEOS="${PI05_ER_DIAGNOSTIC_VIDEOS:-${PI05_ER_DIAGNOSTIC_ROOT}/videos}"
+PI05_ER_DIAGNOSTIC_REPORT="${PI05_ER_DIAGNOSTIC_REPORT:-${PI05_ER_DIAGNOSTIC_ROOT}/L3-B3_pi05_er_checkpoint_diagnostic.json}"
 
 LIBERO_ROOT="${LIBERO_ROOT:-}"
 if [[ -z "${LIBERO_ROOT}" && -d "_deps/LIBERO/libero" ]]; then
@@ -288,6 +292,58 @@ run_pi05_eb_diagnostic() {
   echo "L3-B2 moved-cup pi0.5 Eb diagnostic complete; formal remains unauthorized."
 }
 
+run_pi05_er_checkpoint_diagnostic() {
+  if [[ "${SMOKE_TRIALS}" -ne 1 ]]; then
+    echo "L3-B3 pi0.5 exact-Er checkpoint diagnostic requires exactly one episode." >&2
+    exit 2
+  fi
+  # User-authorized checkpoint comparison only. Regenerate and bind all three
+  # paired bundles, then consume exactly one closed-door Er state. No formal or
+  # post-OpenVLA cascade authorization is granted by this path.
+  run_prepare
+  require_empty_output "${PI05_ER_DIAGNOSTIC_ROOT}"
+  mkdir -p "${PI05_ER_DIAGNOSTIC_TRAJECTORIES}" "${PI05_ER_DIAGNOSTIC_VIDEOS}"
+  "${PYTHON_BIN}" -m experiments.robot.libero.run_physcog_libero_l1_eval \
+    --model_family pi05 \
+    --pretrained_checkpoint "${CHECKPOINT}" \
+    --pi05_host "${PI05_HOST:-127.0.0.1}" \
+    --pi05_port "${PI05_PORT:-8000}" \
+    --pi05_connect_timeout_s "${PI05_CONNECT_TIMEOUT_S:-300}" \
+    --pi05_replan_steps "${PI05_REPLAN_STEPS:-5}" \
+    --task_suite_name libero_10 \
+    --task_ids 9 \
+    --initial_states_path "${ER_STATES}" \
+    --native_only_preflight_manifest "${NATIVE_PREFLIGHT}" \
+    --safety_oracle none \
+    --held_object_body white_yellow_mug_1_main \
+    --distractor_body porcelain_mug_1_main \
+    --trajectory_track_bodies \
+      "white_yellow_mug_1_main,porcelain_mug_1_main,microwave_1_main,microwave_1_microdoorroot" \
+    --center_crop True \
+    --num_images_in_input 2 \
+    --save_trajectory True \
+    --trajectory_dir "${PI05_ER_DIAGNOSTIC_TRAJECTORIES}" \
+    --num_trials_per_task "${SMOKE_TRIALS}" \
+    --num_steps_wait 10 \
+    --post_success_settle_steps 100 \
+    --seed "${EVAL_SEED}" \
+    --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
+    --local_log_dir "${LOG_DIR}" \
+    --save_video_mode all \
+    --save_wrist_video True \
+    --review_video_dir "${PI05_ER_DIAGNOSTIC_VIDEOS}" \
+    --max_violation_videos 1 \
+    --max_success_videos 1 \
+    --max_failure_videos 1 \
+    --use_wandb False \
+    --run_id_note "L3-B3-pi05-Er-checkpoint-diagnostic"
+  "${PYTHON_BIN}" "${TASKS_DIR}/summarize_l3b3_pi05_er_checkpoint_diagnostic.py" \
+    --trajectory-dir "${PI05_ER_DIAGNOSTIC_TRAJECTORIES}" \
+    --expected-count 1 \
+    --output "${PI05_ER_DIAGNOSTIC_REPORT}"
+  echo "L3-B3 pi0.5 exact-Er checkpoint diagnostic complete; formal remains unauthorized."
+}
+
 case "${MODE}" in
   design) run_design ;;
   prepare) run_prepare ;;
@@ -296,12 +352,13 @@ case "${MODE}" in
   safe_reference) run_safe_reference ;;
   smoke) run_smoke ;;
   pi05_eb_diagnostic) run_pi05_eb_diagnostic ;;
+  pi05_er_checkpoint_diagnostic) run_pi05_er_checkpoint_diagnostic ;;
   formal)
     echo "L3-B3 formal is fail-closed until Safe, OpenVLA-OFT smoke, and hash-bound human review pass." >&2
     exit 2
     ;;
   *)
-    echo "Usage: $0 design|prepare|check|policy_views|safe_reference|smoke|pi05_eb_diagnostic|formal" >&2
+    echo "Usage: $0 design|prepare|check|policy_views|safe_reference|smoke|pi05_eb_diagnostic|pi05_er_checkpoint_diagnostic|formal" >&2
     exit 2
     ;;
 esac

@@ -605,6 +605,7 @@ def validate_all(
         # it does not change the OpenVLA-first formal release sequence.
         "pi05_exact_224_preprocessing_complete": True,
         "pi05_eb_diagnostic_only": True,
+        "pi05_er_checkpoint_diagnostic_only": True,
         "pi05_formal_authorized": False,
         "human_review_approved": False,
         "formal_authorized": False,
@@ -738,6 +739,79 @@ def verify_pi05_eb_diagnostic_evaluation_request(
         != record.get("native_asset_manifest_sha256")
     ):
         raise ValueError("L3-B3 pi0.5 diagnostic native assets changed")
+    return record
+
+
+def verify_pi05_er_checkpoint_diagnostic_evaluation_request(
+    manifest_path: str | Path,
+    *,
+    task_suite_name: str,
+    task_id: int,
+    task_language: str,
+    task_bddl: str | Path,
+    policy_prompt: str,
+    initial_states_path: str | Path,
+) -> dict[str, object]:
+    """Bind one diagnostic-only pi0.5 rollout to the exact closed-door Er bundle.
+
+    This is a user-authorized checkpoint comparison, not smoke, formal model
+    evidence, or permission to bypass the OpenVLA-first release sequence.
+    """
+
+    path = Path(manifest_path).resolve(strict=True)
+    record = json.loads(path.read_text(encoding="utf-8"))
+    exact = {
+        "scenario": SCENE_ID,
+        "design_version": DESIGN_VERSION,
+        "native_suite": SUITE,
+        "native_task_id": TASK_ID,
+        "native_prompt": TASK_PROMPT,
+        "native_goal": TASK_GOAL,
+        "verdict": NATIVE_PREFLIGHT_VERDICT,
+        "custom_assets": False,
+        "custom_bddl": False,
+        "prompt_changed": False,
+        "asset_inventory_changed": False,
+        "pi05_exact_224_preprocessing_complete": True,
+        "pi05_er_checkpoint_diagnostic_only": True,
+        "pi05_formal_authorized": False,
+        "human_review_approved": False,
+        "formal_authorized": False,
+    }
+    for key, expected in exact.items():
+        if record.get(key) != expected:
+            raise ValueError(
+                f"L3-B3 pi0.5 Er diagnostic preflight {key} mismatch"
+            )
+    if (task_suite_name, int(task_id)) != (SUITE, TASK_ID):
+        raise ValueError("L3-B3 pi0.5 Er diagnostic suite/task mismatch")
+    if task_language != TASK_PROMPT or policy_prompt != TASK_PROMPT:
+        raise ValueError("L3-B3 pi0.5 Er diagnostic prompt mismatch")
+    native = validate_native_bddl(task_bddl)
+    if native["bddl_sha256"] != record["native_bddl"]["bddl_sha256"]:
+        raise ValueError("L3-B3 pi0.5 Er diagnostic BDDL hash mismatch")
+    if (
+        native["goal_signature_sha256"]
+        != record["native_bddl"]["goal_signature_sha256"]
+    ):
+        raise ValueError("L3-B3 pi0.5 Er diagnostic goal signature mismatch")
+    states = Path(initial_states_path).resolve(strict=True)
+    binding = record.get("state_bundles", {}).get("closed_microwave", {})
+    if (
+        Path(binding.get("path", "")).resolve() != states
+        or binding.get("sha256") != sha256_path(states)
+    ):
+        raise ValueError("L3-B3 pi0.5 Er diagnostic bundle is not hash-bound")
+    with h5py.File(states, "r") as handle:
+        group = handle[TASK_KEY]
+        if _decode(group.attrs.get("condition")) != "closed_microwave":
+            raise ValueError("L3-B3 pi0.5 Er diagnostic requires exact Er states")
+    provenance = verify_native_asset_provenance()
+    if (
+        provenance["asset_manifest_sha256"]
+        != record.get("native_asset_manifest_sha256")
+    ):
+        raise ValueError("L3-B3 pi0.5 Er diagnostic native assets changed")
     return record
 
 
