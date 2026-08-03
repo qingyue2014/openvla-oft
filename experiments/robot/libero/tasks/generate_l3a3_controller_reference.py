@@ -5169,6 +5169,7 @@ def _fixed_safe_z_lateral_hold_action(
     maximum_positive_safety_release_action=None,
     vertical_stability_confirmation_hold=False,
     strict_target_refill_latched=False,
+    strict_target_refill_stable_repeat_count=None,
 ):
     """Hold the captured safe Z throughout the final lateral return."""
     current_eef = np.asarray(current_eef, dtype=float)
@@ -5232,6 +5233,25 @@ def _fixed_safe_z_lateral_hold_action(
     ):
         raise ValueError(
             "fixed-safe-Z vertical confirmation hold must be boolean"
+        )
+    strict_target_refill_stable_repeat_state_enabled = bool(
+        strict_target_refill_stable_repeat_count is not None
+    )
+    if strict_target_refill_stable_repeat_state_enabled:
+        if (
+            not isinstance(
+                strict_target_refill_stable_repeat_count,
+                (int, np.integer),
+            )
+            or isinstance(strict_target_refill_stable_repeat_count, bool)
+            or strict_target_refill_stable_repeat_count < 0
+        ):
+            raise ValueError(
+                "fixed-safe-Z strict-target refill stable-repeat count "
+                "must be a nonnegative integer"
+            )
+        strict_target_refill_stable_repeat_count = int(
+            strict_target_refill_stable_repeat_count
         )
     release_slew_arguments_partial = bool(
         (previous_commanded_action_xyz is None)
@@ -5964,9 +5984,34 @@ def _fixed_safe_z_lateral_hold_action(
     strict_target_axis_transition_exact_repeat = bool(
         coupled_xy_preceding_action_delta == 0.0
     )
+    strict_target_refill_stable_repeat_required_count = 2
+    strict_target_refill_current_repeat_stable = bool(
+        strict_target_refill_reserve_pending
+        and strict_target_axis_transition_exact_repeat
+        and coupled_xy_neutralization_step_stable
+    )
+    strict_target_refill_stable_repeat_count_after_action = int(
+        min(
+            strict_target_refill_stable_repeat_required_count,
+            strict_target_refill_stable_repeat_count + 1,
+        )
+        if (
+            strict_target_refill_stable_repeat_state_enabled
+            and strict_target_refill_current_repeat_stable
+        )
+        else 0
+    )
+    strict_target_refill_stable_repeat_confirmed = bool(
+        not strict_target_refill_stable_repeat_state_enabled
+        or strict_target_refill_stable_repeat_count_after_action
+        >= strict_target_refill_stable_repeat_required_count
+    )
     strict_target_refill_increment_repeat_wait_requested = bool(
         strict_target_refill_reserve_pending
-        and not strict_target_axis_transition_exact_repeat
+        and (
+            not strict_target_axis_transition_exact_repeat
+            or not strict_target_refill_stable_repeat_confirmed
+        )
     )
     strict_target_refill_post_acquisition_safety_eligible = bool(
         lateral_target_reached
@@ -6899,6 +6944,28 @@ def _fixed_safe_z_lateral_hold_action(
         ),
         "strict_target_refill_increment_repeat_wait_requested": (
             strict_target_refill_increment_repeat_wait_requested
+        ),
+        "strict_target_refill_stable_repeat_state_enabled": (
+            strict_target_refill_stable_repeat_state_enabled
+        ),
+        "strict_target_refill_stable_repeat_count_before_action": (
+            strict_target_refill_stable_repeat_count
+            if strict_target_refill_stable_repeat_state_enabled
+            else None
+        ),
+        "strict_target_refill_stable_repeat_count_after_action": (
+            strict_target_refill_stable_repeat_count_after_action
+            if strict_target_refill_stable_repeat_state_enabled
+            else None
+        ),
+        "strict_target_refill_stable_repeat_required_count": (
+            strict_target_refill_stable_repeat_required_count
+        ),
+        "strict_target_refill_current_repeat_stable": (
+            strict_target_refill_current_repeat_stable
+        ),
+        "strict_target_refill_stable_repeat_confirmed": (
+            strict_target_refill_stable_repeat_confirmed
         ),
         "strict_target_axis_transition_repeat_wait_requested": (
             strict_target_axis_transition_repeat_wait_requested
@@ -18664,6 +18731,7 @@ def _seek_stable_plate_contact(
     fixed_safe_z_previous_commanded_action_xyz = None
     fixed_safe_z_preceding_commanded_action_xyz = None
     fixed_safe_z_strict_target_refill_latched = False
+    fixed_safe_z_strict_target_refill_stable_repeat_count = 0
     fixed_safe_z_positive_safety_release_action = 0.05
     vertical_corridor_neutral_damping_release_action = 0.025
     vertical_corridor_hazard_outward_brake_action = float(
@@ -20574,10 +20642,18 @@ def _seek_stable_plate_contact(
                 strict_target_refill_latched=(
                     fixed_safe_z_strict_target_refill_latched
                 ),
+                strict_target_refill_stable_repeat_count=(
+                    fixed_safe_z_strict_target_refill_stable_repeat_count
+                ),
             )
             fixed_safe_z_strict_target_refill_latched = bool(
                 path_control[
                     "strict_target_refill_latched_after_action"
+                ]
+            )
+            fixed_safe_z_strict_target_refill_stable_repeat_count = int(
+                path_control[
+                    "strict_target_refill_stable_repeat_count_after_action"
                 ]
             )
             fixed_safe_z_preceding_commanded_action_xyz = np.asarray(
@@ -21771,6 +21847,7 @@ def _seek_stable_plate_contact(
                 ).copy()
                 fixed_safe_z_preceding_commanded_action_xyz = None
                 fixed_safe_z_strict_target_refill_latched = False
+                fixed_safe_z_strict_target_refill_stable_repeat_count = 0
             elif (
                 hazard_release_zero_coast_active_before_action
                 and zero_coast_stable_count >= 2

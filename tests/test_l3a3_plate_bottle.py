@@ -3166,6 +3166,115 @@ def test_fixed_safe_z_lateral_hold_scopes_and_latches_job504206_refill():
     ] is True
 
 
+def test_fixed_safe_z_lateral_hold_waits_for_two_stable_repeats_job504218():
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": (-np.ones(7, dtype=float)).tolist(),
+        "high": np.ones(7, dtype=float).tolist(),
+        "runtime_resolved": True,
+    }
+    kwargs = dict(
+        current_eef=np.array(
+            [0.13351069207110634, -0.02455731584097068, 0.920436379478114]
+        ),
+        lateral_target_xy=np.array(
+            [0.13242106705090634, -0.02850777957668001]
+        ),
+        lateral_position_tolerance_m=0.005,
+        fixed_safe_z_m=0.920581288496378,
+        vertical_position_tolerance_m=0.0004,
+        measured_vertical_step_progress_m=0.00001687692393478,
+        measured_outward_step_progress_m=-0.0000005743135750857498,
+        outside_side_guard={
+            "minimum_outside_clearance_m": 0.0022213324612141566,
+            "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+            "finger_table_vertical_clearance_m": 0.007710020235136568,
+            "required_finger_table_clearance_m": np.nextafter(
+                0.0, np.inf
+            ),
+        },
+        outward_direction_xy=np.array([1.0, 0.0]),
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_lateral_translation_action=0.005,
+        maximum_safety_brake_action=0.20,
+        strict_outside_clearance_m=0.0004,
+        strict_table_clearance_m=0.0004,
+        closed_loop_hazard_response_bound_m=0.0011,
+        full_outward_brake_clearance_m=0.00095,
+        progress_resolution_m=0.00005,
+        derivative_gain=2.0,
+        native_action_spec=native_spec,
+        previous_commanded_action_xyz=np.array(
+            [0.1928052901590658, -0.004970463735855576, 0.15171652155521861]
+        ),
+        preceding_commanded_action_xyz=np.array(
+            [0.1928052901590658, -0.004970463735855576, 0.1510464869700785]
+        ),
+        maximum_positive_safety_release_action=0.05,
+        strict_target_refill_latched=True,
+    )
+    wait_action, wait_evidence = _fixed_safe_z_lateral_hold_action(
+        **kwargs,
+        strict_target_refill_stable_repeat_count=0,
+    )
+    assert wait_action[:2] == pytest.approx(
+        [0.1928052901590658, -0.004970463735855576]
+    )
+    assert wait_evidence[
+        "strict_target_refill_increment_repeat_wait_requested"
+    ] is True
+    assert wait_evidence[
+        "strict_target_refill_current_repeat_stable"
+    ] is True
+    assert wait_evidence[
+        "strict_target_refill_stable_repeat_count_after_action"
+    ] == 1
+    assert wait_evidence[
+        "strict_target_refill_stable_repeat_confirmed"
+    ] is False
+
+    confirmed_action, confirmed_evidence = _fixed_safe_z_lateral_hold_action(
+        **kwargs,
+        strict_target_refill_stable_repeat_count=1,
+    )
+    assert confirmed_action[:2] == pytest.approx(
+        [0.19780529015906578, -0.004970463735855576]
+    )
+    assert confirmed_evidence[
+        "strict_target_refill_increment_repeat_wait_requested"
+    ] is False
+    assert confirmed_evidence[
+        "strict_target_refill_stable_repeat_count_after_action"
+    ] == 2
+    assert confirmed_evidence[
+        "strict_target_refill_stable_repeat_confirmed"
+    ] is True
+
+    unstable_action, unstable_evidence = _fixed_safe_z_lateral_hold_action(
+        **{
+            **kwargs,
+            "measured_outward_step_progress_m": -0.00014631429588404798,
+            "outside_side_guard": {
+                **kwargs["outside_side_guard"],
+                "minimum_outside_clearance_m": 0.0020785870928087397,
+            },
+        },
+        strict_target_refill_stable_repeat_count=1,
+    )
+    assert unstable_evidence[
+        "strict_target_refill_current_repeat_stable"
+    ] is False
+    assert unstable_evidence[
+        "strict_target_refill_stable_repeat_count_after_action"
+    ] == 0
+    assert unstable_evidence[
+        "strict_target_refill_stable_repeat_confirmed"
+    ] is False
+    assert unstable_action[0] == pytest.approx(0.20)
+
+
 @pytest.mark.parametrize(
     "measured_outward_step_progress_m",
     [4.3090152911873236e-05, -3.330000095114194e-08],
