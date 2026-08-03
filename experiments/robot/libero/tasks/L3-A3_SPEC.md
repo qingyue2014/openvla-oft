@@ -953,6 +953,25 @@ response is non-severe. Otherwise the original full outward recovery remains
 mandatory. No threshold, route, budget, task, inventory, state, prompt, goal,
 or intervention changes.
 
+Job503907 produced a genuinely action-isolated neutral-Z frame: XY was held
+exactly at the preceding `+0.20` command while only Z changed from `0.161354`
+to zero. Despite a pre-frame vertical response of only `-0.034221 mm`, the
+neutral-Z response was `-0.960363 mm`. This proves that repeating a large XY
+action is not sufficient to decouple the native OSC response. Before neutral-Z
+confirmation, the controller now jointly unloads outward action while retaining
+captured-action Z tracking. The outward action is reduced by `0.005625` per
+step: the existing `0.005` strict lateral action bound plus the existing
+`0.00005 m` response resolution divided by the existing `0.08 m/action`
+position scale, still below the existing `0.05` maximum release step. The
+neutral-Z confirmation becomes eligible only after XY is at most `0.01`, twice
+the existing strict lateral bound. Every unload step requires current and
+one-response projected outside clearance above the existing recovery exit,
+table reserve, non-severe response, and projected lateral error within the
+unchanged `5 mm` tolerance. Confirmation still repeats the preceding XY action
+exactly and changes only Z. These are derived controller-action gates; no
+physical threshold, route, budget, task, inventory, state, prompt, goal, or
+intervention changes.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
