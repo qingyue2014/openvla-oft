@@ -1056,6 +1056,20 @@ least one further response measurement before it can decrement. Z may continue
 captured tracking during that hold. No physical threshold, route, budget, task,
 inventory, state, prompt, goal, or intervention changes.
 
+Job503929 confirmed that the repeated-predecessor and refill-reserve gates
+prevent the prior single-frame reentry. Three decrements and eighteen hold
+frames remained physically and structurally valid, but the generic release
+after full recovery still changed X directly from `0.20` to `0.15` while the
+measured outward response was `+0.147235 mm`. After one repeated `X=0.15`
+frame, the response reversed to `-0.100956 mm`, projected clearance fell to
+`1.510088 mm`, and another full recovery cycle began. A full outward recovery
+action is now retained exactly while its response is unsettled. Only after the
+existing stable-response, repeated-predecessor, lateral, table, and refill
+gates all pass may X unload through the existing `0.015625` coupled decrement.
+An inward response or projected exit loss still invokes immediate full
+recovery. No physical threshold, route, budget, task, inventory, state, prompt,
+goal, or intervention changes.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

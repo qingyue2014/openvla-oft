@@ -5617,10 +5617,30 @@ def _fixed_safe_z_lateral_hold_action(
     coupled_xy_neutralization_lateral_hold_tolerance_m = float(
         lateral_position_tolerance_m + progress_resolution_m
     )
+    coupled_xy_full_outward_settle_hold_requested = bool(
+        previous_full_outward_recovery_action
+        and coupled_xy_neutralization_height_tracking_accepted
+        and lateral_error_m
+        <= coupled_xy_neutralization_lateral_hold_tolerance_m
+        and projected_lateral_error_after_measured_outward_response_m
+        <= coupled_xy_neutralization_lateral_hold_tolerance_m
+        and live_outside_clearance > outside_recovery_exit_clearance
+        and outside_response_projected_clearance_m
+        > outside_recovery_exit_clearance
+        and live_table_clearance > outside_recovery_exit_clearance
+        and not measured_inward_response
+        and not severe_vertical_response
+        and abs(measured_outward_step_progress_m)
+        <= closed_loop_hazard_response_bound_m
+        and not sticky_full_outward_recovery_requested
+    )
     coupled_xy_neutralization_lateral_hold_accepted = bool(
         lateral_target_reached
         or (
-            coupled_xy_neutralization_in_progress
+            (
+                coupled_xy_neutralization_in_progress
+                or coupled_xy_full_outward_settle_hold_requested
+            )
             and lateral_error_m
             <= coupled_xy_neutralization_lateral_hold_tolerance_m
         )
@@ -5629,7 +5649,10 @@ def _fixed_safe_z_lateral_hold_action(
         projected_lateral_error_after_measured_outward_response_m
         <= (
             coupled_xy_neutralization_lateral_hold_tolerance_m
-            if coupled_xy_neutralization_in_progress
+            if (
+                coupled_xy_neutralization_in_progress
+                or coupled_xy_full_outward_settle_hold_requested
+            )
             else lateral_position_tolerance_m
         )
     )
@@ -5652,6 +5675,7 @@ def _fixed_safe_z_lateral_hold_action(
         and (
             coupled_xy_neutralization_in_progress
             or coupled_xy_neutralization_entry_stable
+            or coupled_xy_full_outward_settle_hold_requested
         )
     )
     coupled_xy_neutralization_requested = bool(
@@ -6231,6 +6255,9 @@ def _fixed_safe_z_lateral_hold_action(
         "coupled_xy_neutralization_in_progress": (
             coupled_xy_neutralization_in_progress
         ),
+        "coupled_xy_full_outward_settle_hold_requested": (
+            coupled_xy_full_outward_settle_hold_requested
+        ),
         "preceding_commanded_action_defaulted": (
             preceding_commanded_action_defaulted
         ),
@@ -6349,6 +6376,9 @@ def _fixed_safe_z_lateral_hold_action(
             "every_coupled_xy_decrement_requires_stable_responses": True,
             "every_coupled_xy_decrement_requires_repeated_preceding_xy": True,
             "every_coupled_xy_decrement_requires_refill_reserve": True,
+            "full_outward_recovery_waits_for_stable_response_before_"
+            "release": True,
+            "full_outward_recovery_uses_coupled_release_step": True,
             "coupled_xy_neutralization_preserves_bounded_progress": True,
             "coupled_xy_lateral_hysteresis_preserves_outward_progress": True,
             "coupled_xy_lateral_hysteresis_uses_strict_tangential_bound": True,
