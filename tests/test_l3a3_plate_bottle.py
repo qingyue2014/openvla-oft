@@ -620,16 +620,19 @@ def test_fixed_safe_z_lateral_hold_brakes_job503456_tail_before_return():
     )
     strict_brake = np.nextafter(0.20, 0.0)
     assert action[:3].tolist() == pytest.approx(
-        [strict_brake, 0.0, strict_brake]
+        [strict_brake, 0.0, 0.0]
     )
-    assert np.linalg.norm(action[:3]) == pytest.approx(
-        np.sqrt(2.0) * strict_brake
-    )
+    assert np.linalg.norm(action[:3]) == pytest.approx(strict_brake)
     assert evidence["outside_recovery_active"] is True
     assert evidence["downward_tail_brake_active"] is True
-    assert evidence["commanded_z_action"] == pytest.approx(strict_brake)
+    assert evidence["commanded_z_action"] == 0.0
+    assert evidence[
+        "pure_outward_recovery_authority_isolation_entry"
+    ] is True
     assert evidence["predicted_outside_clearance_m"] > 0.016
-    assert evidence["predicted_table_clearance_m"] > 0.017
+    assert evidence["predicted_table_clearance_m"] == pytest.approx(
+        0.0018460824236792295
+    )
 
 
 def test_fixed_safe_z_lateral_hold_keeps_original_lateral_bound_when_safe():
@@ -717,7 +720,7 @@ def test_fixed_safe_z_lateral_hold_stops_job503459_redundant_inward_step():
     )
     strict_brake = np.nextafter(0.20, 0.0)
     assert action[:3].tolist() == pytest.approx(
-        [strict_brake, 0.0, strict_brake]
+        [strict_brake, 0.0, 0.0]
     )
     assert evidence["lateral_error_m"] == pytest.approx(
         0.0012403642841947859
@@ -726,6 +729,9 @@ def test_fixed_safe_z_lateral_hold_stops_job503459_redundant_inward_step():
     assert evidence["vertical_capture_active"] is True
     assert evidence["outside_recovery_active"] is True
     assert evidence["inward_suspended_for_vertical_capture"] is False
+    assert evidence[
+        "pure_outward_recovery_authority_isolation_requested"
+    ] is True
     assert evidence["proof"][
         "no_inward_xy_after_lateral_tolerance"
     ] is True
@@ -830,11 +836,14 @@ def test_fixed_safe_z_lateral_hold_brakes_job503463_only_at_low_reserve():
     )
     strict_brake = np.nextafter(0.20, 0.0)
     assert action[:3].tolist() == pytest.approx(
-        [strict_brake, 0.0, strict_brake]
+        [strict_brake, 0.0, 0.0]
     )
     assert evidence["lateral_target_reached"] is True
     assert evidence["outside_recovery_active"] is True
     assert evidence["measured_inward_response"] is True
+    assert evidence[
+        "pure_outward_recovery_authority_isolation_requested"
+    ] is True
     assert evidence["proof"][
         "measured_inward_tail_uses_full_outward_brake"
     ] is True
@@ -1512,9 +1521,7 @@ def test_fixed_safe_z_lateral_hold_corrects_job503874_without_xy_starvation():
         ),
         maximum_positive_safety_release_action=0.05,
     )
-    assert action[:3] == pytest.approx(
-        [0.2875, -0.0016133293249752092, 0.34075636329400466]
-    )
+    assert action[:3] == pytest.approx([0.20, 0.0, 0.0])
     assert evidence["positive_response_unload_active"] is True
     assert evidence["positive_z_release_slew_bypass_requested"] is False
     assert evidence["captured_safe_z_response_hold_requested"] is True
@@ -1528,13 +1535,16 @@ def test_fixed_safe_z_lateral_hold_corrects_job503874_without_xy_starvation():
     ] == pytest.approx([0.0, -0.0016133293249752092])
     assert evidence[
         "tangential_xy_action_preserved_during_recovery"
+    ] is False
+    assert evidence[
+        "pure_outward_recovery_authority_isolation_requested"
     ] is True
     assert evidence["proof"][
         "vertical_capture_removes_only_inward_component"
     ] is True
     assert evidence["proof"][
         "outside_recovery_preserves_bounded_tangential_return"
-    ] is True
+    ] is False
 
 
 def test_fixed_safe_z_lateral_hold_tracks_job503891_shallow_overshoot():
@@ -1582,9 +1592,7 @@ def test_fixed_safe_z_lateral_hold_tracks_job503891_shallow_overshoot():
         ),
         maximum_positive_safety_release_action=0.05,
     )
-    assert action[:3] == pytest.approx(
-        [0.2375, -0.0017246097173998244, 0.3224235261403193]
-    )
+    assert action[:3] == pytest.approx([0.20, 0.0, 0.0])
     assert evidence["above_safe_z_band"] is True
     assert evidence["position_error_m"] == pytest.approx(
         -0.0005744579303034181
@@ -1599,6 +1607,9 @@ def test_fixed_safe_z_lateral_hold_tracks_job503891_shallow_overshoot():
     assert evidence[
         "captured_safe_z_response_hold_correction"
     ] == pytest.approx(-0.017418051601973683)
+    assert evidence[
+        "pure_outward_recovery_authority_isolation_requested"
+    ] is True
     assert evidence["proof"][
         "above_band_unload_bypass_requires_projected_three_tolerance_"
         "overshoot"
@@ -1648,14 +1659,15 @@ def test_fixed_safe_z_lateral_hold_tracks_job503891_after_xy_entry():
         previous_commanded_action_xyz=np.array([0.15, 0.0, 0.20]),
         maximum_positive_safety_release_action=0.05,
     )
-    assert action[:3] == pytest.approx(
-        [0.20, 0.0, 0.19047760578833323]
-    )
+    assert action[:3] == pytest.approx([0.20, 0.0, 0.0])
     assert evidence["lateral_target_reached"] is True
     assert evidence["captured_safe_z_response_hold_requested"] is True
     assert evidence[
         "captured_safe_z_response_hold_correction"
     ] == pytest.approx(-0.009522394211666785)
+    assert evidence[
+        "pure_outward_recovery_authority_isolation_requested"
+    ] is True
     assert evidence["proof"][
         "captured_safe_z_hold_continues_until_stability_confirmation"
     ] is True
@@ -1765,9 +1777,7 @@ def test_fixed_safe_z_lateral_hold_tracks_job503895_near_zero_response():
         previous_commanded_action_xyz=np.array([0.20, 0.0, 0.20]),
         maximum_positive_safety_release_action=0.05,
     )
-    assert action[:3] == pytest.approx(
-        [0.20, 0.0, 0.19499784055830566]
-    )
+    assert action[:3] == pytest.approx([0.20, 0.0, 0.0])
     assert evidence["lateral_target_reached"] is True
     assert evidence["above_safe_z_band"] is True
     assert evidence["captured_safe_z_response_tracking_band_active"] is True
@@ -1776,6 +1786,9 @@ def test_fixed_safe_z_lateral_hold_tracks_job503895_near_zero_response():
         "captured_safe_z_response_hold_correction"
     ] == pytest.approx(-0.005002159441694354)
     assert evidence["positive_z_release_slew_applied"] is False
+    assert evidence[
+        "pure_outward_recovery_authority_isolation_requested"
+    ] is True
     assert evidence["proof"][
         "captured_safe_z_hold_tracks_shallow_projected_overshoot"
     ] is True
@@ -1826,9 +1839,7 @@ def test_fixed_safe_z_lateral_hold_tracks_job503896_shallow_downward_tail():
         ),
         maximum_positive_safety_release_action=0.05,
     )
-    assert action[:3] == pytest.approx(
-        [0.20, 0.0, 0.15164312956357626]
-    )
+    assert action[:3] == pytest.approx([0.20, 0.0, 0.0])
     assert evidence["measured_downward_tail"] is True
     assert evidence[
         "shallow_above_band_downward_tracking_requested"
@@ -1841,6 +1852,9 @@ def test_fixed_safe_z_lateral_hold_tracks_job503896_shallow_downward_tail():
     assert evidence[
         "captured_safe_z_response_hold_correction"
     ] == pytest.approx(-0.004182315100824396)
+    assert evidence[
+        "pure_outward_recovery_authority_isolation_requested"
+    ] is True
     assert evidence["proof"][
         "shallow_above_band_downward_tail_uses_incremental_pd"
     ] is True
@@ -1895,9 +1909,7 @@ def test_fixed_safe_z_lateral_hold_tracks_job503898_inside_band_downward_tail():
         "maximum_positive_safety_release_action": 0.05,
     }
     action, evidence = _fixed_safe_z_lateral_hold_action(**kwargs)
-    assert action[:3] == pytest.approx(
-        [0.20, 0.0, 0.1512195012784793]
-    )
+    assert action[:3] == pytest.approx([0.20, 0.0, 0.0])
     assert evidence["inside_safe_z_band"] is True
     assert evidence[
         "shallow_inside_band_downward_tracking_requested"
@@ -1912,6 +1924,9 @@ def test_fixed_safe_z_lateral_hold_tracks_job503898_inside_band_downward_tail():
     assert evidence["captured_safe_z_response_hold_requested"] is True
     assert evidence["coupled_xy_neutralization_requested"] is False
     assert evidence["coupled_xy_neutralization_hold_requested"] is False
+    assert evidence[
+        "pure_outward_recovery_authority_isolation_requested"
+    ] is True
     assert evidence["proof"][
         "shallow_inside_band_downward_tail_uses_incremental_pd"
     ] is True
@@ -1920,7 +1935,7 @@ def test_fixed_safe_z_lateral_hold_tracks_job503898_inside_band_downward_tail():
     rejected_action, rejected_evidence = (
         _fixed_safe_z_lateral_hold_action(**kwargs)
     )
-    assert rejected_action[2] == pytest.approx(np.nextafter(0.20, 0.0))
+    assert rejected_action[:3] == pytest.approx([0.20, 0.0, 0.0])
     assert rejected_evidence[
         "shallow_inside_band_downward_tracking_requested"
     ] is False
@@ -1979,9 +1994,7 @@ def test_fixed_safe_z_lateral_hold_tracks_job503899_during_outside_recovery():
         "maximum_positive_safety_release_action": 0.05,
     }
     action, evidence = _fixed_safe_z_lateral_hold_action(**kwargs)
-    assert action[:3] == pytest.approx(
-        [0.20, 0.0, 0.1548415344235247]
-    )
+    assert action[:3] == pytest.approx([0.20, 0.0, 0.0])
     assert evidence["outside_recovery_active"] is True
     assert evidence["full_outward_recovery_active"] is True
     assert evidence[
@@ -1992,9 +2005,12 @@ def test_fixed_safe_z_lateral_hold_tracks_job503899_during_outside_recovery():
     ] is True
     assert evidence["downward_tail_brake_active"] is False
     assert evidence["captured_safe_z_response_hold_requested"] is True
+    assert evidence[
+        "pure_outward_recovery_authority_isolation_requested"
+    ] is True
     assert evidence["proof"][
         "full_outward_recovery_preserves_inside_band_z_tracking"
-    ] is True
+    ] is False
 
     kwargs["outside_side_guard"] = {
         **kwargs["outside_side_guard"],
@@ -2003,7 +2019,7 @@ def test_fixed_safe_z_lateral_hold_tracks_job503899_during_outside_recovery():
     rejected_action, rejected_evidence = (
         _fixed_safe_z_lateral_hold_action(**kwargs)
     )
-    assert rejected_action[:3] == pytest.approx([0.20, 0.0, 0.20])
+    assert rejected_action[:3] == pytest.approx([0.20, 0.0, 0.0])
     assert rejected_evidence["full_outward_recovery_active"] is True
     assert rejected_evidence[
         "inside_band_tracking_outside_reserve_accepted"
@@ -2062,17 +2078,163 @@ def test_fixed_safe_z_lateral_hold_tracks_job503900_positive_recovery_response()
         ),
         maximum_positive_safety_release_action=0.05,
     )
-    assert action[:3] == pytest.approx(
-        [0.20, 0.0, 0.1511875694875887]
-    )
+    assert action[:3] == pytest.approx([0.20, 0.0, 0.0])
     assert evidence["inside_safe_z_band"] is True
     assert evidence["full_outward_recovery_active"] is True
     assert evidence["positive_response_unload_active"] is True
     assert evidence["captured_safe_z_response_hold_requested"] is True
     assert evidence["positive_z_release_slew_applied"] is False
+    assert evidence[
+        "pure_outward_recovery_authority_isolation_requested"
+    ] is True
     assert evidence["proof"][
         "recovery_coupled_z_tracking_is_response_sign_invariant"
+    ] is False
+
+
+def test_fixed_safe_z_lateral_hold_latches_job503958_pure_outward_recovery():
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": (-np.ones(7, dtype=float)).tolist(),
+        "high": np.ones(7, dtype=float).tolist(),
+        "runtime_resolved": True,
+    }
+    strict_brake = np.nextafter(0.20, 0.0)
+    kwargs = {
+        "current_eef": np.array(
+            [0.13242106705090634, -0.02850777957668001, 0.920581288496378]
+        ),
+        "lateral_target_xy": np.array(
+            [0.13242106705090634, -0.02850777957668001]
+        ),
+        "lateral_position_tolerance_m": 0.005,
+        "fixed_safe_z_m": 0.920581288496378,
+        "vertical_position_tolerance_m": 0.0004,
+        "measured_vertical_step_progress_m": 0.0,
+        "measured_outward_step_progress_m": 0.00002,
+        "outside_side_guard": {
+            "minimum_outside_clearance_m": 0.0016,
+            "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+            "finger_table_vertical_clearance_m": 0.008,
+            "required_finger_table_clearance_m": np.nextafter(
+                0.0, np.inf
+            ),
+        },
+        "outward_direction_xy": np.array([1.0, 0.0]),
+        "gripper": -1.0,
+        "position_action_scale": 0.08,
+        "maximum_lateral_translation_action": 0.005,
+        "maximum_safety_brake_action": 0.20,
+        "strict_outside_clearance_m": 0.0004,
+        "strict_table_clearance_m": 0.0004,
+        "closed_loop_hazard_response_bound_m": 0.0011,
+        "full_outward_brake_clearance_m": 0.00095,
+        "progress_resolution_m": 0.00005,
+        "derivative_gain": 2.0,
+        "native_action_spec": native_spec,
+        "previous_commanded_action_xyz": np.array(
+            [strict_brake, 0.0, 0.0]
+        ),
+        "preceding_commanded_action_xyz": np.array(
+            [strict_brake, 0.0, 0.0]
+        ),
+        "maximum_positive_safety_release_action": 0.05,
+    }
+    action, evidence = _fixed_safe_z_lateral_hold_action(**kwargs)
+    assert action[:3] == pytest.approx([strict_brake, 0.0, 0.0])
+    assert evidence[
+        "previous_pure_outward_recovery_authority_isolation_action"
     ] is True
+    assert evidence[
+        "pure_outward_recovery_authority_isolation_entry"
+    ] is False
+    assert evidence[
+        "pure_outward_recovery_authority_isolation_latched"
+    ] is True
+    assert evidence[
+        "pure_outward_recovery_authority_isolation_requested"
+    ] is True
+
+    kwargs["outside_side_guard"] = {
+        **kwargs["outside_side_guard"],
+        "minimum_outside_clearance_m": 0.0017,
+    }
+    released_action, released_evidence = (
+        _fixed_safe_z_lateral_hold_action(**kwargs)
+    )
+    assert released_evidence[
+        "pure_outward_recovery_authority_isolation_latched"
+    ] is False
+    assert released_evidence[
+        "pure_outward_recovery_authority_isolation_requested"
+    ] is False
+    assert released_action[0] < strict_brake
+
+
+def test_fixed_safe_z_lateral_hold_isolates_job503958_terminal_response():
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": (-np.ones(7, dtype=float)).tolist(),
+        "high": np.ones(7, dtype=float).tolist(),
+        "runtime_resolved": True,
+    }
+    strict_brake = np.nextafter(0.20, 0.0)
+    action, evidence = _fixed_safe_z_lateral_hold_action(
+        current_eef=np.array(
+            [0.13189863498427995, -0.02285625616167275, 0.920631752742616]
+        ),
+        lateral_target_xy=np.array(
+            [0.13242106705090634, -0.02850777957668001]
+        ),
+        lateral_position_tolerance_m=0.005,
+        fixed_safe_z_m=0.920581288496378,
+        vertical_position_tolerance_m=0.0004,
+        measured_vertical_step_progress_m=0.0002395613493330062,
+        measured_outward_step_progress_m=-0.00039868237091689185,
+        outside_side_guard={
+            "minimum_outside_clearance_m": 0.0005688727911672825,
+            "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+            "finger_table_vertical_clearance_m": 0.00795887588935118,
+            "required_finger_table_clearance_m": np.nextafter(
+                0.0, np.inf
+            ),
+        },
+        outward_direction_xy=np.array([1.0, 0.0]),
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_lateral_translation_action=0.005,
+        maximum_safety_brake_action=0.20,
+        strict_outside_clearance_m=0.0004,
+        strict_table_clearance_m=0.0004,
+        closed_loop_hazard_response_bound_m=0.0011,
+        full_outward_brake_clearance_m=0.00095,
+        progress_resolution_m=0.00005,
+        derivative_gain=2.0,
+        native_action_spec=native_spec,
+        previous_commanded_action_xyz=np.array(
+            [0.20, -0.00499874940713578, 0.1950580920451623]
+        ),
+        preceding_commanded_action_xyz=np.array(
+            [0.20, -0.004995367896050772, 0.20]
+        ),
+        maximum_positive_safety_release_action=0.05,
+    )
+    assert action[:3] == pytest.approx([strict_brake, 0.0, 0.0])
+    assert evidence["full_outward_recovery_active"] is True
+    assert evidence[
+        "pure_outward_recovery_authority_isolation_entry"
+    ] is True
+    assert evidence[
+        "pure_outward_recovery_authority_isolation_action_xyz"
+    ] == pytest.approx([strict_brake, 0.0, 0.0])
+    assert evidence[
+        "tangential_xy_action_preserved_during_recovery"
+    ] is False
+    assert evidence["predicted_table_clearance_m"] == pytest.approx(
+        0.00795887588935118
+    )
 
 
 def test_fixed_safe_z_lateral_hold_tracks_job503901_until_confirmation_eligible():
@@ -2279,9 +2441,7 @@ def test_fixed_safe_z_lateral_hold_rejects_job503904_coupled_confirmation():
         "maximum_positive_safety_release_action": 0.05,
     }
     action, evidence = _fixed_safe_z_lateral_hold_action(**kwargs)
-    assert action[:3] == pytest.approx(
-        [0.15120865294351569, 0.0, 0.1425043993318357]
-    )
+    assert action[:3] == pytest.approx([0.20, 0.0, 0.0])
     assert evidence["measured_inward_response"] is True
     assert evidence["outside_recovery_active"] is True
     assert evidence["previous_xy_action_neutral"] is False
@@ -2297,6 +2457,9 @@ def test_fixed_safe_z_lateral_hold_rejects_job503904_coupled_confirmation():
     assert evidence[
         "captured_outward_response_action_correction"
     ] == pytest.approx(0.0012086529435157068)
+    assert evidence[
+        "pure_outward_recovery_authority_isolation_requested"
+    ] is True
     assert evidence["proof"][
         "captured_outward_hold_uses_incremental_pd_correction"
     ] is True

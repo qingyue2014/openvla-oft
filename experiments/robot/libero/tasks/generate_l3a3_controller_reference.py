@@ -5448,6 +5448,22 @@ def _fixed_safe_z_lateral_hold_action(
         )
         >= strict_safety_brake_bound
     )
+    previous_pure_outward_recovery_authority_isolation_action = bool(
+        release_slew_enabled
+        and previous_full_outward_recovery_action
+        and np.linalg.norm(
+            previous_commanded_action_xyz[:2]
+            - float(
+                np.dot(
+                    previous_commanded_action_xyz[:2],
+                    outward_direction_xy,
+                )
+            )
+            * outward_direction_xy
+        )
+        == 0.0
+        and previous_commanded_action_xyz[2] == 0.0
+    )
     previous_outward_action_for_recovery = (
         float(
             np.dot(
@@ -6079,6 +6095,27 @@ def _fixed_safe_z_lateral_hold_action(
         minimum_released_outward_action = None
         minimum_released_positive_z_action = None
 
+    pure_outward_recovery_authority_isolation_entry = bool(
+        full_outward_recovery_active and measured_inward_response
+    )
+    pure_outward_recovery_authority_isolation_latched = bool(
+        previous_pure_outward_recovery_authority_isolation_action
+        and (
+            measured_inward_response
+            or live_outside_clearance
+            <= outside_refill_target_clearance
+        )
+    )
+    pure_outward_recovery_authority_isolation_requested = bool(
+        pure_outward_recovery_authority_isolation_entry
+        or pure_outward_recovery_authority_isolation_latched
+    )
+    if pure_outward_recovery_authority_isolation_requested:
+        commanded_xy_action = (
+            outward_direction_xy * strict_safety_brake_bound
+        )
+        commanded_z_action = 0.0
+
     vertical_stability_confirmation_hold_applied = bool(
         vertical_stability_confirmation_hold
     )
@@ -6125,7 +6162,10 @@ def _fixed_safe_z_lateral_hold_action(
             "retain the unchanged strict lateral-return bound while a "
             "position-plus-velocity Z hold independently uses the existing "
             "structural positive-Z brake authority; suspend inward return "
-            "and use the same authority outward before live reserve is spent"
+            "and use the same authority outward before live reserve is "
+            "spent; a measured inward response isolates full recovery to "
+            "pure outward XY with zero tangential and Z action until the "
+            "response is noninward and refill reserve is restored"
         ),
         "current_eef": current_eef.tolist(),
         "lateral_target_xy": lateral_target_xy.tolist(),
@@ -6266,6 +6306,7 @@ def _fixed_safe_z_lateral_hold_action(
         "tangential_xy_action_preserved_during_recovery": bool(
             outside_recovery_active
             and np.linalg.norm(tangential_xy_action_before_recovery) > 0.0
+            and not pure_outward_recovery_authority_isolation_requested
         ),
         "vertical_capture_active": vertical_capture_active,
         "inward_suspended_for_vertical_capture": (
@@ -6302,6 +6343,23 @@ def _fixed_safe_z_lateral_hold_action(
         ),
         "previous_full_outward_recovery_action": (
             previous_full_outward_recovery_action
+        ),
+        "previous_pure_outward_recovery_authority_isolation_action": (
+            previous_pure_outward_recovery_authority_isolation_action
+        ),
+        "pure_outward_recovery_authority_isolation_entry": (
+            pure_outward_recovery_authority_isolation_entry
+        ),
+        "pure_outward_recovery_authority_isolation_latched": (
+            pure_outward_recovery_authority_isolation_latched
+        ),
+        "pure_outward_recovery_authority_isolation_requested": (
+            pure_outward_recovery_authority_isolation_requested
+        ),
+        "pure_outward_recovery_authority_isolation_action_xyz": (
+            action[:3].tolist()
+            if pure_outward_recovery_authority_isolation_requested
+            else None
         ),
         "coupled_xy_unload_projected_exit_loss": (
             coupled_xy_unload_projected_exit_loss
@@ -6441,8 +6499,18 @@ def _fixed_safe_z_lateral_hold_action(
             "downward_tail_retains_positive_release_slew": True,
             "shallow_above_band_downward_tail_uses_incremental_pd": True,
             "shallow_inside_band_downward_tail_uses_incremental_pd": True,
-            "full_outward_recovery_preserves_inside_band_z_tracking": True,
-            "recovery_coupled_z_tracking_is_response_sign_invariant": True,
+            "full_outward_recovery_preserves_inside_band_z_tracking": bool(
+                not pure_outward_recovery_authority_isolation_requested
+            ),
+            "recovery_coupled_z_tracking_is_response_sign_invariant": bool(
+                not pure_outward_recovery_authority_isolation_requested
+            ),
+            "inward_response_isolates_full_recovery_to_pure_outward_xy": (
+                True
+            ),
+            "isolated_outward_recovery_zeros_tangential_xy_and_z": True,
+            "isolated_outward_recovery_latches_until_refill_and_noninward_"
+            "response": True,
             "stable_response_waits_for_complete_confirmation_eligibility": (
                 True
             ),
@@ -6490,7 +6558,9 @@ def _fixed_safe_z_lateral_hold_action(
             "above_band_unload_bypass_requires_projected_three_tolerance_"
             "overshoot": True,
             "vertical_capture_removes_only_inward_component": True,
-            "outside_recovery_preserves_bounded_tangential_return": True,
+            "outside_recovery_preserves_bounded_tangential_return": bool(
+                not pure_outward_recovery_authority_isolation_requested
+            ),
             "first_stable_frame_uses_neutral_z_confirmation": True,
             "neutral_z_confirmation_requires_stable_outward_response": True,
             "neutral_z_confirmation_repeats_preceding_xy_action": True,

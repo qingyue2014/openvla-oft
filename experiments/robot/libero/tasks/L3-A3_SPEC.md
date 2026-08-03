@@ -1224,6 +1224,21 @@ frame passes the same pre-action and post-action gates. Entry outside the fixed
 safe-Z stage, leaving that stage, loss of any gate, lack of confirmation by the
 effective cap, native episode termination, or lost horizon reserve fails
 closed; none is bypassed by this scoped settle extension.
+Job503958 exercised `44` scoped extension actions and thereby ruled out route
+budget as the immediate failure. On samples `279` through `284`, every frame
+selected the existing full `0.20` outward recovery, yet its retained tangential
+Y action and resumed positive-Z tracking accompanied a persistent measured
+inward response that grew from `0.301632 mm` to `0.433836 mm`. Outside
+clearance fell from `2.272914 mm` to `0.141139 mm`, crossing the unchanged
+`0.400 mm` one-controller-step corridor reserve; the gate stopped before
+contact seek. A meaningful inward response that selects full recovery now
+isolates native OSC authority to the same existing `0.20` pure outward action:
+tangential XY and Z are exactly zero. This action repeats while the response is
+inward or live clearance has not strictly exceeded the unchanged refill target.
+Only a noninward response within the existing `0.050 mm` resolution together
+with restored refill reserve releases the latch back to the existing coupled
+fixed-safe-Z law. No route, budget, action bound, physical threshold, response
+threshold, task, inventory, state, prompt, goal, or intervention changes.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.
