@@ -1299,6 +1299,22 @@ the existing `0.050 mm` measurement resolution converted through the existing
 inward response recovery, predecessor response confirmation, all lateral and
 reserve envelopes, final confirmation, route budget, and every physical gate
 remain unchanged.
+Job504107 confirmed that the `0.000625` action release removed the Job504104
+limit cycle: from sample `233` onward it produced no additional meaningful
+inward response or full recovery, and all `321` structural and physical samples
+remained accepted. It was nevertheless too slow for the frozen route budget:
+`41` response-confirmed decrements reduced outward action only from `0.184375`
+to `0.15875`, while the terminal lateral error remained `5.542 mm` and outside
+clearance approached the existing refill target at `1.660 mm`. A transient
+dynamic decrement therefore uses the smaller of the unchanged strict lateral
+action bound and the unchanged strict-target coupled release step. For L3-A3
+this is `min(0.005, 0.015625) = 0.005` action. It is an existing action bound,
+not a new threshold, remains below the decrement that caused Job504104's limit
+cycle, and retains predecessor response confirmation. The `0.000625` quantity
+continues to serve only as the predecessor action-repeat tolerance derived from
+measurement resolution. The route budget, meaningful-inward full recovery,
+dynamic and strict lateral envelopes, reserves, final confirmation, and every
+physical gate remain unchanged.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.

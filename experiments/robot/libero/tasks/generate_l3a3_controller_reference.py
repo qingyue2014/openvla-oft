@@ -5580,8 +5580,15 @@ def _fixed_safe_z_lateral_hold_action(
         if release_slew_enabled
         else None
     )
-    coupled_xy_transient_neutral_release_action_step = float(
-        progress_resolution_m / position_action_scale
+    coupled_xy_transient_neutral_release_action_step = (
+        float(
+            min(
+                maximum_lateral_translation_action,
+                coupled_xy_neutral_release_action_step,
+            )
+        )
+        if release_slew_enabled
+        else None
     )
     outside_response_projected_clearance_m = float(
         live_outside_clearance + measured_outward_step_progress_m
@@ -6402,7 +6409,8 @@ def _fixed_safe_z_lateral_hold_action(
             coupled_xy_transient_neutral_release_action_step
         ),
         "coupled_xy_transient_neutral_release_action_step_formula": (
-            "progress_resolution_m / position_action_scale"
+            "min(maximum_lateral_translation_action, "
+            "coupled_xy_neutral_release_action_step)"
         ),
         "coupled_xy_selected_neutral_release_action_step": (
             coupled_xy_selected_neutral_release_action_step
@@ -6591,8 +6599,8 @@ def _fixed_safe_z_lateral_hold_action(
             "transient_xy_hold_is_independent_of_z_tracking_acceptance": True,
             "stable_transient_lateral_hold_can_qualify_one_coupled_xy_"
             "decrement": True,
-            "transient_dynamic_decrement_uses_response_resolution_"
-            "action_step": True,
+            "transient_dynamic_decrement_uses_strict_lateral_action_"
+            "bound": True,
             "dynamic_lateral_hold_uses_existing_hazard_response_bound": True,
             "dynamic_lateral_handoff_requires_inward_return_request": True,
             "coupled_xy_neutralization_preserves_bounded_progress": True,

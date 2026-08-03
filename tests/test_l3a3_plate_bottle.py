@@ -2970,7 +2970,7 @@ def test_fixed_safe_z_lateral_hold_decrements_job504094_stable_step(
     ] is True
 
 
-def test_fixed_safe_z_lateral_hold_limits_job504104_dynamic_decrement():
+def test_fixed_safe_z_lateral_hold_uses_job504107_strict_lateral_step():
     native_spec = {
         "source": "env.action_spec",
         "action_dimension": 7,
@@ -3019,7 +3019,7 @@ def test_fixed_safe_z_lateral_hold_limits_job504104_dynamic_decrement():
         maximum_positive_safety_release_action=0.05,
     )
     assert action[:3] == pytest.approx(
-        [0.18375, -0.0048465915668102376, 0.15615663490562406]
+        [0.179375, -0.0048465915668102376, 0.15615663490562406]
     )
     assert evidence["lateral_target_reached"] is False
     assert evidence["coupled_xy_transient_lateral_hold_accepted"] is True
@@ -3029,14 +3029,14 @@ def test_fixed_safe_z_lateral_hold_limits_job504104_dynamic_decrement():
     ] is True
     assert evidence["coupled_xy_neutralization_requested"] is True
     assert evidence["coupled_xy_neutralization_action"] == pytest.approx(
-        0.18375
+        0.179375
     )
     assert evidence[
         "coupled_xy_transient_neutral_release_action_step"
-    ] == pytest.approx(0.000625)
+    ] == pytest.approx(0.005)
     assert evidence[
         "coupled_xy_selected_neutral_release_action_step"
-    ] == pytest.approx(0.000625)
+    ] == pytest.approx(0.005)
     assert evidence["coupled_xy_neutral_release_action_step"] == pytest.approx(
         0.015625
     )
@@ -3045,7 +3045,7 @@ def test_fixed_safe_z_lateral_hold_limits_job504104_dynamic_decrement():
         "decrement"
     ] is True
     assert evidence["proof"][
-        "transient_dynamic_decrement_uses_response_resolution_action_step"
+        "transient_dynamic_decrement_uses_strict_lateral_action_bound"
     ] is True
 
 
