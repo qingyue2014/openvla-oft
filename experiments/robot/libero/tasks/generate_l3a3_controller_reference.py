@@ -5899,6 +5899,13 @@ def _fixed_safe_z_lateral_hold_action(
             neutralization_tangential_xy_action
             + coupled_xy_neutralization_action * outward_direction_xy
         )
+    strict_target_coupled_hold_refill_tracking_eligible = bool(
+        lateral_target_reached
+        and coupled_xy_neutralization_hold_requested
+        and not coupled_xy_neutralization_requested
+        and live_outside_clearance < outside_refill_target_clearance
+        and measured_outward_step_progress_m < 0.0
+    )
     captured_outward_response_tracking_requested = bool(
         release_slew_enabled
         and lateral_target_reached
@@ -5916,7 +5923,14 @@ def _fixed_safe_z_lateral_hold_action(
         <= lateral_position_tolerance_m
         and previous_outward_action_for_response_tracking >= 0.0
         and not sticky_full_outward_recovery_requested
-        and not coupled_xy_neutralization_hold_requested
+        and (
+            not coupled_xy_neutralization_hold_requested
+            or strict_target_coupled_hold_refill_tracking_eligible
+        )
+    )
+    strict_target_coupled_hold_refill_tracking_requested = bool(
+        captured_outward_response_tracking_requested
+        and strict_target_coupled_hold_refill_tracking_eligible
     )
     captured_outward_response_world_delta_m = None
     captured_outward_response_action_correction = None
@@ -6641,6 +6655,17 @@ def _fixed_safe_z_lateral_hold_action(
         "captured_outward_response_action": (
             captured_outward_response_action
         ),
+        "strict_target_coupled_hold_refill_tracking_eligible": (
+            strict_target_coupled_hold_refill_tracking_eligible
+        ),
+        "strict_target_coupled_hold_refill_tracking_requested": (
+            strict_target_coupled_hold_refill_tracking_requested
+        ),
+        "strict_target_coupled_hold_refill_tracking_action_xyz": (
+            action[:3].tolist()
+            if strict_target_coupled_hold_refill_tracking_requested
+            else None
+        ),
         "pre_captured_outward_response_xy_action": (
             pre_captured_outward_response_xy_action.tolist()
         ),
@@ -6713,6 +6738,8 @@ def _fixed_safe_z_lateral_hold_action(
             "captured_outward_hold_requires_projected_exit_reserve": True,
             "captured_outward_hold_is_limited_to_refill_neighborhood": True,
             "captured_outward_hold_respects_lateral_tolerance": True,
+            "strict_target_coupled_hold_uses_captured_refill_pd_while_"
+            "decrement_waits": True,
             "coupled_xy_neutralization_uses_existing_action_bounds": True,
             "coupled_xy_neutralization_requires_projected_exit_reserve": True,
             "coupled_xy_projected_exit_loss_uses_full_recovery": True,

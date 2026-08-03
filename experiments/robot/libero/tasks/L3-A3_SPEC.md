@@ -1403,6 +1403,26 @@ not apply to meaningful-inward, downward-tail, below-band, table-recovery,
 severe-response, strict-target, live-full-brake, or full-recovery cases. The
 pure-X increment, thresholds, route budget, and every current/projected/post-
 action hard gate remain unchanged.
+Job504171 verified that safe-Z retention remained stable and let the lateral
+path enter the unchanged `5.0 mm` target at sample `362`. A separate liveness
+conflict then appeared: `coupled_xy_neutralization_hold_requested` correctly
+held the prior XY command while the existing `1.650000 mm` refill condition
+prevented a decrement, but that hold also disabled the existing captured
+outward-response refill controller. Repeating `+0.164375` X and `-0.004970` Y
+allowed outside clearance to fall from `1.623278 mm` to `1.518995 mm`; a
+meaningful inward response at sample `375` correctly selected strict-target
+full recovery, and the unchanged physical gate stopped the delayed response at
+sample `379`. When the strict lateral target is true, coupled hold is active,
+and its decrement is not yet eligible, the already-defined captured-response
+PD refill formula may therefore override only the outward component when live
+clearance is below the same refill target and the measured response is inward,
+while all of its existing live/projected exit, refill-neighborhood, table,
+response,
+sticky-recovery, and action predicates pass. The tangential component and
+guarded Z remain those of the coupled hold. The override disables immediately
+when the decrement becomes eligible or any existing predicate fails. It does
+not change Job504122 strict-target full recovery, any threshold, or any hard
+gate.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.
