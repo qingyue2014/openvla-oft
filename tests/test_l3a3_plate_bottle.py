@@ -3181,7 +3181,7 @@ def test_fixed_safe_z_lateral_hold_restores_job504122_strict_recovery():
     )
 
 
-def test_fixed_safe_z_lateral_hold_isolates_job504132_projected_exit():
+def test_fixed_safe_z_lateral_hold_bounds_job504135_projected_exit():
     native_spec = {
         "source": "env.action_spec",
         "action_dimension": 7,
@@ -3230,22 +3230,23 @@ def test_fixed_safe_z_lateral_hold_isolates_job504132_projected_exit():
         maximum_positive_safety_release_action=0.05,
     )
     assert action[:3] == pytest.approx(
-        [0.20, 0.0, 0.1311177869440223]
+        [0.164375, 0.0, 0.1311177869440223]
     )
     assert evidence["measured_inward_response"] is False
     assert evidence["coupled_xy_unload_projected_exit_loss"] is True
-    assert evidence["full_outward_recovery_active"] is True
+    assert evidence["bounded_projected_exit_brake_requested"] is True
+    assert evidence["full_outward_recovery_active"] is False
     assert evidence[
         "outward_xy_recovery_authority_isolation_projected_exit_entry"
-    ] is True
+    ] is False
     assert evidence[
         "outward_xy_recovery_authority_isolation_requested"
-    ] is True
+    ] is False
     assert evidence[
-        "outward_xy_recovery_authority_isolation_action_xyz"
-    ] == pytest.approx([0.20, 0.0, 0.1311177869440223])
+        "bounded_projected_exit_brake_action_xyz"
+    ] == pytest.approx([0.164375, 0.0, 0.1311177869440223])
     assert evidence["proof"][
-        "projected_exit_loss_isolates_full_recovery_to_pure_outward_xy"
+        "healthy_dynamic_projected_exit_uses_incremental_pure_xy_brake"
     ] is True
 
 

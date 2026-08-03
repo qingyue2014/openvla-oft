@@ -5542,6 +5542,31 @@ def _fixed_safe_z_lateral_hold_action(
         and not sticky_full_outward_recovery_requested
         and not coupled_xy_unload_projected_exit_loss
     )
+    bounded_projected_exit_brake_requested = bool(
+        release_slew_enabled
+        and coupled_xy_unload_projected_exit_loss
+        and not measured_inward_response
+        and not lateral_target_reached
+        and previous_outward_action_for_recovery
+        > min(strict_safety_brake_bound, 2.0 * strict_lateral_bound)
+        and previous_outward_action_for_recovery
+        < strict_safety_brake_bound
+        and live_outside_clearance > outside_recovery_clearance
+        and live_table_clearance > outside_recovery_exit_clearance
+        and abs(fixed_safe_z_m - current_eef[2])
+        <= vertical_position_tolerance_m
+        and lateral_error_m
+        <= lateral_position_tolerance_m
+        + closed_loop_hazard_response_bound_m
+        and projected_lateral_error_after_measured_outward_response_m
+        <= lateral_position_tolerance_m
+        + closed_loop_hazard_response_bound_m
+        and not live_full_outward_brake_active
+        and not downward_vertical_response
+        and not severe_vertical_response
+        and not stability_pending_outside_recovery_requested
+        and not sticky_full_outward_recovery_requested
+    )
     outside_recovery_active = bool(
         measured_inward_response
         or live_outside_recovery_active
@@ -5570,7 +5595,10 @@ def _fixed_safe_z_lateral_hold_action(
                 previous_outward_action_for_recovery
                 + bounded_inward_response_brake_step,
             )
-            if bounded_inward_response_brake_requested
+            if (
+                bounded_inward_response_brake_requested
+                or bounded_projected_exit_brake_requested
+            )
             else strict_safety_brake_bound
             if (
                 measured_inward_response
@@ -5589,7 +5617,10 @@ def _fixed_safe_z_lateral_hold_action(
         )
         commanded_xy_action = (
             outward_direction_xy * selected_outward_recovery_action
-            if bounded_inward_response_brake_requested
+            if (
+                bounded_inward_response_brake_requested
+                or bounded_projected_exit_brake_requested
+            )
             else (
                 outward_direction_xy * selected_outward_recovery_action
                 + tangential_xy_action_before_recovery
@@ -6397,6 +6428,14 @@ def _fixed_safe_z_lateral_hold_action(
             if bounded_inward_response_brake_requested
             else None
         ),
+        "bounded_projected_exit_brake_requested": (
+            bounded_projected_exit_brake_requested
+        ),
+        "bounded_projected_exit_brake_action_xyz": (
+            action[:3].tolist()
+            if bounded_projected_exit_brake_requested
+            else None
+        ),
         "tangential_xy_action_before_recovery": (
             tangential_xy_action_before_recovery.tolist()
         ),
@@ -6620,6 +6659,9 @@ def _fixed_safe_z_lateral_hold_action(
             "bound": True,
             "full_outward_brake_retained_outside_bounded_brake_"
             "eligibility": True,
+            "healthy_dynamic_projected_exit_uses_incremental_pure_xy_"
+            "brake": True,
+            "strict_target_projected_exit_retains_full_recovery": True,
             "live_low_reserve_uses_full_outward_brake": True,
             "severe_vertical_response_uses_full_outward_brake": True,
             "downward_vertical_response_uses_full_outward_brake": True,

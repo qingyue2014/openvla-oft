@@ -1356,6 +1356,20 @@ therefore enters the same pure-outward XY isolation as a meaningful inward
 response. Only tangential XY is zeroed; guarded Z and the existing latch until
 refill reserve plus a noninward response remain unchanged. No new predicate,
 threshold, action bound, or budget is introduced.
+Job504135 confirmed that projected-exit XY isolation removed the tangential
+component at sample `265`, but pure X still jumped from `0.159375` directly to
+`0.20`. The resulting `+0.145426 mm` outward response was followed by large
+vertical tails and renewed refill/release oscillation; the unchanged corridor
+reserve stopped the run at sample `303`. In the dynamic regime only, when no
+meaningful inward response exists, current outside clearance is still strictly
+above the existing `outside_recovery_clearance`, table and safe-Z gates pass,
+current and projected lateral error remain in the existing dynamic envelope,
+vertical response is neither downward nor severe, and the previous action is
+below full recovery, projected-exit braking therefore increases pure outward X
+by the existing strict `0.005` lateral action bound and retains guarded Z.
+Continuing eligible frames repeat that increment up to `0.20`. Strict-target
+projected-exit loss and failure of any eligibility predicate retain the prior
+full or required recovery. No threshold, bound, or budget changes.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.
