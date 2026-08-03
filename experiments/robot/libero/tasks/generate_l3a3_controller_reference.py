@@ -5423,6 +5423,28 @@ def _fixed_safe_z_lateral_hold_action(
         )
         >= strict_safety_brake_bound
     )
+    previous_outward_action_for_recovery = (
+        float(
+            np.dot(
+                previous_commanded_action_xyz[:2],
+                outward_direction_xy,
+            )
+        )
+        if release_slew_enabled
+        else None
+    )
+    coupled_xy_unload_projected_exit_loss = bool(
+        release_slew_enabled
+        and previous_outward_action_for_recovery
+        > min(strict_safety_brake_bound, 2.0 * strict_lateral_bound)
+        and previous_outward_action_for_recovery
+        < strict_safety_brake_bound
+        and min(
+            live_outside_clearance,
+            live_outside_clearance + measured_outward_step_progress_m,
+        )
+        <= outside_recovery_exit_clearance
+    )
     sticky_full_outward_recovery_requested = bool(
         previous_full_outward_recovery_action
         and lateral_target_reached
@@ -5453,6 +5475,7 @@ def _fixed_safe_z_lateral_hold_action(
         or predicted_outside_after_lateral <= outside_recovery_clearance
         or stability_pending_outside_recovery_requested
         or sticky_full_outward_recovery_requested
+        or coupled_xy_unload_projected_exit_loss
     )
     if outside_recovery_active:
         required_outward_recovery_action = float(
@@ -5478,6 +5501,7 @@ def _fixed_safe_z_lateral_hold_action(
                 or severe_vertical_response
                 or stability_pending_outside_recovery_requested
                 or sticky_full_outward_recovery_requested
+                or coupled_xy_unload_projected_exit_loss
             )
             else min(
                 strict_safety_brake_bound,
@@ -5509,7 +5533,7 @@ def _fixed_safe_z_lateral_hold_action(
         float(
             min(
                 maximum_positive_safety_release_action,
-                4.0 * strict_lateral_bound
+                3.0 * strict_lateral_bound
                 + progress_resolution_m / position_action_scale,
             )
         )
@@ -6135,6 +6159,9 @@ def _fixed_safe_z_lateral_hold_action(
         "previous_full_outward_recovery_action": (
             previous_full_outward_recovery_action
         ),
+        "coupled_xy_unload_projected_exit_loss": (
+            coupled_xy_unload_projected_exit_loss
+        ),
         "previous_outward_action_for_response_tracking": (
             previous_outward_action_for_response_tracking
         ),
@@ -6246,6 +6273,7 @@ def _fixed_safe_z_lateral_hold_action(
             "captured_outward_hold_respects_lateral_tolerance": True,
             "coupled_xy_neutralization_uses_existing_action_bounds": True,
             "coupled_xy_neutralization_requires_projected_exit_reserve": True,
+            "coupled_xy_projected_exit_loss_uses_full_recovery": True,
             "coupled_xy_neutralization_entry_requires_stable_responses": True,
             "every_coupled_xy_decrement_requires_stable_responses": True,
             "coupled_xy_neutralization_preserves_bounded_progress": True,

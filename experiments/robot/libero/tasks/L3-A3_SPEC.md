@@ -1011,6 +1011,21 @@ An inward response or lost projected reserve continues to invoke immediate full
 recovery. No physical threshold, route, budget, task, inventory, state, prompt,
 goal, or intervention changes.
 
+Job503914 issued one `0.020625` decrement and correctly held the reduced
+`0.179375` outward action on the following frame. Inertia nevertheless lowered
+live clearance to `1.546961 mm`, with a one-response projection of
+`1.497670 mm`. Because the measured response was `-0.049291 mm`, still just
+inside the existing deadband, the generic recovery branch released the prior
+action by another `0.05` before full recovery began. During an in-progress
+neutralization, current or one-response projected loss of the existing recovery
+exit now requests immediate full outward recovery even when the response is
+inside the deadband; no intermediate positive-action release is permitted. The
+per-step decrement is reduced to `0.015625`: three times the existing strict
+lateral bound plus the existing response resolution divided by the existing
+position scale. Stable waiting between decrements is unchanged, and the step
+remains below the existing maximum release action. No physical threshold,
+route, budget, task, inventory, state, prompt, goal, or intervention changes.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

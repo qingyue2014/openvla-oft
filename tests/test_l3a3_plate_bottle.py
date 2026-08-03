@@ -1272,7 +1272,7 @@ def test_fixed_safe_z_lateral_hold_slews_job503647_positive_release():
         maximum_positive_safety_release_action=0.05,
     )
     assert action[:3].tolist() == pytest.approx(
-        [0.179375, 0.0, 0.20]
+        [0.184375, 0.0, 0.20]
     )
     assert evidence["release_slew_enabled"] is True
     assert evidence["outward_release_slew_applied"] is False
@@ -1281,7 +1281,7 @@ def test_fixed_safe_z_lateral_hold_slews_job503647_positive_release():
     assert evidence["coupled_xy_neutralization_entry_stable"] is True
     assert evidence["coupled_xy_neutralization_hold_requested"] is True
     assert evidence["coupled_xy_neutralization_action"] == pytest.approx(
-        0.179375
+        0.184375
     )
     assert evidence["captured_safe_z_response_hold_requested"] is True
     assert evidence["positive_z_release_slew_applied"] is False
@@ -2367,14 +2367,14 @@ def test_fixed_safe_z_lateral_hold_neutralizes_job503907_coupled_xy():
         maximum_positive_safety_release_action=0.05,
     )
     assert action[:3] == pytest.approx(
-        [0.179375, 0.0, 0.1639123102406643]
+        [0.184375, 0.0, 0.1639123102406643]
     )
     assert evidence["lateral_target_reached"] is True
     assert evidence["coupled_xy_neutralization_requested"] is True
     assert evidence["coupled_xy_neutralization_entry_stable"] is True
     assert evidence["coupled_xy_neutralization_hold_requested"] is True
     assert evidence["coupled_xy_neutralization_action"] == pytest.approx(
-        0.179375
+        0.184375
     )
     assert evidence["captured_safe_z_response_hold_requested"] is True
     assert evidence[
@@ -2384,7 +2384,7 @@ def test_fixed_safe_z_lateral_hold_neutralizes_job503907_coupled_xy():
         0.01
     )
     assert evidence["coupled_xy_neutral_release_action_step"] == pytest.approx(
-        0.020625
+        0.015625
     )
     assert evidence["proof"][
         "neutral_z_confirmation_requires_small_coupled_xy_action"
@@ -2506,6 +2506,64 @@ def test_fixed_safe_z_lateral_hold_waits_after_job503911_unload_step():
     )
     assert evidence["proof"][
         "every_coupled_xy_decrement_requires_stable_responses"
+    ] is True
+
+
+def test_fixed_safe_z_lateral_hold_recovers_job503914_projected_exit_loss():
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": (-np.ones(7, dtype=float)).tolist(),
+        "high": np.ones(7, dtype=float).tolist(),
+        "runtime_resolved": True,
+    }
+    action, evidence = _fixed_safe_z_lateral_hold_action(
+        current_eef=np.array(
+            [0.13286725113702028, -0.023723283129517696, 0.920672356493915]
+        ),
+        lateral_target_xy=np.array(
+            [0.13242106705090634, -0.02850777957668001]
+        ),
+        lateral_position_tolerance_m=0.005,
+        fixed_safe_z_m=0.920581288496378,
+        vertical_position_tolerance_m=0.0004,
+        measured_vertical_step_progress_m=0.00017035519822639067,
+        measured_outward_step_progress_m=-0.00004929146664697792,
+        outside_side_guard={
+            "minimum_outside_clearance_m": 0.0015469614207969523,
+            "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+            "finger_table_vertical_clearance_m": 0.008016745214241117,
+            "required_finger_table_clearance_m": np.nextafter(
+                0.0, np.inf
+            ),
+        },
+        outward_direction_xy=np.array([1.0, 0.0]),
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_lateral_translation_action=0.005,
+        maximum_safety_brake_action=0.20,
+        strict_outside_clearance_m=0.0004,
+        strict_table_clearance_m=0.0004,
+        closed_loop_hazard_response_bound_m=0.0011,
+        full_outward_brake_clearance_m=0.00095,
+        progress_resolution_m=0.00005,
+        derivative_gain=2.0,
+        native_action_spec=native_spec,
+        previous_commanded_action_xyz=np.array(
+            [0.179375, 0.0, 0.16347904153041612]
+        ),
+        maximum_positive_safety_release_action=0.05,
+    )
+    assert action[:3] == pytest.approx(
+        [0.20, 0.0, 0.15808181160554388]
+    )
+    assert evidence["coupled_xy_unload_projected_exit_loss"] is True
+    assert evidence["outside_recovery_active"] is True
+    assert evidence["full_outward_recovery_active"] is True
+    assert evidence["coupled_xy_neutralization_hold_requested"] is False
+    assert evidence["outward_release_slew_applied"] is False
+    assert evidence["proof"][
+        "coupled_xy_projected_exit_loss_uses_full_recovery"
     ] is True
 
 
