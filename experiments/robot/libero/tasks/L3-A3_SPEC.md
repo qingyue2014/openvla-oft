@@ -1042,6 +1042,20 @@ current/projected reserve still invokes the original recovery path. No physical
 threshold, route, budget, task, inventory, state, prompt, goal, or intervention
 changes.
 
+Job503927 used the lateral hysteresis successfully and reached four decrements
+with sixteen progress-hold frames. The third decrement began with projected
+clearance `1.648842 mm`, only `0.001158 mm` below the existing `1.65 mm` refill
+target, and subsequently required full recovery. After that recovery, one
+`X=0.15` release frame happened to pass the instantaneous response limits; the
+controller immediately treated it as established progress, decremented to
+`0.134375`, and observed a `-0.155426 mm` outward response. Every decrement now
+requires both current and one-response projected clearance above the existing
+refill target. It also requires that the two preceding XY action vectors be
+exactly identical. A one-frame post-recovery release is therefore held for at
+least one further response measurement before it can decrement. Z may continue
+captured tracking during that hold. No physical threshold, route, budget, task,
+inventory, state, prompt, goal, or intervention changes.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

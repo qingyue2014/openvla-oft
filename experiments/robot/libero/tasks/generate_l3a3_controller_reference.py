@@ -5165,6 +5165,7 @@ def _fixed_safe_z_lateral_hold_action(
     derivative_gain,
     native_action_spec,
     previous_commanded_action_xyz=None,
+    preceding_commanded_action_xyz=None,
     maximum_positive_safety_release_action=None,
     vertical_stability_confirmation_hold=False,
 ):
@@ -5235,7 +5236,13 @@ def _fixed_safe_z_lateral_hold_action(
         (previous_commanded_action_xyz is None)
         != (maximum_positive_safety_release_action is None)
     )
-    if release_slew_arguments_partial:
+    if (
+        release_slew_arguments_partial
+        or (
+            previous_commanded_action_xyz is None
+            and preceding_commanded_action_xyz is not None
+        )
+    ):
         raise ValueError(
             "fixed-safe-Z positive safety release inputs must be paired"
         )
@@ -5246,14 +5253,27 @@ def _fixed_safe_z_lateral_hold_action(
         previous_commanded_action_xyz = np.asarray(
             previous_commanded_action_xyz, dtype=float
         )
+        preceding_commanded_action_defaulted = bool(
+            preceding_commanded_action_xyz is None
+        )
+        preceding_commanded_action_xyz = np.asarray(
+            previous_commanded_action_xyz
+            if preceding_commanded_action_defaulted
+            else preceding_commanded_action_xyz,
+            dtype=float,
+        )
         maximum_positive_safety_release_action = float(
             maximum_positive_safety_release_action
         )
         if (
             previous_commanded_action_xyz.shape != (3,)
+            or preceding_commanded_action_xyz.shape != (3,)
             or not np.all(np.isfinite(previous_commanded_action_xyz))
+            or not np.all(np.isfinite(preceding_commanded_action_xyz))
             or np.any(previous_commanded_action_xyz < native_low[:3])
             or np.any(previous_commanded_action_xyz > native_high[:3])
+            or np.any(preceding_commanded_action_xyz < native_low[:3])
+            or np.any(preceding_commanded_action_xyz > native_high[:3])
             or not np.isfinite(maximum_positive_safety_release_action)
             or not 0.0 < maximum_positive_safety_release_action
             < maximum_safety_brake_action
@@ -5261,6 +5281,8 @@ def _fixed_safe_z_lateral_hold_action(
             raise ValueError(
                 "fixed-safe-Z positive safety release inputs are invalid"
             )
+    else:
+        preceding_commanded_action_defaulted = False
     previous_xy_action_neutral = bool(
         release_slew_enabled
         and np.all(previous_commanded_action_xyz[:2] == 0.0)
@@ -5570,6 +5592,13 @@ def _fixed_safe_z_lateral_hold_action(
         and previous_outward_action_for_response_tracking
         < strict_safety_brake_bound
     )
+    coupled_xy_preceding_action_repeated = bool(
+        release_slew_enabled
+        and np.array_equal(
+            previous_commanded_action_xyz[:2],
+            preceding_commanded_action_xyz[:2],
+        )
+    )
     coupled_xy_neutralization_step_stable = bool(
         abs(coupled_xy_neutralization_position_error_m)
         <= vertical_position_tolerance_m
@@ -5577,12 +5606,13 @@ def _fixed_safe_z_lateral_hold_action(
         <= progress_resolution_m
         and 0.0 <= measured_outward_step_progress_m
         <= progress_resolution_m
-    )
-    coupled_xy_neutralization_entry_stable = bool(
-        coupled_xy_neutralization_step_stable
+        and coupled_xy_preceding_action_repeated
         and live_outside_clearance > outside_refill_target_clearance
         and outside_response_projected_clearance_m
         > outside_refill_target_clearance
+    )
+    coupled_xy_neutralization_entry_stable = bool(
+        coupled_xy_neutralization_step_stable
     )
     coupled_xy_neutralization_lateral_hold_tolerance_m = float(
         lateral_position_tolerance_m + progress_resolution_m
@@ -6201,6 +6231,17 @@ def _fixed_safe_z_lateral_hold_action(
         "coupled_xy_neutralization_in_progress": (
             coupled_xy_neutralization_in_progress
         ),
+        "preceding_commanded_action_defaulted": (
+            preceding_commanded_action_defaulted
+        ),
+        "preceding_commanded_action_xyz": (
+            preceding_commanded_action_xyz.tolist()
+            if release_slew_enabled
+            else None
+        ),
+        "coupled_xy_preceding_action_repeated": (
+            coupled_xy_preceding_action_repeated
+        ),
         "coupled_xy_neutralization_entry_stable": (
             coupled_xy_neutralization_entry_stable
         ),
@@ -6306,6 +6347,8 @@ def _fixed_safe_z_lateral_hold_action(
             "coupled_xy_projected_exit_loss_uses_full_recovery": True,
             "coupled_xy_neutralization_entry_requires_stable_responses": True,
             "every_coupled_xy_decrement_requires_stable_responses": True,
+            "every_coupled_xy_decrement_requires_repeated_preceding_xy": True,
+            "every_coupled_xy_decrement_requires_refill_reserve": True,
             "coupled_xy_neutralization_preserves_bounded_progress": True,
             "coupled_xy_lateral_hysteresis_preserves_outward_progress": True,
             "coupled_xy_lateral_hysteresis_uses_strict_tangential_bound": True,
@@ -17723,6 +17766,7 @@ def _seek_stable_plate_contact(
     high_plane_workspace_saturation_observations = []
     fixed_safe_z = None
     fixed_safe_z_previous_commanded_action_xyz = None
+    fixed_safe_z_preceding_commanded_action_xyz = None
     fixed_safe_z_positive_safety_release_action = 0.05
     vertical_corridor_neutral_damping_release_action = 0.025
     vertical_corridor_hazard_outward_brake_action = float(
@@ -19601,6 +19645,9 @@ def _seek_stable_plate_contact(
                 previous_commanded_action_xyz=(
                     fixed_safe_z_previous_commanded_action_xyz
                 ),
+                preceding_commanded_action_xyz=(
+                    fixed_safe_z_preceding_commanded_action_xyz
+                ),
                 maximum_positive_safety_release_action=(
                     fixed_safe_z_positive_safety_release_action
                 ),
@@ -19608,6 +19655,10 @@ def _seek_stable_plate_contact(
                     fixed_safe_z_stable_count > 0
                 ),
             )
+            fixed_safe_z_preceding_commanded_action_xyz = np.asarray(
+                fixed_safe_z_previous_commanded_action_xyz,
+                dtype=float,
+            ).copy()
             fixed_safe_z_previous_commanded_action_xyz = np.asarray(
                 action[:3], dtype=float
             ).copy()
@@ -20783,6 +20834,7 @@ def _seek_stable_plate_contact(
                 fixed_safe_z_previous_commanded_action_xyz = np.asarray(
                     action[:3], dtype=float
                 ).copy()
+                fixed_safe_z_preceding_commanded_action_xyz = None
             elif (
                 hazard_release_zero_coast_active_before_action
                 and zero_coast_stable_count >= 2
