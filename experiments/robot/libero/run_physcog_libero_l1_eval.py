@@ -78,6 +78,13 @@ from experiments.robot.libero.tasks.l3b_moka_runtime_gate import (
     MokaOrderRuntimeGate,
     MokaOrderRuntimeGateError,
 )
+from experiments.robot.libero.tasks.l3b3_microwave_runtime_gate import (
+    MicrowavePreconditionRuntimeGate,
+    MicrowavePreconditionRuntimeGateError,
+)
+from experiments.robot.libero.tasks.l3b3_microwave_precondition_common import (
+    MicrowavePreconditionSequenceTracker,
+)
 from experiments.robot.libero.physcog_l3c import L3CConfig, TemporalSharedSpaceIntervention
 from experiments.robot.libero.run_libero_eval import (
     GenerateConfig as LiberoGenerateConfig,
@@ -301,6 +308,9 @@ def run_episode_with_safety(
 
     runtime_initial_gate = {}
     moka_runtime_gate = None
+    microwave_runtime_gate = None
+    microwave_sequence_tracker = None
+    microwave_sequence = {}
     if cfg.native_only_preflight_manifest:
         with open(
             cfg.native_only_preflight_manifest, encoding="utf-8"
@@ -316,6 +326,14 @@ def run_episode_with_safety(
                     "L3-B moka evaluation requires a bound HDF5 state record"
                 )
             moka_runtime_gate = MokaOrderRuntimeGate(
+                env, initial_state_record
+            )
+        elif runtime_scene == "L3-B3-MICROWAVE-PRECONDITION":
+            if initial_state_record is None:
+                raise MicrowavePreconditionRuntimeGateError(
+                    "L3-B3 evaluation requires a bound HDF5 state record"
+                )
+            microwave_runtime_gate = MicrowavePreconditionRuntimeGate(
                 env, initial_state_record
             )
 
@@ -487,6 +505,8 @@ def run_episode_with_safety(
                     recorder.record(obs, dummy_action, t, phase="wait")
                 if moka_runtime_gate is not None:
                     moka_runtime_gate.observe()
+                if microwave_runtime_gate is not None:
+                    microwave_runtime_gate.observe()
                 if cfg.support_check_during_wait:
                     check_safety(obs, dummy_action, t)
                 t += 1
@@ -499,6 +519,20 @@ def run_episode_with_safety(
                 runtime_initial_gate = moka_runtime_gate.finalize()
                 log_message(
                     "L3-B moka exact first-policy physical gate: PASS",
+                    log_file,
+                )
+            if (
+                microwave_runtime_gate is not None
+                and not microwave_runtime_gate.finalized
+            ):
+                runtime_initial_gate = microwave_runtime_gate.finalize()
+                microwave_sequence_tracker = MicrowavePreconditionSequenceTracker(
+                    env,
+                    microwave_runtime_gate.condition,
+                    policy_start_step=t,
+                )
+                log_message(
+                    "L3-B3 exact first-policy physical gate: PASS",
                     log_file,
                 )
 
@@ -560,6 +594,8 @@ def run_episode_with_safety(
             action = process_action(raw_action, cfg.model_family)
             env_gripper_commands.append(float(action[-1]))
             obs, reward, done, info = env.step(action.tolist())
+            if microwave_sequence_tracker is not None:
+                microwave_sequence_tracker.observe(t)
             if recorder is not None:
                 recorder.record(obs, action, t, phase="policy")
 
@@ -610,12 +646,18 @@ def run_episode_with_safety(
                         break
                 break
             t += 1
-    except MokaOrderRuntimeGateError:
+    except (MokaOrderRuntimeGateError, MicrowavePreconditionRuntimeGateError):
         # Scene validity errors invalidate the whole job.  They must never be
         # converted into ordinary policy failures and included in metrics.
         raise
     except Exception as exc:
         log_message(f"Episode error: {exc}", log_file)
+
+    if microwave_sequence_tracker is not None:
+        microwave_sequence = microwave_sequence_tracker.finalize(
+            task_success=success,
+            final_step=t,
+        )
 
     # Post-episode outcome attribution must run before oracle metrics are
     # logged. L3 closure attribution depends on the final task outcome and
@@ -795,6 +837,7 @@ def run_episode_with_safety(
         "wrist_images": wrist_images,
         "l3c_metrics": {} if l3c is None else l3c.metrics(),
         "runtime_initial_gate": runtime_initial_gate,
+        "l3b3_microwave_sequence": microwave_sequence,
         "oracle_metrics": oracle.metrics(),
         "gripper_metrics": gripper_metrics,
     }
@@ -893,6 +936,71 @@ def run_task_with_safety(
             )
 
             native_runtime_inventory_check = verify_runtime_asset_inventory
+        elif (
+            native_record.get("scenario") or native_record.get("scene_id")
+        ) == "L3-B3-MICROWAVE-PRECONDITION":
+            from experiments.robot.libero.tasks import (
+                validate_l3b3_microwave_artifacts as l3b3_artifacts,
+            )
+
+            if cfg.model_family == "openvla":
+                verify_evaluation_request = (
+                    l3b3_artifacts.verify_evaluation_request
+                )
+                view_gate = native_record.get("openvla_policy_view_gate") or {}
+                if view_gate.get("checkpoint") != cfg.pretrained_checkpoint:
+                    raise ValueError(
+                        "L3-B3 checkpoint is not bound to the exact policy-view gate"
+                    )
+                if cfg.center_crop is not True:
+                    raise ValueError(
+                        "L3-B3 requires the certified OpenVLA center crop"
+                    )
+            elif cfg.model_family == "pi05":
+                verify_evaluation_request = (
+                    l3b3_artifacts.verify_pi05_eb_diagnostic_evaluation_request
+                )
+                expected_note = "L3-B2-moved-cup-pi05-Eb-diagnostic"
+                if cfg.run_id_note != expected_note:
+                    raise ValueError(
+                        "L3-B3 geometry may be used with pi0.5 only for the "
+                        "bounded L3-B2 moved-cup Eb diagnostic"
+                    )
+                if cfg.pretrained_checkpoint != (
+                    "gs://openpi-assets/checkpoints/pi05_libero"
+                ):
+                    raise ValueError("L3-B2 moved-cup diagnostic checkpoint mismatch")
+                if cfg.num_trials_per_task > 5:
+                    raise ValueError(
+                        "L3-B2 moved-cup pi0.5 diagnostic is limited to five episodes"
+                    )
+                if cfg.safety_oracle != "none":
+                    raise ValueError(
+                        "L3-B2 moved-cup Eb diagnostic must use native task success"
+                    )
+                if cfg.num_steps_wait != 10:
+                    raise ValueError(
+                        "L3-B2 moved-cup diagnostic requires the formal ten-step wait"
+                    )
+                review_root = Path(cfg.review_video_dir).resolve()
+                expected_root = (
+                    Path(__file__).resolve().parents[3]
+                    / "review"
+                    / "L3-B2_task"
+                ).resolve()
+                if (
+                    expected_root != review_root
+                    and expected_root not in review_root.parents
+                ):
+                    raise ValueError(
+                        "L3-B2 moved-cup diagnostic videos must stay under "
+                        "review/L3-B2_task/"
+                    )
+            else:
+                raise ValueError("unsupported L3-B3 learned-policy family")
+            native_runtime_inventory_check = (
+                l3b3_artifacts.verify_runtime_asset_inventory
+            )
         else:
             raise ValueError(
                 "Unsupported native-only preflight task identity: "
@@ -1146,6 +1254,10 @@ def _save_episode_trajectory(
     if diagnostics.get("runtime_initial_gate"):
         metadata["runtime_initial_gate"] = diagnostics[
             "runtime_initial_gate"
+        ]
+    if diagnostics.get("l3b3_microwave_sequence"):
+        metadata["l3b3_microwave_sequence"] = diagnostics[
+            "l3b3_microwave_sequence"
         ]
     metadata.update(diagnostics.get("oracle_metrics", {}))
     metadata.update(diagnostics.get("gripper_metrics", {}))

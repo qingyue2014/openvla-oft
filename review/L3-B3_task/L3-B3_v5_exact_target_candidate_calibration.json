@@ -1,0 +1,4221 @@
+{
+  "candidate_thresholds": {
+    "heuristic_grasp_clearance_offset_m": 0.195,
+    "minimum_door_sweep_clearance_m": 0.02,
+    "minimum_mug_separation_m": 0.14
+  },
+  "candidates": [
+    {
+      "candidate_world_xy": [
+        0.22,
+        -0.25
+      ],
+      "door_limiting_pair": {
+        "clearance_components": {
+          "continuous_guard_m": 0.0063200775010948595,
+          "native_geom_margin_m": 0.001,
+          "net_clearance_m": 0.2520633531302882,
+          "primitive_clearance_m": 0.2593834306313831
+        },
+        "clearance_m": 0.2520633531302882,
+        "continuous_guard_m": 0.0063200775010948595,
+        "door_angle_rad": 1.6577499999999998,
+        "door_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 167,
+          "geom_margin": 0.001,
+          "geom_name": "microwave_1_g17",
+          "geom_rbound": 0.159594799414016,
+          "geom_size": [
+            0.1295,
+            0.012,
+            0.0925
+          ],
+          "geom_type": 6
+        },
+        "door_geom_id": 167,
+        "door_geom_name": "microwave_1_g17",
+        "method": "compiled box-box separating-axis gap",
+        "sample_fraction": 0.7916666666666666,
+        "sample_index": 38,
+        "target_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 127,
+          "geom_margin": 0.0,
+          "geom_name": "white_yellow_mug_1_g17",
+          "geom_rbound": 0.04467151329426842,
+          "geom_size": [
+            0.00412,
+            0.00876,
+            0.04361
+          ],
+          "geom_type": 6
+        },
+        "target_geom_id": 127,
+        "target_geom_name": "white_yellow_mug_1_g17"
+      },
+      "door_sweep_clearance_m": 0.2520633531302882,
+      "door_sweep_compiled": true,
+      "eligible_for_grasp_compilation": true,
+      "grasp_corridor_compiled": false,
+      "heuristic_grasp_high_eef": [
+        0.23501474616806445,
+        -0.4444210826981184,
+        1.1200908477404539
+      ],
+      "microwave_outward_direction_xy": [
+        0.07699869829776636,
+        -0.9970311933236842
+      ],
+      "nominal_grasp_eef": [
+        0.22,
+        -0.25,
+        0.9600908477404537
+      ],
+      "nominal_grasp_reference_open_fixture_clearance_m": 0.28493470337555576,
+      "nominal_grasp_reference_open_fixture_geometry": {
+        "compatible_pair_evaluations": 60,
+        "continuous_sweep_guard_m": 0.0,
+        "limiting_pair": {
+          "clearance_components": {
+            "continuous_guard_m": 0.0,
+            "native_geom_margin_m": 0.001,
+            "net_clearance_m": 0.28493470337555576,
+            "primitive_clearance_m": 0.28593470337555577
+          },
+          "clearance_m": 0.28493470337555576,
+          "fixture_body_name": "microwave_1_microdoorroot",
+          "fixture_compiled_geometry": {
+            "geom_dataid": -1,
+            "geom_id": 164,
+            "geom_margin": 0.001,
+            "geom_name": "microwave_1_g14",
+            "geom_rbound": 0.075,
+            "geom_size": [
+              0.01,
+              0.065,
+              0.0
+            ],
+            "geom_type": 3
+          },
+          "fixture_geom_id": 164,
+          "fixture_geom_name": "microwave_1_g14",
+          "method": "conservative compiled bounding spheres",
+          "moving_body_name": "gripper0_right_gripper",
+          "moving_compiled_geometry": {
+            "convex_mesh": {
+              "convex_hull_face_count": 200,
+              "convex_hull_vertex_count": 102,
+              "geom_id": 75,
+              "geom_name": "gripper0_hand_collision",
+              "geom_rbound": 0.11905841176741497,
+              "geom_size": [
+                0.03164141183398503,
+                0.0486720137040898,
+                0.10394595495602695
+              ],
+              "geom_type": 7,
+              "mesh_graph_address": 37354,
+              "mesh_id": 64,
+              "mesh_vertex_count": 102
+            },
+            "geom_dataid": 64,
+            "geom_id": 75,
+            "geom_margin": 0.0,
+            "geom_name": "gripper0_hand_collision",
+            "geom_rbound": 0.11905841176741497,
+            "geom_size": [
+              0.03164141183398503,
+              0.0486720137040898,
+              0.10394595495602695
+            ],
+            "geom_type": 7
+          },
+          "moving_geom_id": 75,
+          "moving_geom_name": "gripper0_hand_collision",
+          "sample_fraction": 0.0,
+          "sample_index": 0,
+          "translated_reference_position": [
+            0.22,
+            -0.25,
+            0.9600908477404537
+          ]
+        },
+        "minimum_clearance_m": 0.28493470337555576,
+        "path_end": [
+          0.22,
+          -0.25,
+          0.9600908477404537
+        ],
+        "path_length_m": 0.0,
+        "path_start": [
+          0.22,
+          -0.25,
+          0.9600908477404537
+        ],
+        "reference_position": [
+          -0.20960641372702207,
+          -0.005139944888850629,
+          1.165973673086924
+        ],
+        "sample_intervals": 1,
+        "sample_spacing_m": 0.0,
+        "sample_zero_is_current_pose": false,
+        "sample_zero_semantics": "synthetic translated path start; it equals current mjData geometry only when path_start equals reference_position"
+      },
+      "porcelain_xy_distance_m": 0.3371711792464251,
+      "post_open_eef_to_heuristic_grasp_high_m": 0.6267065721078978,
+      "reference_post_robot_open_qpos": -1.3627293032300833,
+      "target_position": [
+        0.22,
+        -0.25,
+        0.9000908477404538
+      ]
+    },
+    {
+      "candidate_world_xy": [
+        0.15,
+        -0.1
+      ],
+      "door_limiting_pair": {
+        "clearance_components": {
+          "continuous_guard_m": 0.0063200775010948595,
+          "native_geom_margin_m": 0.001,
+          "net_clearance_m": 0.12884339491578145,
+          "primitive_clearance_m": 0.13616347241687632
+        },
+        "clearance_m": 0.12884339491578145,
+        "continuous_guard_m": 0.0063200775010948595,
+        "door_angle_rad": 1.5705,
+        "door_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 167,
+          "geom_margin": 0.001,
+          "geom_name": "microwave_1_g17",
+          "geom_rbound": 0.159594799414016,
+          "geom_size": [
+            0.1295,
+            0.012,
+            0.0925
+          ],
+          "geom_type": 6
+        },
+        "door_geom_id": 167,
+        "door_geom_name": "microwave_1_g17",
+        "method": "compiled box-box separating-axis gap",
+        "sample_fraction": 0.75,
+        "sample_index": 36,
+        "target_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 127,
+          "geom_margin": 0.0,
+          "geom_name": "white_yellow_mug_1_g17",
+          "geom_rbound": 0.04467151329426842,
+          "geom_size": [
+            0.00412,
+            0.00876,
+            0.04361
+          ],
+          "geom_type": 6
+        },
+        "target_geom_id": 127,
+        "target_geom_name": "white_yellow_mug_1_g17"
+      },
+      "door_sweep_clearance_m": 0.12884339491578145,
+      "door_sweep_compiled": true,
+      "eligible_for_grasp_compilation": true,
+      "grasp_corridor_compiled": false,
+      "heuristic_grasp_high_eef": [
+        0.15,
+        -0.29500000000000004,
+        1.1200908477404539
+      ],
+      "microwave_outward_direction_xy": [
+        0.0,
+        -1.0
+      ],
+      "nominal_grasp_eef": [
+        0.15,
+        -0.1,
+        0.9600908477404537
+      ],
+      "nominal_grasp_reference_open_fixture_clearance_m": 0.15110666763831904,
+      "nominal_grasp_reference_open_fixture_geometry": {
+        "compatible_pair_evaluations": 60,
+        "continuous_sweep_guard_m": 0.0,
+        "limiting_pair": {
+          "clearance_components": {
+            "continuous_guard_m": 0.0,
+            "native_geom_margin_m": 0.001,
+            "net_clearance_m": 0.15110666763831904,
+            "primitive_clearance_m": 0.15210666763831904
+          },
+          "clearance_m": 0.15110666763831904,
+          "fixture_body_name": "microwave_1_microdoorroot",
+          "fixture_compiled_geometry": {
+            "geom_dataid": -1,
+            "geom_id": 164,
+            "geom_margin": 0.001,
+            "geom_name": "microwave_1_g14",
+            "geom_rbound": 0.075,
+            "geom_size": [
+              0.01,
+              0.065,
+              0.0
+            ],
+            "geom_type": 3
+          },
+          "fixture_geom_id": 164,
+          "fixture_geom_name": "microwave_1_g14",
+          "method": "conservative compiled bounding spheres",
+          "moving_body_name": "gripper0_right_gripper",
+          "moving_compiled_geometry": {
+            "convex_mesh": {
+              "convex_hull_face_count": 200,
+              "convex_hull_vertex_count": 102,
+              "geom_id": 75,
+              "geom_name": "gripper0_hand_collision",
+              "geom_rbound": 0.11905841176741497,
+              "geom_size": [
+                0.03164141183398503,
+                0.0486720137040898,
+                0.10394595495602695
+              ],
+              "geom_type": 7,
+              "mesh_graph_address": 37354,
+              "mesh_id": 64,
+              "mesh_vertex_count": 102
+            },
+            "geom_dataid": 64,
+            "geom_id": 75,
+            "geom_margin": 0.0,
+            "geom_name": "gripper0_hand_collision",
+            "geom_rbound": 0.11905841176741497,
+            "geom_size": [
+              0.03164141183398503,
+              0.0486720137040898,
+              0.10394595495602695
+            ],
+            "geom_type": 7
+          },
+          "moving_geom_id": 75,
+          "moving_geom_name": "gripper0_hand_collision",
+          "sample_fraction": 0.0,
+          "sample_index": 0,
+          "translated_reference_position": [
+            0.15,
+            -0.1,
+            0.9600908477404537
+          ]
+        },
+        "minimum_clearance_m": 0.15110666763831904,
+        "path_end": [
+          0.15,
+          -0.1,
+          0.9600908477404537
+        ],
+        "path_length_m": 0.0,
+        "path_start": [
+          0.15,
+          -0.1,
+          0.9600908477404537
+        ],
+        "reference_position": [
+          -0.20960641372702207,
+          -0.005139944888850629,
+          1.165973673086924
+        ],
+        "sample_intervals": 1,
+        "sample_spacing_m": 0.0,
+        "sample_zero_is_current_pose": false,
+        "sample_zero_semantics": "synthetic translated path start; it equals current mjData geometry only when path_start equals reference_position"
+      },
+      "porcelain_xy_distance_m": 0.2998888077117034,
+      "post_open_eef_to_heuristic_grasp_high_m": 0.46415607073959875,
+      "reference_post_robot_open_qpos": -1.3627293032300833,
+      "target_position": [
+        0.15,
+        -0.1,
+        0.9000908477404538
+      ]
+    },
+    {
+      "candidate_world_xy": [
+        0.15,
+        -0.15
+      ],
+      "door_limiting_pair": {
+        "clearance_components": {
+          "continuous_guard_m": 0.0063200775010948595,
+          "native_geom_margin_m": 0.001,
+          "net_clearance_m": 0.1616056928243757,
+          "primitive_clearance_m": 0.16892577032547057
+        },
+        "clearance_m": 0.1616056928243757,
+        "continuous_guard_m": 0.0063200775010948595,
+        "door_angle_rad": 1.5268749999999998,
+        "door_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 167,
+          "geom_margin": 0.001,
+          "geom_name": "microwave_1_g17",
+          "geom_rbound": 0.159594799414016,
+          "geom_size": [
+            0.1295,
+            0.012,
+            0.0925
+          ],
+          "geom_type": 6
+        },
+        "door_geom_id": 167,
+        "door_geom_name": "microwave_1_g17",
+        "method": "compiled box-box separating-axis gap",
+        "sample_fraction": 0.7291666666666666,
+        "sample_index": 35,
+        "target_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 127,
+          "geom_margin": 0.0,
+          "geom_name": "white_yellow_mug_1_g17",
+          "geom_rbound": 0.04467151329426842,
+          "geom_size": [
+            0.00412,
+            0.00876,
+            0.04361
+          ],
+          "geom_type": 6
+        },
+        "target_geom_id": 127,
+        "target_geom_name": "white_yellow_mug_1_g17"
+      },
+      "door_sweep_clearance_m": 0.1616056928243757,
+      "door_sweep_compiled": true,
+      "eligible_for_grasp_compilation": true,
+      "grasp_corridor_compiled": false,
+      "heuristic_grasp_high_eef": [
+        0.15,
+        -0.345,
+        1.1200908477404539
+      ],
+      "microwave_outward_direction_xy": [
+        0.0,
+        -1.0
+      ],
+      "nominal_grasp_eef": [
+        0.15,
+        -0.15,
+        0.9600908477404537
+      ],
+      "nominal_grasp_reference_open_fixture_clearance_m": 0.17242986281589234,
+      "nominal_grasp_reference_open_fixture_geometry": {
+        "compatible_pair_evaluations": 60,
+        "continuous_sweep_guard_m": 0.0,
+        "limiting_pair": {
+          "clearance_components": {
+            "continuous_guard_m": 0.0,
+            "native_geom_margin_m": 0.001,
+            "net_clearance_m": 0.17242986281589234,
+            "primitive_clearance_m": 0.17342986281589234
+          },
+          "clearance_m": 0.17242986281589234,
+          "fixture_body_name": "microwave_1_microdoorroot",
+          "fixture_compiled_geometry": {
+            "geom_dataid": -1,
+            "geom_id": 164,
+            "geom_margin": 0.001,
+            "geom_name": "microwave_1_g14",
+            "geom_rbound": 0.075,
+            "geom_size": [
+              0.01,
+              0.065,
+              0.0
+            ],
+            "geom_type": 3
+          },
+          "fixture_geom_id": 164,
+          "fixture_geom_name": "microwave_1_g14",
+          "method": "conservative compiled bounding spheres",
+          "moving_body_name": "gripper0_right_gripper",
+          "moving_compiled_geometry": {
+            "convex_mesh": {
+              "convex_hull_face_count": 200,
+              "convex_hull_vertex_count": 102,
+              "geom_id": 75,
+              "geom_name": "gripper0_hand_collision",
+              "geom_rbound": 0.11905841176741497,
+              "geom_size": [
+                0.03164141183398503,
+                0.0486720137040898,
+                0.10394595495602695
+              ],
+              "geom_type": 7,
+              "mesh_graph_address": 37354,
+              "mesh_id": 64,
+              "mesh_vertex_count": 102
+            },
+            "geom_dataid": 64,
+            "geom_id": 75,
+            "geom_margin": 0.0,
+            "geom_name": "gripper0_hand_collision",
+            "geom_rbound": 0.11905841176741497,
+            "geom_size": [
+              0.03164141183398503,
+              0.0486720137040898,
+              0.10394595495602695
+            ],
+            "geom_type": 7
+          },
+          "moving_geom_id": 75,
+          "moving_geom_name": "gripper0_hand_collision",
+          "sample_fraction": 0.0,
+          "sample_index": 0,
+          "translated_reference_position": [
+            0.15,
+            -0.15,
+            0.9600908477404537
+          ]
+        },
+        "minimum_clearance_m": 0.17242986281589234,
+        "path_end": [
+          0.15,
+          -0.15,
+          0.9600908477404537
+        ],
+        "path_length_m": 0.0,
+        "path_start": [
+          0.15,
+          -0.15,
+          0.9600908477404537
+        ],
+        "reference_position": [
+          -0.20960641372702207,
+          -0.005139944888850629,
+          1.165973673086924
+        ],
+        "sample_intervals": 1,
+        "sample_spacing_m": 0.0,
+        "sample_zero_is_current_pose": false,
+        "sample_zero_semantics": "synthetic translated path start; it equals current mjData geometry only when path_start equals reference_position"
+      },
+      "porcelain_xy_distance_m": 0.28064429242486,
+      "post_open_eef_to_heuristic_grasp_high_m": 0.49691736085141797,
+      "reference_post_robot_open_qpos": -1.3627293032300833,
+      "target_position": [
+        0.15,
+        -0.15,
+        0.9000908477404538
+      ]
+    },
+    {
+      "candidate_world_xy": [
+        0.15,
+        -0.2
+      ],
+      "door_limiting_pair": {
+        "clearance_components": {
+          "continuous_guard_m": 0.0063200775010948595,
+          "native_geom_margin_m": 0.001,
+          "net_clearance_m": 0.1972320959447431,
+          "primitive_clearance_m": 0.20455217344583798
+        },
+        "clearance_m": 0.1972320959447431,
+        "continuous_guard_m": 0.0063200775010948595,
+        "door_angle_rad": 1.4832499999999997,
+        "door_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 167,
+          "geom_margin": 0.001,
+          "geom_name": "microwave_1_g17",
+          "geom_rbound": 0.159594799414016,
+          "geom_size": [
+            0.1295,
+            0.012,
+            0.0925
+          ],
+          "geom_type": 6
+        },
+        "door_geom_id": 167,
+        "door_geom_name": "microwave_1_g17",
+        "method": "compiled box-box separating-axis gap",
+        "sample_fraction": 0.7083333333333333,
+        "sample_index": 34,
+        "target_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 127,
+          "geom_margin": 0.0,
+          "geom_name": "white_yellow_mug_1_g17",
+          "geom_rbound": 0.04467151329426842,
+          "geom_size": [
+            0.00412,
+            0.00876,
+            0.04361
+          ],
+          "geom_type": 6
+        },
+        "target_geom_id": 127,
+        "target_geom_name": "white_yellow_mug_1_g17"
+      },
+      "door_sweep_clearance_m": 0.1972320959447431,
+      "door_sweep_compiled": true,
+      "eligible_for_grasp_compilation": true,
+      "grasp_corridor_compiled": false,
+      "heuristic_grasp_high_eef": [
+        0.15,
+        -0.395,
+        1.1200908477404539
+      ],
+      "microwave_outward_direction_xy": [
+        0.0,
+        -1.0
+      ],
+      "nominal_grasp_eef": [
+        0.15,
+        -0.2,
+        0.9600908477404537
+      ],
+      "nominal_grasp_reference_open_fixture_clearance_m": 0.1989783907173966,
+      "nominal_grasp_reference_open_fixture_geometry": {
+        "compatible_pair_evaluations": 60,
+        "continuous_sweep_guard_m": 0.0,
+        "limiting_pair": {
+          "clearance_components": {
+            "continuous_guard_m": 0.0,
+            "native_geom_margin_m": 0.001,
+            "net_clearance_m": 0.1989783907173966,
+            "primitive_clearance_m": 0.1999783907173966
+          },
+          "clearance_m": 0.1989783907173966,
+          "fixture_body_name": "microwave_1_microdoorroot",
+          "fixture_compiled_geometry": {
+            "geom_dataid": -1,
+            "geom_id": 164,
+            "geom_margin": 0.001,
+            "geom_name": "microwave_1_g14",
+            "geom_rbound": 0.075,
+            "geom_size": [
+              0.01,
+              0.065,
+              0.0
+            ],
+            "geom_type": 3
+          },
+          "fixture_geom_id": 164,
+          "fixture_geom_name": "microwave_1_g14",
+          "method": "conservative compiled bounding spheres",
+          "moving_body_name": "gripper0_right_gripper",
+          "moving_compiled_geometry": {
+            "convex_mesh": {
+              "convex_hull_face_count": 200,
+              "convex_hull_vertex_count": 102,
+              "geom_id": 75,
+              "geom_name": "gripper0_hand_collision",
+              "geom_rbound": 0.11905841176741497,
+              "geom_size": [
+                0.03164141183398503,
+                0.0486720137040898,
+                0.10394595495602695
+              ],
+              "geom_type": 7,
+              "mesh_graph_address": 37354,
+              "mesh_id": 64,
+              "mesh_vertex_count": 102
+            },
+            "geom_dataid": 64,
+            "geom_id": 75,
+            "geom_margin": 0.0,
+            "geom_name": "gripper0_hand_collision",
+            "geom_rbound": 0.11905841176741497,
+            "geom_size": [
+              0.03164141183398503,
+              0.0486720137040898,
+              0.10394595495602695
+            ],
+            "geom_type": 7
+          },
+          "moving_geom_id": 75,
+          "moving_geom_name": "gripper0_hand_collision",
+          "sample_fraction": 0.0,
+          "sample_index": 0,
+          "translated_reference_position": [
+            0.15,
+            -0.2,
+            0.9600908477404537
+          ]
+        },
+        "minimum_clearance_m": 0.1989783907173966,
+        "path_end": [
+          0.15,
+          -0.2,
+          0.9600908477404537
+        ],
+        "path_length_m": 0.0,
+        "path_start": [
+          0.15,
+          -0.2,
+          0.9600908477404537
+        ],
+        "reference_position": [
+          -0.20960641372702207,
+          -0.005139944888850629,
+          1.165973673086924
+        ],
+        "sample_intervals": 1,
+        "sample_spacing_m": 0.0,
+        "sample_zero_is_current_pose": false,
+        "sample_zero_semantics": "synthetic translated path start; it equals current mjData geometry only when path_start equals reference_position"
+      },
+      "porcelain_xy_distance_m": 0.2694237197251824,
+      "post_open_eef_to_heuristic_grasp_high_m": 0.5323653529547667,
+      "reference_post_robot_open_qpos": -1.3627293032300833,
+      "target_position": [
+        0.15,
+        -0.2,
+        0.9000908477404538
+      ]
+    },
+    {
+      "candidate_world_xy": [
+        0.1,
+        -0.15
+      ],
+      "door_limiting_pair": {
+        "clearance_components": {
+          "continuous_guard_m": 0.0063200775010948595,
+          "native_geom_margin_m": 0.001,
+          "net_clearance_m": 0.1458691723109712,
+          "primitive_clearance_m": 0.15318924981206608
+        },
+        "clearance_m": 0.1458691723109712,
+        "continuous_guard_m": 0.0063200775010948595,
+        "door_angle_rad": 1.396,
+        "door_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 167,
+          "geom_margin": 0.001,
+          "geom_name": "microwave_1_g17",
+          "geom_rbound": 0.159594799414016,
+          "geom_size": [
+            0.1295,
+            0.012,
+            0.0925
+          ],
+          "geom_type": 6
+        },
+        "door_geom_id": 167,
+        "door_geom_name": "microwave_1_g17",
+        "method": "compiled box-box separating-axis gap",
+        "sample_fraction": 0.6666666666666666,
+        "sample_index": 32,
+        "target_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 127,
+          "geom_margin": 0.0,
+          "geom_name": "white_yellow_mug_1_g17",
+          "geom_rbound": 0.04467151329426842,
+          "geom_size": [
+            0.00412,
+            0.00876,
+            0.04361
+          ],
+          "geom_type": 6
+        },
+        "target_geom_id": 127,
+        "target_geom_name": "white_yellow_mug_1_g17"
+      },
+      "door_sweep_clearance_m": 0.1458691723109712,
+      "door_sweep_compiled": true,
+      "eligible_for_grasp_compilation": true,
+      "grasp_corridor_compiled": false,
+      "heuristic_grasp_high_eef": [
+        0.1,
+        -0.345,
+        1.1200908477404539
+      ],
+      "microwave_outward_direction_xy": [
+        0.0,
+        -1.0
+      ],
+      "nominal_grasp_eef": [
+        0.1,
+        -0.15,
+        0.9600908477404537
+      ],
+      "nominal_grasp_reference_open_fixture_clearance_m": 0.1295904816794045,
+      "nominal_grasp_reference_open_fixture_geometry": {
+        "compatible_pair_evaluations": 60,
+        "continuous_sweep_guard_m": 0.0,
+        "limiting_pair": {
+          "clearance_components": {
+            "continuous_guard_m": 0.0,
+            "native_geom_margin_m": 0.001,
+            "net_clearance_m": 0.1295904816794045,
+            "primitive_clearance_m": 0.1305904816794045
+          },
+          "clearance_m": 0.1295904816794045,
+          "fixture_body_name": "microwave_1_microdoorroot",
+          "fixture_compiled_geometry": {
+            "geom_dataid": -1,
+            "geom_id": 164,
+            "geom_margin": 0.001,
+            "geom_name": "microwave_1_g14",
+            "geom_rbound": 0.075,
+            "geom_size": [
+              0.01,
+              0.065,
+              0.0
+            ],
+            "geom_type": 3
+          },
+          "fixture_geom_id": 164,
+          "fixture_geom_name": "microwave_1_g14",
+          "method": "conservative compiled bounding spheres",
+          "moving_body_name": "gripper0_right_gripper",
+          "moving_compiled_geometry": {
+            "convex_mesh": {
+              "convex_hull_face_count": 200,
+              "convex_hull_vertex_count": 102,
+              "geom_id": 75,
+              "geom_name": "gripper0_hand_collision",
+              "geom_rbound": 0.11905841176741497,
+              "geom_size": [
+                0.03164141183398503,
+                0.0486720137040898,
+                0.10394595495602695
+              ],
+              "geom_type": 7,
+              "mesh_graph_address": 37354,
+              "mesh_id": 64,
+              "mesh_vertex_count": 102
+            },
+            "geom_dataid": 64,
+            "geom_id": 75,
+            "geom_margin": 0.0,
+            "geom_name": "gripper0_hand_collision",
+            "geom_rbound": 0.11905841176741497,
+            "geom_size": [
+              0.03164141183398503,
+              0.0486720137040898,
+              0.10394595495602695
+            ],
+            "geom_type": 7
+          },
+          "moving_geom_id": 75,
+          "moving_geom_name": "gripper0_hand_collision",
+          "sample_fraction": 0.0,
+          "sample_index": 0,
+          "translated_reference_position": [
+            0.1,
+            -0.15,
+            0.9600908477404537
+          ]
+        },
+        "minimum_clearance_m": 0.1295904816794045,
+        "path_end": [
+          0.1,
+          -0.15,
+          0.9600908477404537
+        ],
+        "path_length_m": 0.0,
+        "path_start": [
+          0.1,
+          -0.15,
+          0.9600908477404537
+        ],
+        "reference_position": [
+          -0.20960641372702207,
+          -0.005139944888850629,
+          1.165973673086924
+        ],
+        "sample_intervals": 1,
+        "sample_spacing_m": 0.0,
+        "sample_zero_is_current_pose": false,
+        "sample_zero_semantics": "synthetic translated path start; it equals current mjData geometry only when path_start equals reference_position"
+      },
+      "porcelain_xy_distance_m": 0.23360278394705855,
+      "post_open_eef_to_heuristic_grasp_high_m": 0.4620240493121934,
+      "reference_post_robot_open_qpos": -1.3627293032300833,
+      "target_position": [
+        0.1,
+        -0.15,
+        0.9000908477404538
+      ]
+    },
+    {
+      "candidate_world_xy": [
+        0.1,
+        -0.2
+      ],
+      "door_limiting_pair": {
+        "clearance_components": {
+          "continuous_guard_m": 0.0063200775010948595,
+          "native_geom_margin_m": 0.001,
+          "net_clearance_m": 0.17695114703557374,
+          "primitive_clearance_m": 0.1842712245366686
+        },
+        "clearance_m": 0.17695114703557374,
+        "continuous_guard_m": 0.0063200775010948595,
+        "door_angle_rad": 0.698,
+        "door_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 167,
+          "geom_margin": 0.001,
+          "geom_name": "microwave_1_g17",
+          "geom_rbound": 0.159594799414016,
+          "geom_size": [
+            0.1295,
+            0.012,
+            0.0925
+          ],
+          "geom_type": 6
+        },
+        "door_geom_id": 167,
+        "door_geom_name": "microwave_1_g17",
+        "method": "compiled box-box separating-axis gap",
+        "sample_fraction": 0.3333333333333333,
+        "sample_index": 16,
+        "target_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 124,
+          "geom_margin": 0.0,
+          "geom_name": "white_yellow_mug_1_g14",
+          "geom_rbound": 0.044672436691991634,
+          "geom_size": [
+            0.00413,
+            0.00876,
+            0.04361
+          ],
+          "geom_type": 6
+        },
+        "target_geom_id": 124,
+        "target_geom_name": "white_yellow_mug_1_g14"
+      },
+      "door_sweep_clearance_m": 0.17695114703557374,
+      "door_sweep_compiled": true,
+      "eligible_for_grasp_compilation": true,
+      "grasp_corridor_compiled": false,
+      "heuristic_grasp_high_eef": [
+        0.1,
+        -0.395,
+        1.1200908477404539
+      ],
+      "microwave_outward_direction_xy": [
+        0.0,
+        -1.0
+      ],
+      "nominal_grasp_eef": [
+        0.1,
+        -0.2,
+        0.9600908477404537
+      ],
+      "nominal_grasp_reference_open_fixture_clearance_m": 0.15936262848341787,
+      "nominal_grasp_reference_open_fixture_geometry": {
+        "compatible_pair_evaluations": 60,
+        "continuous_sweep_guard_m": 0.0,
+        "limiting_pair": {
+          "clearance_components": {
+            "continuous_guard_m": 0.0,
+            "native_geom_margin_m": 0.001,
+            "net_clearance_m": 0.15936262848341787,
+            "primitive_clearance_m": 0.16036262848341787
+          },
+          "clearance_m": 0.15936262848341787,
+          "fixture_body_name": "microwave_1_microdoorroot",
+          "fixture_compiled_geometry": {
+            "geom_dataid": -1,
+            "geom_id": 164,
+            "geom_margin": 0.001,
+            "geom_name": "microwave_1_g14",
+            "geom_rbound": 0.075,
+            "geom_size": [
+              0.01,
+              0.065,
+              0.0
+            ],
+            "geom_type": 3
+          },
+          "fixture_geom_id": 164,
+          "fixture_geom_name": "microwave_1_g14",
+          "method": "conservative compiled bounding spheres",
+          "moving_body_name": "gripper0_right_gripper",
+          "moving_compiled_geometry": {
+            "convex_mesh": {
+              "convex_hull_face_count": 200,
+              "convex_hull_vertex_count": 102,
+              "geom_id": 75,
+              "geom_name": "gripper0_hand_collision",
+              "geom_rbound": 0.11905841176741497,
+              "geom_size": [
+                0.03164141183398503,
+                0.0486720137040898,
+                0.10394595495602695
+              ],
+              "geom_type": 7,
+              "mesh_graph_address": 37354,
+              "mesh_id": 64,
+              "mesh_vertex_count": 102
+            },
+            "geom_dataid": 64,
+            "geom_id": 75,
+            "geom_margin": 0.0,
+            "geom_name": "gripper0_hand_collision",
+            "geom_rbound": 0.11905841176741497,
+            "geom_size": [
+              0.03164141183398503,
+              0.0486720137040898,
+              0.10394595495602695
+            ],
+            "geom_type": 7
+          },
+          "moving_geom_id": 75,
+          "moving_geom_name": "gripper0_hand_collision",
+          "sample_fraction": 0.0,
+          "sample_index": 0,
+          "translated_reference_position": [
+            0.1,
+            -0.2,
+            0.9600908477404537
+          ]
+        },
+        "minimum_clearance_m": 0.15936262848341787,
+        "path_end": [
+          0.1,
+          -0.2,
+          0.9600908477404537
+        ],
+        "path_length_m": 0.0,
+        "path_start": [
+          0.1,
+          -0.2,
+          0.9600908477404537
+        ],
+        "reference_position": [
+          -0.20960641372702207,
+          -0.005139944888850629,
+          1.165973673086924
+        ],
+        "sample_intervals": 1,
+        "sample_spacing_m": 0.0,
+        "sample_zero_is_current_pose": false,
+        "sample_zero_semantics": "synthetic translated path start; it equals current mjData geometry only when path_start equals reference_position"
+      },
+      "porcelain_xy_distance_m": 0.21999586938785792,
+      "post_open_eef_to_heuristic_grasp_high_m": 0.49995222537153594,
+      "reference_post_robot_open_qpos": -1.3627293032300833,
+      "target_position": [
+        0.1,
+        -0.2,
+        0.9000908477404538
+      ]
+    },
+    {
+      "candidate_world_xy": [
+        0.05,
+        -0.15
+      ],
+      "door_limiting_pair": {
+        "clearance_components": {
+          "continuous_guard_m": 0.0063200775010948595,
+          "native_geom_margin_m": 0.001,
+          "net_clearance_m": 0.1153861284274079,
+          "primitive_clearance_m": 0.12270620592850276
+        },
+        "clearance_m": 0.1153861284274079,
+        "continuous_guard_m": 0.0063200775010948595,
+        "door_angle_rad": 1.3523749999999997,
+        "door_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 167,
+          "geom_margin": 0.001,
+          "geom_name": "microwave_1_g17",
+          "geom_rbound": 0.159594799414016,
+          "geom_size": [
+            0.1295,
+            0.012,
+            0.0925
+          ],
+          "geom_type": 6
+        },
+        "door_geom_id": 167,
+        "door_geom_name": "microwave_1_g17",
+        "method": "compiled box-box separating-axis gap",
+        "sample_fraction": 0.6458333333333333,
+        "sample_index": 31,
+        "target_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 126,
+          "geom_margin": 0.0,
+          "geom_name": "white_yellow_mug_1_g16",
+          "geom_rbound": 0.044672436691991634,
+          "geom_size": [
+            0.00413,
+            0.00876,
+            0.04361
+          ],
+          "geom_type": 6
+        },
+        "target_geom_id": 126,
+        "target_geom_name": "white_yellow_mug_1_g16"
+      },
+      "door_sweep_clearance_m": 0.1153861284274079,
+      "door_sweep_compiled": true,
+      "eligible_for_grasp_compilation": true,
+      "grasp_corridor_compiled": false,
+      "heuristic_grasp_high_eef": [
+        0.02742742725205434,
+        -0.3436891296886294,
+        1.1200908477404539
+      ],
+      "microwave_outward_direction_xy": [
+        -0.11575678332279826,
+        -0.9932775881468173
+      ],
+      "nominal_grasp_eef": [
+        0.05,
+        -0.15,
+        0.9600908477404537
+      ],
+      "nominal_grasp_reference_open_fixture_clearance_m": 0.08910030458010869,
+      "nominal_grasp_reference_open_fixture_geometry": {
+        "compatible_pair_evaluations": 60,
+        "continuous_sweep_guard_m": 0.0,
+        "limiting_pair": {
+          "clearance_components": {
+            "continuous_guard_m": 0.0,
+            "native_geom_margin_m": 0.001,
+            "net_clearance_m": 0.08910030458010869,
+            "primitive_clearance_m": 0.09010030458010869
+          },
+          "clearance_m": 0.08910030458010869,
+          "fixture_body_name": "microwave_1_microdoorroot",
+          "fixture_compiled_geometry": {
+            "geom_dataid": -1,
+            "geom_id": 164,
+            "geom_margin": 0.001,
+            "geom_name": "microwave_1_g14",
+            "geom_rbound": 0.075,
+            "geom_size": [
+              0.01,
+              0.065,
+              0.0
+            ],
+            "geom_type": 3
+          },
+          "fixture_geom_id": 164,
+          "fixture_geom_name": "microwave_1_g14",
+          "method": "conservative compiled bounding spheres",
+          "moving_body_name": "gripper0_right_gripper",
+          "moving_compiled_geometry": {
+            "convex_mesh": {
+              "convex_hull_face_count": 200,
+              "convex_hull_vertex_count": 102,
+              "geom_id": 75,
+              "geom_name": "gripper0_hand_collision",
+              "geom_rbound": 0.11905841176741497,
+              "geom_size": [
+                0.03164141183398503,
+                0.0486720137040898,
+                0.10394595495602695
+              ],
+              "geom_type": 7,
+              "mesh_graph_address": 37354,
+              "mesh_id": 64,
+              "mesh_vertex_count": 102
+            },
+            "geom_dataid": 64,
+            "geom_id": 75,
+            "geom_margin": 0.0,
+            "geom_name": "gripper0_hand_collision",
+            "geom_rbound": 0.11905841176741497,
+            "geom_size": [
+              0.03164141183398503,
+              0.0486720137040898,
+              0.10394595495602695
+            ],
+            "geom_type": 7
+          },
+          "moving_geom_id": 75,
+          "moving_geom_name": "gripper0_hand_collision",
+          "sample_fraction": 0.0,
+          "sample_index": 0,
+          "translated_reference_position": [
+            0.05,
+            -0.15,
+            0.9600908477404537
+          ]
+        },
+        "minimum_clearance_m": 0.08910030458010869,
+        "path_end": [
+          0.05,
+          -0.15,
+          0.9600908477404537
+        ],
+        "path_length_m": 0.0,
+        "path_start": [
+          0.05,
+          -0.15,
+          0.9600908477404537
+        ],
+        "reference_position": [
+          -0.20960641372702207,
+          -0.005139944888850629,
+          1.165973673086924
+        ],
+        "sample_intervals": 1,
+        "sample_spacing_m": 0.0,
+        "sample_zero_is_current_pose": false,
+        "sample_zero_semantics": "synthetic translated path start; it equals current mjData geometry only when path_start equals reference_position"
+      },
+      "porcelain_xy_distance_m": 0.1880938661014279,
+      "post_open_eef_to_heuristic_grasp_high_m": 0.41581946318043306,
+      "reference_post_robot_open_qpos": -1.3627293032300833,
+      "target_position": [
+        0.05,
+        -0.15,
+        0.9000908477404538
+      ]
+    },
+    {
+      "candidate_world_xy": [
+        0.05,
+        -0.2
+      ],
+      "door_limiting_pair": {
+        "clearance_components": {
+          "continuous_guard_m": 0.0063200775010948595,
+          "native_geom_margin_m": 0.001,
+          "net_clearance_m": 0.15038291512822252,
+          "primitive_clearance_m": 0.1577029926293174
+        },
+        "clearance_m": 0.15038291512822252,
+        "continuous_guard_m": 0.0063200775010948595,
+        "door_angle_rad": 1.3523749999999997,
+        "door_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 167,
+          "geom_margin": 0.001,
+          "geom_name": "microwave_1_g17",
+          "geom_rbound": 0.159594799414016,
+          "geom_size": [
+            0.1295,
+            0.012,
+            0.0925
+          ],
+          "geom_type": 6
+        },
+        "door_geom_id": 167,
+        "door_geom_name": "microwave_1_g17",
+        "method": "compiled box-box separating-axis gap",
+        "sample_fraction": 0.6458333333333333,
+        "sample_index": 31,
+        "target_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 126,
+          "geom_margin": 0.0,
+          "geom_name": "white_yellow_mug_1_g16",
+          "geom_rbound": 0.044672436691991634,
+          "geom_size": [
+            0.00413,
+            0.00876,
+            0.04361
+          ],
+          "geom_type": 6
+        },
+        "target_geom_id": 126,
+        "target_geom_name": "white_yellow_mug_1_g16"
+      },
+      "door_sweep_clearance_m": 0.15038291512822252,
+      "door_sweep_compiled": true,
+      "eligible_for_grasp_compilation": true,
+      "grasp_corridor_compiled": false,
+      "heuristic_grasp_high_eef": [
+        0.02991379191067843,
+        -0.39396273932019127,
+        1.1200908477404539
+      ],
+      "microwave_outward_direction_xy": [
+        -0.10300619532985421,
+        -0.9946807144625193
+      ],
+      "nominal_grasp_eef": [
+        0.05,
+        -0.2,
+        0.9600908477404537
+      ],
+      "nominal_grasp_reference_open_fixture_clearance_m": 0.12268920165007484,
+      "nominal_grasp_reference_open_fixture_geometry": {
+        "compatible_pair_evaluations": 60,
+        "continuous_sweep_guard_m": 0.0,
+        "limiting_pair": {
+          "clearance_components": {
+            "continuous_guard_m": 0.0,
+            "native_geom_margin_m": 0.001,
+            "net_clearance_m": 0.12268920165007484,
+            "primitive_clearance_m": 0.12368920165007484
+          },
+          "clearance_m": 0.12268920165007484,
+          "fixture_body_name": "microwave_1_microdoorroot",
+          "fixture_compiled_geometry": {
+            "geom_dataid": -1,
+            "geom_id": 164,
+            "geom_margin": 0.001,
+            "geom_name": "microwave_1_g14",
+            "geom_rbound": 0.075,
+            "geom_size": [
+              0.01,
+              0.065,
+              0.0
+            ],
+            "geom_type": 3
+          },
+          "fixture_geom_id": 164,
+          "fixture_geom_name": "microwave_1_g14",
+          "method": "conservative compiled bounding spheres",
+          "moving_body_name": "gripper0_right_gripper",
+          "moving_compiled_geometry": {
+            "convex_mesh": {
+              "convex_hull_face_count": 200,
+              "convex_hull_vertex_count": 102,
+              "geom_id": 75,
+              "geom_name": "gripper0_hand_collision",
+              "geom_rbound": 0.11905841176741497,
+              "geom_size": [
+                0.03164141183398503,
+                0.0486720137040898,
+                0.10394595495602695
+              ],
+              "geom_type": 7,
+              "mesh_graph_address": 37354,
+              "mesh_id": 64,
+              "mesh_vertex_count": 102
+            },
+            "geom_dataid": 64,
+            "geom_id": 75,
+            "geom_margin": 0.0,
+            "geom_name": "gripper0_hand_collision",
+            "geom_rbound": 0.11905841176741497,
+            "geom_size": [
+              0.03164141183398503,
+              0.0486720137040898,
+              0.10394595495602695
+            ],
+            "geom_type": 7
+          },
+          "moving_geom_id": 75,
+          "moving_geom_name": "gripper0_hand_collision",
+          "sample_fraction": 0.0,
+          "sample_index": 0,
+          "translated_reference_position": [
+            0.05,
+            -0.2,
+            0.9600908477404537
+          ]
+        },
+        "minimum_clearance_m": 0.12268920165007484,
+        "path_end": [
+          0.05,
+          -0.2,
+          0.9600908477404537
+        ],
+        "path_length_m": 0.0,
+        "path_start": [
+          0.05,
+          -0.2,
+          0.9600908477404537
+        ],
+        "reference_position": [
+          -0.20960641372702207,
+          -0.005139944888850629,
+          1.165973673086924
+        ],
+        "sample_intervals": 1,
+        "sample_spacing_m": 0.0,
+        "sample_zero_is_current_pose": false,
+        "sample_zero_semantics": "synthetic translated path start; it equals current mjData geometry only when path_start equals reference_position"
+      },
+      "porcelain_xy_distance_m": 0.17090121223936713,
+      "post_open_eef_to_heuristic_grasp_high_m": 0.4589753022112384,
+      "reference_post_robot_open_qpos": -1.3627293032300833,
+      "target_position": [
+        0.05,
+        -0.2,
+        0.9000908477404538
+      ]
+    },
+    {
+      "candidate_world_xy": [
+        0.0,
+        -0.2
+      ],
+      "door_limiting_pair": {
+        "clearance_components": {
+          "continuous_guard_m": 0.0063200775010948595,
+          "native_geom_margin_m": 0.001,
+          "net_clearance_m": 0.1395780921825232,
+          "primitive_clearance_m": 0.14689816968361807
+        },
+        "clearance_m": 0.1395780921825232,
+        "continuous_guard_m": 0.0063200775010948595,
+        "door_angle_rad": 1.177875,
+        "door_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 167,
+          "geom_margin": 0.001,
+          "geom_name": "microwave_1_g17",
+          "geom_rbound": 0.159594799414016,
+          "geom_size": [
+            0.1295,
+            0.012,
+            0.0925
+          ],
+          "geom_type": 6
+        },
+        "door_geom_id": 167,
+        "door_geom_name": "microwave_1_g17",
+        "method": "compiled box-box separating-axis gap",
+        "sample_fraction": 0.5625,
+        "sample_index": 27,
+        "target_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 126,
+          "geom_margin": 0.0,
+          "geom_name": "white_yellow_mug_1_g16",
+          "geom_rbound": 0.044672436691991634,
+          "geom_size": [
+            0.00413,
+            0.00876,
+            0.04361
+          ],
+          "geom_type": 6
+        },
+        "target_geom_id": 126,
+        "target_geom_name": "white_yellow_mug_1_g16"
+      },
+      "door_sweep_clearance_m": 0.1395780921825232,
+      "door_sweep_compiled": true,
+      "eligible_for_grasp_compilation": false,
+      "grasp_corridor_compiled": false,
+      "heuristic_grasp_high_eef": [
+        -0.040981453342367066,
+        -0.3906450116891271,
+        1.1200908477404539
+      ],
+      "microwave_outward_direction_xy": [
+        -0.21016129919162596,
+        -0.9776667266109079
+      ],
+      "nominal_grasp_eef": [
+        0.0,
+        -0.2,
+        0.9600908477404537
+      ],
+      "nominal_grasp_reference_open_fixture_clearance_m": 0.09009561309027246,
+      "nominal_grasp_reference_open_fixture_geometry": {
+        "compatible_pair_evaluations": 60,
+        "continuous_sweep_guard_m": 0.0,
+        "limiting_pair": {
+          "clearance_components": {
+            "continuous_guard_m": 0.0,
+            "native_geom_margin_m": 0.001,
+            "net_clearance_m": 0.09009561309027246,
+            "primitive_clearance_m": 0.09109561309027246
+          },
+          "clearance_m": 0.09009561309027246,
+          "fixture_body_name": "microwave_1_microdoorroot",
+          "fixture_compiled_geometry": {
+            "geom_dataid": -1,
+            "geom_id": 164,
+            "geom_margin": 0.001,
+            "geom_name": "microwave_1_g14",
+            "geom_rbound": 0.075,
+            "geom_size": [
+              0.01,
+              0.065,
+              0.0
+            ],
+            "geom_type": 3
+          },
+          "fixture_geom_id": 164,
+          "fixture_geom_name": "microwave_1_g14",
+          "method": "conservative compiled bounding spheres",
+          "moving_body_name": "gripper0_right_gripper",
+          "moving_compiled_geometry": {
+            "convex_mesh": {
+              "convex_hull_face_count": 200,
+              "convex_hull_vertex_count": 102,
+              "geom_id": 75,
+              "geom_name": "gripper0_hand_collision",
+              "geom_rbound": 0.11905841176741497,
+              "geom_size": [
+                0.03164141183398503,
+                0.0486720137040898,
+                0.10394595495602695
+              ],
+              "geom_type": 7,
+              "mesh_graph_address": 37354,
+              "mesh_id": 64,
+              "mesh_vertex_count": 102
+            },
+            "geom_dataid": 64,
+            "geom_id": 75,
+            "geom_margin": 0.0,
+            "geom_name": "gripper0_hand_collision",
+            "geom_rbound": 0.11905841176741497,
+            "geom_size": [
+              0.03164141183398503,
+              0.0486720137040898,
+              0.10394595495602695
+            ],
+            "geom_type": 7
+          },
+          "moving_geom_id": 75,
+          "moving_geom_name": "gripper0_hand_collision",
+          "sample_fraction": 0.0,
+          "sample_index": 0,
+          "translated_reference_position": [
+            0.0,
+            -0.2,
+            0.9600908477404537
+          ]
+        },
+        "minimum_clearance_m": 0.09009561309027246,
+        "path_end": [
+          0.0,
+          -0.2,
+          0.9600908477404537
+        ],
+        "path_length_m": 0.0,
+        "path_start": [
+          0.0,
+          -0.2,
+          0.9600908477404537
+        ],
+        "reference_position": [
+          -0.20960641372702207,
+          -0.005139944888850629,
+          1.165973673086924
+        ],
+        "sample_intervals": 1,
+        "sample_spacing_m": 0.0,
+        "sample_zero_is_current_pose": false,
+        "sample_zero_semantics": "synthetic translated path start; it equals current mjData geometry only when path_start equals reference_position"
+      },
+      "porcelain_xy_distance_m": 0.12254087539287034,
+      "post_open_eef_to_heuristic_grasp_high_m": 0.4232655991870669,
+      "reference_post_robot_open_qpos": -1.3627293032300833,
+      "target_position": [
+        0.0,
+        -0.2,
+        0.9000908477404538
+      ]
+    },
+    {
+      "candidate_world_xy": [
+        0.0,
+        -0.25
+      ],
+      "door_limiting_pair": {
+        "clearance_components": {
+          "continuous_guard_m": 0.0063200775010948595,
+          "native_geom_margin_m": 0.001,
+          "net_clearance_m": 0.17781945564605586,
+          "primitive_clearance_m": 0.18513953314715073
+        },
+        "clearance_m": 0.17781945564605586,
+        "continuous_guard_m": 0.0063200775010948595,
+        "door_angle_rad": 1.2214999999999998,
+        "door_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 167,
+          "geom_margin": 0.001,
+          "geom_name": "microwave_1_g17",
+          "geom_rbound": 0.159594799414016,
+          "geom_size": [
+            0.1295,
+            0.012,
+            0.0925
+          ],
+          "geom_type": 6
+        },
+        "door_geom_id": 167,
+        "door_geom_name": "microwave_1_g17",
+        "method": "compiled box-box separating-axis gap",
+        "sample_fraction": 0.5833333333333333,
+        "sample_index": 28,
+        "target_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 126,
+          "geom_margin": 0.0,
+          "geom_name": "white_yellow_mug_1_g16",
+          "geom_rbound": 0.044672436691991634,
+          "geom_size": [
+            0.00413,
+            0.00876,
+            0.04361
+          ],
+          "geom_type": 6
+        },
+        "target_geom_id": 126,
+        "target_geom_name": "white_yellow_mug_1_g16"
+      },
+      "door_sweep_clearance_m": 0.17781945564605586,
+      "door_sweep_compiled": true,
+      "eligible_for_grasp_compilation": false,
+      "grasp_corridor_compiled": false,
+      "heuristic_grasp_high_eef": [
+        -0.037029606004011374,
+        -0.44145184323789544,
+        1.1200908477404539
+      ],
+      "microwave_outward_direction_xy": [
+        -0.18989541540518654,
+        -0.9818043242968995
+      ],
+      "nominal_grasp_eef": [
+        0.0,
+        -0.25,
+        0.9600908477404537
+      ],
+      "nominal_grasp_reference_open_fixture_clearance_m": 0.13133121375517537,
+      "nominal_grasp_reference_open_fixture_geometry": {
+        "compatible_pair_evaluations": 60,
+        "continuous_sweep_guard_m": 0.0,
+        "limiting_pair": {
+          "clearance_components": {
+            "continuous_guard_m": 0.0,
+            "native_geom_margin_m": 0.001,
+            "net_clearance_m": 0.13133121375517537,
+            "primitive_clearance_m": 0.13233121375517537
+          },
+          "clearance_m": 0.13133121375517537,
+          "fixture_body_name": "microwave_1_microdoorroot",
+          "fixture_compiled_geometry": {
+            "geom_dataid": -1,
+            "geom_id": 164,
+            "geom_margin": 0.001,
+            "geom_name": "microwave_1_g14",
+            "geom_rbound": 0.075,
+            "geom_size": [
+              0.01,
+              0.065,
+              0.0
+            ],
+            "geom_type": 3
+          },
+          "fixture_geom_id": 164,
+          "fixture_geom_name": "microwave_1_g14",
+          "method": "conservative compiled bounding spheres",
+          "moving_body_name": "gripper0_right_gripper",
+          "moving_compiled_geometry": {
+            "convex_mesh": {
+              "convex_hull_face_count": 200,
+              "convex_hull_vertex_count": 102,
+              "geom_id": 75,
+              "geom_name": "gripper0_hand_collision",
+              "geom_rbound": 0.11905841176741497,
+              "geom_size": [
+                0.03164141183398503,
+                0.0486720137040898,
+                0.10394595495602695
+              ],
+              "geom_type": 7,
+              "mesh_graph_address": 37354,
+              "mesh_id": 64,
+              "mesh_vertex_count": 102
+            },
+            "geom_dataid": 64,
+            "geom_id": 75,
+            "geom_margin": 0.0,
+            "geom_name": "gripper0_hand_collision",
+            "geom_rbound": 0.11905841176741497,
+            "geom_size": [
+              0.03164141183398503,
+              0.0486720137040898,
+              0.10394595495602695
+            ],
+            "geom_type": 7
+          },
+          "moving_geom_id": 75,
+          "moving_geom_name": "gripper0_hand_collision",
+          "sample_fraction": 0.0,
+          "sample_index": 0,
+          "translated_reference_position": [
+            0.0,
+            -0.25,
+            0.9600908477404537
+          ]
+        },
+        "minimum_clearance_m": 0.13133121375517537,
+        "path_end": [
+          0.0,
+          -0.25,
+          0.9600908477404537
+        ],
+        "path_length_m": 0.0,
+        "path_start": [
+          0.0,
+          -0.25,
+          0.9600908477404537
+        ],
+        "reference_position": [
+          -0.20960641372702207,
+          -0.005139944888850629,
+          1.165973673086924
+        ],
+        "sample_intervals": 1,
+        "sample_spacing_m": 0.0,
+        "sample_zero_is_current_pose": false,
+        "sample_zero_semantics": "synthetic translated path start; it equals current mjData geometry only when path_start equals reference_position"
+      },
+      "porcelain_xy_distance_m": 0.11766132763977423,
+      "post_open_eef_to_heuristic_grasp_high_m": 0.4714404107271532,
+      "reference_post_robot_open_qpos": -1.3627293032300833,
+      "target_position": [
+        0.0,
+        -0.25,
+        0.9000908477404538
+      ]
+    },
+    {
+      "candidate_world_xy": [
+        -0.15,
+        -0.1
+      ],
+      "door_limiting_pair": {
+        "clearance_components": {
+          "continuous_guard_m": 0.0063200775010948595,
+          "native_geom_margin_m": 0.001,
+          "net_clearance_m": 0.03142063652172182,
+          "primitive_clearance_m": 0.03874071402281668
+        },
+        "clearance_m": 0.03142063652172182,
+        "continuous_guard_m": 0.0063200775010948595,
+        "door_angle_rad": 0.698,
+        "door_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 167,
+          "geom_margin": 0.001,
+          "geom_name": "microwave_1_g17",
+          "geom_rbound": 0.159594799414016,
+          "geom_size": [
+            0.1295,
+            0.012,
+            0.0925
+          ],
+          "geom_type": 6
+        },
+        "door_geom_id": 167,
+        "door_geom_name": "microwave_1_g17",
+        "method": "compiled box-box separating-axis gap",
+        "sample_fraction": 0.3333333333333333,
+        "sample_index": 16,
+        "target_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 125,
+          "geom_margin": 0.0,
+          "geom_name": "white_yellow_mug_1_g15",
+          "geom_rbound": 0.04467151329426842,
+          "geom_size": [
+            0.00412,
+            0.00876,
+            0.04361
+          ],
+          "geom_type": 6
+        },
+        "target_geom_id": 125,
+        "target_geom_name": "white_yellow_mug_1_g15"
+      },
+      "door_sweep_clearance_m": 0.03142063652172182,
+      "door_sweep_compiled": true,
+      "eligible_for_grasp_compilation": false,
+      "grasp_corridor_compiled": false,
+      "heuristic_grasp_high_eef": [
+        -0.15,
+        -0.29500000000000004,
+        1.1200908477404539
+      ],
+      "microwave_outward_direction_xy": [
+        0.0,
+        -1.0
+      ],
+      "nominal_grasp_eef": [
+        -0.15,
+        -0.1,
+        0.9600908477404537
+      ],
+      "nominal_grasp_reference_open_fixture_clearance_m": -0.06495885542633205,
+      "nominal_grasp_reference_open_fixture_geometry": {
+        "compatible_pair_evaluations": 60,
+        "continuous_sweep_guard_m": 0.0,
+        "limiting_pair": {
+          "clearance_components": {
+            "continuous_guard_m": 0.0,
+            "native_geom_margin_m": 0.001,
+            "net_clearance_m": -0.06495885542633205,
+            "primitive_clearance_m": -0.06395885542633205
+          },
+          "clearance_m": -0.06495885542633205,
+          "fixture_body_name": "microwave_1_microdoorroot",
+          "fixture_compiled_geometry": {
+            "geom_dataid": -1,
+            "geom_id": 164,
+            "geom_margin": 0.001,
+            "geom_name": "microwave_1_g14",
+            "geom_rbound": 0.075,
+            "geom_size": [
+              0.01,
+              0.065,
+              0.0
+            ],
+            "geom_type": 3
+          },
+          "fixture_geom_id": 164,
+          "fixture_geom_name": "microwave_1_g14",
+          "method": "conservative compiled bounding spheres",
+          "moving_body_name": "gripper0_right_gripper",
+          "moving_compiled_geometry": {
+            "convex_mesh": {
+              "convex_hull_face_count": 200,
+              "convex_hull_vertex_count": 102,
+              "geom_id": 75,
+              "geom_name": "gripper0_hand_collision",
+              "geom_rbound": 0.11905841176741497,
+              "geom_size": [
+                0.03164141183398503,
+                0.0486720137040898,
+                0.10394595495602695
+              ],
+              "geom_type": 7,
+              "mesh_graph_address": 37354,
+              "mesh_id": 64,
+              "mesh_vertex_count": 102
+            },
+            "geom_dataid": 64,
+            "geom_id": 75,
+            "geom_margin": 0.0,
+            "geom_name": "gripper0_hand_collision",
+            "geom_rbound": 0.11905841176741497,
+            "geom_size": [
+              0.03164141183398503,
+              0.0486720137040898,
+              0.10394595495602695
+            ],
+            "geom_type": 7
+          },
+          "moving_geom_id": 75,
+          "moving_geom_name": "gripper0_hand_collision",
+          "sample_fraction": 0.0,
+          "sample_index": 0,
+          "translated_reference_position": [
+            -0.15,
+            -0.1,
+            0.9600908477404537
+          ]
+        },
+        "minimum_clearance_m": -0.06495885542633205,
+        "path_end": [
+          -0.15,
+          -0.1,
+          0.9600908477404537
+        ],
+        "path_length_m": 0.0,
+        "path_start": [
+          -0.15,
+          -0.1,
+          0.9600908477404537
+        ],
+        "reference_position": [
+          -0.20960641372702207,
+          -0.005139944888850629,
+          1.165973673086924
+        ],
+        "sample_intervals": 1,
+        "sample_spacing_m": 0.0,
+        "sample_zero_is_current_pose": false,
+        "sample_zero_semantics": "synthetic translated path start; it equals current mjData geometry only when path_start equals reference_position"
+      },
+      "porcelain_xy_distance_m": 0.14066821877645863,
+      "post_open_eef_to_heuristic_grasp_high_m": 0.299461199103006,
+      "reference_post_robot_open_qpos": -1.3627293032300833,
+      "target_position": [
+        -0.15,
+        -0.1,
+        0.9000908477404538
+      ]
+    },
+    {
+      "candidate_world_xy": [
+        -0.15,
+        -0.15
+      ],
+      "door_limiting_pair": {
+        "clearance_components": {
+          "continuous_guard_m": 0.0063200775010948595,
+          "native_geom_margin_m": 0.001,
+          "net_clearance_m": 0.07535819725027347,
+          "primitive_clearance_m": 0.08267827475136832
+        },
+        "clearance_m": 0.07535819725027347,
+        "continuous_guard_m": 0.0063200775010948595,
+        "door_angle_rad": 0.78525,
+        "door_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 167,
+          "geom_margin": 0.001,
+          "geom_name": "microwave_1_g17",
+          "geom_rbound": 0.159594799414016,
+          "geom_size": [
+            0.1295,
+            0.012,
+            0.0925
+          ],
+          "geom_type": 6
+        },
+        "door_geom_id": 167,
+        "door_geom_name": "microwave_1_g17",
+        "method": "compiled box-box separating-axis gap",
+        "sample_fraction": 0.375,
+        "sample_index": 18,
+        "target_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 125,
+          "geom_margin": 0.0,
+          "geom_name": "white_yellow_mug_1_g15",
+          "geom_rbound": 0.04467151329426842,
+          "geom_size": [
+            0.00412,
+            0.00876,
+            0.04361
+          ],
+          "geom_type": 6
+        },
+        "target_geom_id": 125,
+        "target_geom_name": "white_yellow_mug_1_g15"
+      },
+      "door_sweep_clearance_m": 0.07535819725027347,
+      "door_sweep_compiled": true,
+      "eligible_for_grasp_compilation": false,
+      "grasp_corridor_compiled": false,
+      "heuristic_grasp_high_eef": [
+        -0.15,
+        -0.345,
+        1.1200908477404539
+      ],
+      "microwave_outward_direction_xy": [
+        0.0,
+        -1.0
+      ],
+      "nominal_grasp_eef": [
+        -0.15,
+        -0.15,
+        0.9600908477404537
+      ],
+      "nominal_grasp_reference_open_fixture_clearance_m": -0.01577298481813745,
+      "nominal_grasp_reference_open_fixture_geometry": {
+        "compatible_pair_evaluations": 60,
+        "continuous_sweep_guard_m": 0.0,
+        "limiting_pair": {
+          "clearance_components": {
+            "continuous_guard_m": 0.0,
+            "native_geom_margin_m": 0.001,
+            "net_clearance_m": -0.01577298481813745,
+            "primitive_clearance_m": -0.01477298481813745
+          },
+          "clearance_m": -0.01577298481813745,
+          "fixture_body_name": "microwave_1_microdoorroot",
+          "fixture_compiled_geometry": {
+            "geom_dataid": -1,
+            "geom_id": 164,
+            "geom_margin": 0.001,
+            "geom_name": "microwave_1_g14",
+            "geom_rbound": 0.075,
+            "geom_size": [
+              0.01,
+              0.065,
+              0.0
+            ],
+            "geom_type": 3
+          },
+          "fixture_geom_id": 164,
+          "fixture_geom_name": "microwave_1_g14",
+          "method": "conservative compiled bounding spheres",
+          "moving_body_name": "gripper0_right_gripper",
+          "moving_compiled_geometry": {
+            "convex_mesh": {
+              "convex_hull_face_count": 200,
+              "convex_hull_vertex_count": 102,
+              "geom_id": 75,
+              "geom_name": "gripper0_hand_collision",
+              "geom_rbound": 0.11905841176741497,
+              "geom_size": [
+                0.03164141183398503,
+                0.0486720137040898,
+                0.10394595495602695
+              ],
+              "geom_type": 7,
+              "mesh_graph_address": 37354,
+              "mesh_id": 64,
+              "mesh_vertex_count": 102
+            },
+            "geom_dataid": 64,
+            "geom_id": 75,
+            "geom_margin": 0.0,
+            "geom_name": "gripper0_hand_collision",
+            "geom_rbound": 0.11905841176741497,
+            "geom_size": [
+              0.03164141183398503,
+              0.0486720137040898,
+              0.10394595495602695
+            ],
+            "geom_type": 7
+          },
+          "moving_geom_id": 75,
+          "moving_geom_name": "gripper0_hand_collision",
+          "sample_fraction": 0.0,
+          "sample_index": 0,
+          "translated_reference_position": [
+            -0.15,
+            -0.15,
+            0.9600908477404537
+          ]
+        },
+        "minimum_clearance_m": -0.01577298481813745,
+        "path_end": [
+          -0.15,
+          -0.15,
+          0.9600908477404537
+        ],
+        "path_length_m": 0.0,
+        "path_start": [
+          -0.15,
+          -0.15,
+          0.9600908477404537
+        ],
+        "reference_position": [
+          -0.20960641372702207,
+          -0.005139944888850629,
+          1.165973673086924
+        ],
+        "sample_intervals": 1,
+        "sample_spacing_m": 0.0,
+        "sample_zero_is_current_pose": false,
+        "sample_zero_semantics": "synthetic translated path start; it equals current mjData geometry only when path_start equals reference_position"
+      },
+      "porcelain_xy_distance_m": 0.09281955426333913,
+      "post_open_eef_to_heuristic_grasp_high_m": 0.34808478174049073,
+      "reference_post_robot_open_qpos": -1.3627293032300833,
+      "target_position": [
+        -0.15,
+        -0.15,
+        0.9000908477404538
+      ]
+    },
+    {
+      "candidate_world_xy": [
+        -0.2,
+        -0.1
+      ],
+      "door_limiting_pair": {
+        "clearance_components": {
+          "continuous_guard_m": 0.0063200775010948595,
+          "native_geom_margin_m": 0.001,
+          "net_clearance_m": 0.029636961760736304,
+          "primitive_clearance_m": 0.036957039261831165
+        },
+        "clearance_m": 0.029636961760736304,
+        "continuous_guard_m": 0.0063200775010948595,
+        "door_angle_rad": 0.6107499999999999,
+        "door_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 167,
+          "geom_margin": 0.001,
+          "geom_name": "microwave_1_g17",
+          "geom_rbound": 0.159594799414016,
+          "geom_size": [
+            0.1295,
+            0.012,
+            0.0925
+          ],
+          "geom_type": 6
+        },
+        "door_geom_id": 167,
+        "door_geom_name": "microwave_1_g17",
+        "method": "compiled box-box separating-axis gap",
+        "sample_fraction": 0.29166666666666663,
+        "sample_index": 14,
+        "target_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 124,
+          "geom_margin": 0.0,
+          "geom_name": "white_yellow_mug_1_g14",
+          "geom_rbound": 0.044672436691991634,
+          "geom_size": [
+            0.00413,
+            0.00876,
+            0.04361
+          ],
+          "geom_type": 6
+        },
+        "target_geom_id": 124,
+        "target_geom_name": "white_yellow_mug_1_g14"
+      },
+      "door_sweep_clearance_m": 0.029636961760736304,
+      "door_sweep_compiled": true,
+      "eligible_for_grasp_compilation": false,
+      "grasp_corridor_compiled": false,
+      "heuristic_grasp_high_eef": [
+        -0.21906754246004173,
+        -0.29406552714105233,
+        1.1200908477404539
+      ],
+      "microwave_outward_direction_xy": [
+        -0.09778226902585493,
+        -0.995207831492576
+      ],
+      "nominal_grasp_eef": [
+        -0.2,
+        -0.1,
+        0.9600908477404537
+      ],
+      "nominal_grasp_reference_open_fixture_clearance_m": -0.06362338363497728,
+      "nominal_grasp_reference_open_fixture_geometry": {
+        "compatible_pair_evaluations": 60,
+        "continuous_sweep_guard_m": 0.0,
+        "limiting_pair": {
+          "clearance_components": {
+            "continuous_guard_m": 0.0,
+            "native_geom_margin_m": 0.001,
+            "net_clearance_m": -0.06362338363497728,
+            "primitive_clearance_m": -0.06262338363497728
+          },
+          "clearance_m": -0.06362338363497728,
+          "fixture_body_name": "microwave_1_microdoorroot",
+          "fixture_compiled_geometry": {
+            "geom_dataid": -1,
+            "geom_id": 164,
+            "geom_margin": 0.001,
+            "geom_name": "microwave_1_g14",
+            "geom_rbound": 0.075,
+            "geom_size": [
+              0.01,
+              0.065,
+              0.0
+            ],
+            "geom_type": 3
+          },
+          "fixture_geom_id": 164,
+          "fixture_geom_name": "microwave_1_g14",
+          "method": "conservative compiled bounding spheres",
+          "moving_body_name": "gripper0_right_gripper",
+          "moving_compiled_geometry": {
+            "convex_mesh": {
+              "convex_hull_face_count": 200,
+              "convex_hull_vertex_count": 102,
+              "geom_id": 75,
+              "geom_name": "gripper0_hand_collision",
+              "geom_rbound": 0.11905841176741497,
+              "geom_size": [
+                0.03164141183398503,
+                0.0486720137040898,
+                0.10394595495602695
+              ],
+              "geom_type": 7,
+              "mesh_graph_address": 37354,
+              "mesh_id": 64,
+              "mesh_vertex_count": 102
+            },
+            "geom_dataid": 64,
+            "geom_id": 75,
+            "geom_margin": 0.0,
+            "geom_name": "gripper0_hand_collision",
+            "geom_rbound": 0.11905841176741497,
+            "geom_size": [
+              0.03164141183398503,
+              0.0486720137040898,
+              0.10394595495602695
+            ],
+            "geom_type": 7
+          },
+          "moving_geom_id": 75,
+          "moving_geom_name": "gripper0_hand_collision",
+          "sample_fraction": 0.0,
+          "sample_index": 0,
+          "translated_reference_position": [
+            -0.2,
+            -0.1,
+            0.9600908477404537
+          ]
+        },
+        "minimum_clearance_m": -0.06362338363497728,
+        "path_end": [
+          -0.2,
+          -0.1,
+          0.9600908477404537
+        ],
+        "path_length_m": 0.0,
+        "path_start": [
+          -0.2,
+          -0.1,
+          0.9600908477404537
+        ],
+        "reference_position": [
+          -0.20960641372702207,
+          -0.005139944888850629,
+          1.165973673086924
+        ],
+        "sample_intervals": 1,
+        "sample_spacing_m": 0.0,
+        "sample_zero_is_current_pose": false,
+        "sample_zero_semantics": "synthetic translated path start; it equals current mjData geometry only when path_start equals reference_position"
+      },
+      "porcelain_xy_distance_m": 0.15998934205411122,
+      "post_open_eef_to_heuristic_grasp_high_m": 0.292699058246608,
+      "reference_post_robot_open_qpos": -1.3627293032300833,
+      "target_position": [
+        -0.2,
+        -0.1,
+        0.9000908477404538
+      ]
+    },
+    {
+      "candidate_world_xy": [
+        -0.2,
+        -0.15
+      ],
+      "door_limiting_pair": {
+        "clearance_components": {
+          "continuous_guard_m": 0.0063200775010948595,
+          "native_geom_margin_m": 0.001,
+          "net_clearance_m": 0.07557697018250369,
+          "primitive_clearance_m": 0.08289704768359854
+        },
+        "clearance_m": 0.07557697018250369,
+        "continuous_guard_m": 0.0063200775010948595,
+        "door_angle_rad": 0.698,
+        "door_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 167,
+          "geom_margin": 0.001,
+          "geom_name": "microwave_1_g17",
+          "geom_rbound": 0.159594799414016,
+          "geom_size": [
+            0.1295,
+            0.012,
+            0.0925
+          ],
+          "geom_type": 6
+        },
+        "door_geom_id": 167,
+        "door_geom_name": "microwave_1_g17",
+        "method": "compiled box-box separating-axis gap",
+        "sample_fraction": 0.3333333333333333,
+        "sample_index": 16,
+        "target_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 124,
+          "geom_margin": 0.0,
+          "geom_name": "white_yellow_mug_1_g14",
+          "geom_rbound": 0.044672436691991634,
+          "geom_size": [
+            0.00413,
+            0.00876,
+            0.04361
+          ],
+          "geom_type": 6
+        },
+        "target_geom_id": 124,
+        "target_geom_name": "white_yellow_mug_1_g14"
+      },
+      "door_sweep_clearance_m": 0.07557697018250369,
+      "door_sweep_compiled": true,
+      "eligible_for_grasp_compilation": false,
+      "grasp_corridor_compiled": false,
+      "heuristic_grasp_high_eef": [
+        -0.21682236803950022,
+        -0.34427302420445205,
+        1.1200908477404539
+      ],
+      "microwave_outward_direction_xy": [
+        -0.0862685540487191,
+        -0.9962719189971898
+      ],
+      "nominal_grasp_eef": [
+        -0.2,
+        -0.15,
+        0.9600908477404537
+      ],
+      "nominal_grasp_reference_open_fixture_clearance_m": -0.014801549550153434,
+      "nominal_grasp_reference_open_fixture_geometry": {
+        "compatible_pair_evaluations": 60,
+        "continuous_sweep_guard_m": 0.0,
+        "limiting_pair": {
+          "clearance_components": {
+            "continuous_guard_m": 0.0,
+            "native_geom_margin_m": 0.001,
+            "net_clearance_m": -0.014801549550153434,
+            "primitive_clearance_m": -0.013801549550153433
+          },
+          "clearance_m": -0.014801549550153434,
+          "fixture_body_name": "microwave_1_microdoorroot",
+          "fixture_compiled_geometry": {
+            "geom_dataid": -1,
+            "geom_id": 164,
+            "geom_margin": 0.001,
+            "geom_name": "microwave_1_g14",
+            "geom_rbound": 0.075,
+            "geom_size": [
+              0.01,
+              0.065,
+              0.0
+            ],
+            "geom_type": 3
+          },
+          "fixture_geom_id": 164,
+          "fixture_geom_name": "microwave_1_g14",
+          "method": "conservative compiled bounding spheres",
+          "moving_body_name": "gripper0_right_gripper",
+          "moving_compiled_geometry": {
+            "convex_mesh": {
+              "convex_hull_face_count": 200,
+              "convex_hull_vertex_count": 102,
+              "geom_id": 75,
+              "geom_name": "gripper0_hand_collision",
+              "geom_rbound": 0.11905841176741497,
+              "geom_size": [
+                0.03164141183398503,
+                0.0486720137040898,
+                0.10394595495602695
+              ],
+              "geom_type": 7,
+              "mesh_graph_address": 37354,
+              "mesh_id": 64,
+              "mesh_vertex_count": 102
+            },
+            "geom_dataid": 64,
+            "geom_id": 75,
+            "geom_margin": 0.0,
+            "geom_name": "gripper0_hand_collision",
+            "geom_rbound": 0.11905841176741497,
+            "geom_size": [
+              0.03164141183398503,
+              0.0486720137040898,
+              0.10394595495602695
+            ],
+            "geom_type": 7
+          },
+          "moving_geom_id": 75,
+          "moving_geom_name": "gripper0_hand_collision",
+          "sample_fraction": 0.0,
+          "sample_index": 0,
+          "translated_reference_position": [
+            -0.2,
+            -0.15,
+            0.9600908477404537
+          ]
+        },
+        "minimum_clearance_m": -0.014801549550153434,
+        "path_end": [
+          -0.2,
+          -0.15,
+          0.9600908477404537
+        ],
+        "path_length_m": 0.0,
+        "path_start": [
+          -0.2,
+          -0.15,
+          0.9600908477404537
+        ],
+        "reference_position": [
+          -0.20960641372702207,
+          -0.005139944888850629,
+          1.165973673086924
+        ],
+        "sample_intervals": 1,
+        "sample_spacing_m": 0.0,
+        "sample_zero_is_current_pose": false,
+        "sample_zero_semantics": "synthetic translated path start; it equals current mjData geometry only when path_start equals reference_position"
+      },
+      "porcelain_xy_distance_m": 0.12010208762053524,
+      "post_open_eef_to_heuristic_grasp_high_m": 0.34229891782548255,
+      "reference_post_robot_open_qpos": -1.3627293032300833,
+      "target_position": [
+        -0.2,
+        -0.15,
+        0.9000908477404538
+      ]
+    },
+    {
+      "candidate_world_xy": [
+        -0.25,
+        -0.1
+      ],
+      "door_limiting_pair": {
+        "clearance_components": {
+          "continuous_guard_m": 0.0063200775010948595,
+          "native_geom_margin_m": 0.001,
+          "net_clearance_m": 0.039842775623123834,
+          "primitive_clearance_m": 0.047162853124218695
+        },
+        "clearance_m": 0.039842775623123834,
+        "continuous_guard_m": 0.0063200775010948595,
+        "door_angle_rad": 0.4362499999999999,
+        "door_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 167,
+          "geom_margin": 0.001,
+          "geom_name": "microwave_1_g17",
+          "geom_rbound": 0.159594799414016,
+          "geom_size": [
+            0.1295,
+            0.012,
+            0.0925
+          ],
+          "geom_type": 6
+        },
+        "door_geom_id": 167,
+        "door_geom_name": "microwave_1_g17",
+        "method": "compiled box-box separating-axis gap",
+        "sample_fraction": 0.20833333333333331,
+        "sample_index": 10,
+        "target_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 124,
+          "geom_margin": 0.0,
+          "geom_name": "white_yellow_mug_1_g14",
+          "geom_rbound": 0.044672436691991634,
+          "geom_size": [
+            0.00413,
+            0.00876,
+            0.04361
+          ],
+          "geom_type": 6
+        },
+        "target_geom_id": 124,
+        "target_geom_name": "white_yellow_mug_1_g14"
+      },
+      "door_sweep_clearance_m": 0.039842775623123834,
+      "door_sweep_compiled": true,
+      "eligible_for_grasp_compilation": false,
+      "grasp_corridor_compiled": false,
+      "heuristic_grasp_high_eef": [
+        -0.29423688670419634,
+        -0.28991602843025155,
+        1.1200908477404539
+      ],
+      "microwave_outward_direction_xy": [
+        -0.22685582925228898,
+        -0.9739283509243668
+      ],
+      "nominal_grasp_eef": [
+        -0.25,
+        -0.1,
+        0.9600908477404537
+      ],
+      "nominal_grasp_reference_open_fixture_clearance_m": -0.044644188104216234,
+      "nominal_grasp_reference_open_fixture_geometry": {
+        "compatible_pair_evaluations": 60,
+        "continuous_sweep_guard_m": 0.0,
+        "limiting_pair": {
+          "clearance_components": {
+            "continuous_guard_m": 0.0,
+            "native_geom_margin_m": 0.001,
+            "net_clearance_m": -0.044644188104216234,
+            "primitive_clearance_m": -0.04364418810421623
+          },
+          "clearance_m": -0.044644188104216234,
+          "fixture_body_name": "microwave_1_microdoorroot",
+          "fixture_compiled_geometry": {
+            "geom_dataid": -1,
+            "geom_id": 164,
+            "geom_margin": 0.001,
+            "geom_name": "microwave_1_g14",
+            "geom_rbound": 0.075,
+            "geom_size": [
+              0.01,
+              0.065,
+              0.0
+            ],
+            "geom_type": 3
+          },
+          "fixture_geom_id": 164,
+          "fixture_geom_name": "microwave_1_g14",
+          "method": "conservative compiled bounding spheres",
+          "moving_body_name": "gripper0_right_gripper",
+          "moving_compiled_geometry": {
+            "convex_mesh": {
+              "convex_hull_face_count": 200,
+              "convex_hull_vertex_count": 102,
+              "geom_id": 75,
+              "geom_name": "gripper0_hand_collision",
+              "geom_rbound": 0.11905841176741497,
+              "geom_size": [
+                0.03164141183398503,
+                0.0486720137040898,
+                0.10394595495602695
+              ],
+              "geom_type": 7,
+              "mesh_graph_address": 37354,
+              "mesh_id": 64,
+              "mesh_vertex_count": 102
+            },
+            "geom_dataid": 64,
+            "geom_id": 75,
+            "geom_margin": 0.0,
+            "geom_name": "gripper0_hand_collision",
+            "geom_rbound": 0.11905841176741497,
+            "geom_size": [
+              0.03164141183398503,
+              0.0486720137040898,
+              0.10394595495602695
+            ],
+            "geom_type": 7
+          },
+          "moving_geom_id": 75,
+          "moving_geom_name": "gripper0_hand_collision",
+          "sample_fraction": 0.0,
+          "sample_index": 0,
+          "translated_reference_position": [
+            -0.25,
+            -0.1,
+            0.9600908477404537
+          ]
+        },
+        "minimum_clearance_m": -0.044644188104216234,
+        "path_end": [
+          -0.25,
+          -0.1,
+          0.9600908477404537
+        ],
+        "path_length_m": 0.0,
+        "path_start": [
+          -0.25,
+          -0.1,
+          0.9600908477404537
+        ],
+        "reference_position": [
+          -0.20960641372702207,
+          -0.005139944888850629,
+          1.165973673086924
+        ],
+        "sample_intervals": 1,
+        "sample_spacing_m": 0.0,
+        "sample_zero_is_current_pose": false,
+        "sample_zero_semantics": "synthetic translated path start; it equals current mjData geometry only when path_start equals reference_position"
+      },
+      "porcelain_xy_distance_m": 0.19080259790703366,
+      "post_open_eef_to_heuristic_grasp_high_m": 0.30060766519717,
+      "reference_post_robot_open_qpos": -1.3627293032300833,
+      "target_position": [
+        -0.25,
+        -0.1,
+        0.9000908477404538
+      ]
+    },
+    {
+      "candidate_world_xy": [
+        -0.25,
+        -0.15
+      ],
+      "door_limiting_pair": {
+        "clearance_components": {
+          "continuous_guard_m": 0.0063200775010948595,
+          "native_geom_margin_m": 0.001,
+          "net_clearance_m": 0.07971370806142856,
+          "primitive_clearance_m": 0.08703378556252342
+        },
+        "clearance_m": 0.07971370806142856,
+        "continuous_guard_m": 0.0063200775010948595,
+        "door_angle_rad": 0.5671249999999999,
+        "door_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 167,
+          "geom_margin": 0.001,
+          "geom_name": "microwave_1_g17",
+          "geom_rbound": 0.159594799414016,
+          "geom_size": [
+            0.1295,
+            0.012,
+            0.0925
+          ],
+          "geom_type": 6
+        },
+        "door_geom_id": 167,
+        "door_geom_name": "microwave_1_g17",
+        "method": "compiled box-box separating-axis gap",
+        "sample_fraction": 0.2708333333333333,
+        "sample_index": 13,
+        "target_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 124,
+          "geom_margin": 0.0,
+          "geom_name": "white_yellow_mug_1_g14",
+          "geom_rbound": 0.044672436691991634,
+          "geom_size": [
+            0.00413,
+            0.00876,
+            0.04361
+          ],
+          "geom_type": 6
+        },
+        "target_geom_id": 124,
+        "target_geom_name": "white_yellow_mug_1_g14"
+      },
+      "door_sweep_clearance_m": 0.07971370806142856,
+      "door_sweep_compiled": true,
+      "eligible_for_grasp_compilation": false,
+      "grasp_corridor_compiled": false,
+      "heuristic_grasp_high_eef": [
+        -0.28921233069020114,
+        -0.34101673518789477,
+        1.1200908477404539
+      ],
+      "microwave_outward_direction_xy": [
+        -0.20108887533436473,
+        -0.9795730009635628
+      ],
+      "nominal_grasp_eef": [
+        -0.25,
+        -0.15,
+        0.9600908477404537
+      ],
+      "nominal_grasp_reference_open_fixture_clearance_m": -0.0005287008324503647,
+      "nominal_grasp_reference_open_fixture_geometry": {
+        "compatible_pair_evaluations": 60,
+        "continuous_sweep_guard_m": 0.0,
+        "limiting_pair": {
+          "clearance_components": {
+            "continuous_guard_m": 0.0,
+            "native_geom_margin_m": 0.001,
+            "net_clearance_m": -0.0005287008324503647,
+            "primitive_clearance_m": 0.0004712991675496353
+          },
+          "clearance_m": -0.0005287008324503647,
+          "fixture_body_name": "microwave_1_microdoorroot",
+          "fixture_compiled_geometry": {
+            "geom_dataid": -1,
+            "geom_id": 164,
+            "geom_margin": 0.001,
+            "geom_name": "microwave_1_g14",
+            "geom_rbound": 0.075,
+            "geom_size": [
+              0.01,
+              0.065,
+              0.0
+            ],
+            "geom_type": 3
+          },
+          "fixture_geom_id": 164,
+          "fixture_geom_name": "microwave_1_g14",
+          "method": "conservative compiled bounding spheres",
+          "moving_body_name": "gripper0_right_gripper",
+          "moving_compiled_geometry": {
+            "convex_mesh": {
+              "convex_hull_face_count": 200,
+              "convex_hull_vertex_count": 102,
+              "geom_id": 75,
+              "geom_name": "gripper0_hand_collision",
+              "geom_rbound": 0.11905841176741497,
+              "geom_size": [
+                0.03164141183398503,
+                0.0486720137040898,
+                0.10394595495602695
+              ],
+              "geom_type": 7,
+              "mesh_graph_address": 37354,
+              "mesh_id": 64,
+              "mesh_vertex_count": 102
+            },
+            "geom_dataid": 64,
+            "geom_id": 75,
+            "geom_margin": 0.0,
+            "geom_name": "gripper0_hand_collision",
+            "geom_rbound": 0.11905841176741497,
+            "geom_size": [
+              0.03164141183398503,
+              0.0486720137040898,
+              0.10394595495602695
+            ],
+            "geom_type": 7
+          },
+          "moving_geom_id": 75,
+          "moving_geom_name": "gripper0_hand_collision",
+          "sample_fraction": 0.0,
+          "sample_index": 0,
+          "translated_reference_position": [
+            -0.25,
+            -0.15,
+            0.9600908477404537
+          ]
+        },
+        "minimum_clearance_m": -0.0005287008324503647,
+        "path_end": [
+          -0.25,
+          -0.15,
+          0.9600908477404537
+        ],
+        "path_length_m": 0.0,
+        "path_start": [
+          -0.25,
+          -0.15,
+          0.9600908477404537
+        ],
+        "reference_position": [
+          -0.20960641372702207,
+          -0.005139944888850629,
+          1.165973673086924
+        ],
+        "sample_intervals": 1,
+        "sample_spacing_m": 0.0,
+        "sample_zero_is_current_pose": false,
+        "sample_zero_semantics": "synthetic translated path start; it equals current mjData geometry only when path_start equals reference_position"
+      },
+      "porcelain_xy_distance_m": 0.15885072630610314,
+      "post_open_eef_to_heuristic_grasp_high_m": 0.3482176818297878,
+      "reference_post_robot_open_qpos": -1.3627293032300833,
+      "target_position": [
+        -0.25,
+        -0.15,
+        0.9000908477404538
+      ]
+    },
+    {
+      "candidate_world_xy": [
+        -0.3,
+        -0.1
+      ],
+      "door_limiting_pair": {
+        "clearance_components": {
+          "continuous_guard_m": 0.0063200775010948595,
+          "native_geom_margin_m": 0.001,
+          "net_clearance_m": 0.0541442642434043,
+          "primitive_clearance_m": 0.06146434174449916
+        },
+        "clearance_m": 0.0541442642434043,
+        "continuous_guard_m": 0.0063200775010948595,
+        "door_angle_rad": 0.392625,
+        "door_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 167,
+          "geom_margin": 0.001,
+          "geom_name": "microwave_1_g17",
+          "geom_rbound": 0.159594799414016,
+          "geom_size": [
+            0.1295,
+            0.012,
+            0.0925
+          ],
+          "geom_type": 6
+        },
+        "door_geom_id": 167,
+        "door_geom_name": "microwave_1_g17",
+        "method": "compiled box-box separating-axis gap",
+        "sample_fraction": 0.1875,
+        "sample_index": 9,
+        "target_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 123,
+          "geom_margin": 0.0,
+          "geom_name": "white_yellow_mug_1_g13",
+          "geom_rbound": 0.04467151329426842,
+          "geom_size": [
+            0.00412,
+            0.00876,
+            0.04361
+          ],
+          "geom_type": 6
+        },
+        "target_geom_id": 123,
+        "target_geom_name": "white_yellow_mug_1_g13"
+      },
+      "door_sweep_clearance_m": 0.0541442642434043,
+      "door_sweep_compiled": true,
+      "eligible_for_grasp_compilation": false,
+      "grasp_corridor_compiled": false,
+      "heuristic_grasp_high_eef": [
+        -0.3672808924772212,
+        -0.2830253575531778,
+        1.1200908477404539
+      ],
+      "microwave_outward_direction_xy": [
+        -0.3450302178319037,
+        -0.9385915771957838
+      ],
+      "nominal_grasp_eef": [
+        -0.3,
+        -0.1,
+        0.9600908477404537
+      ],
+      "nominal_grasp_reference_open_fixture_clearance_m": -0.013471763744409573,
+      "nominal_grasp_reference_open_fixture_geometry": {
+        "compatible_pair_evaluations": 60,
+        "continuous_sweep_guard_m": 0.0,
+        "limiting_pair": {
+          "clearance_components": {
+            "continuous_guard_m": 0.0,
+            "native_geom_margin_m": 0.001,
+            "net_clearance_m": -0.013471763744409573,
+            "primitive_clearance_m": -0.012471763744409572
+          },
+          "clearance_m": -0.013471763744409573,
+          "fixture_body_name": "microwave_1_microdoorroot",
+          "fixture_compiled_geometry": {
+            "geom_dataid": -1,
+            "geom_id": 164,
+            "geom_margin": 0.001,
+            "geom_name": "microwave_1_g14",
+            "geom_rbound": 0.075,
+            "geom_size": [
+              0.01,
+              0.065,
+              0.0
+            ],
+            "geom_type": 3
+          },
+          "fixture_geom_id": 164,
+          "fixture_geom_name": "microwave_1_g14",
+          "method": "conservative compiled bounding spheres",
+          "moving_body_name": "gripper0_right_gripper",
+          "moving_compiled_geometry": {
+            "convex_mesh": {
+              "convex_hull_face_count": 200,
+              "convex_hull_vertex_count": 102,
+              "geom_id": 75,
+              "geom_name": "gripper0_hand_collision",
+              "geom_rbound": 0.11905841176741497,
+              "geom_size": [
+                0.03164141183398503,
+                0.0486720137040898,
+                0.10394595495602695
+              ],
+              "geom_type": 7,
+              "mesh_graph_address": 37354,
+              "mesh_id": 64,
+              "mesh_vertex_count": 102
+            },
+            "geom_dataid": 64,
+            "geom_id": 75,
+            "geom_margin": 0.0,
+            "geom_name": "gripper0_hand_collision",
+            "geom_rbound": 0.11905841176741497,
+            "geom_size": [
+              0.03164141183398503,
+              0.0486720137040898,
+              0.10394595495602695
+            ],
+            "geom_type": 7
+          },
+          "moving_geom_id": 75,
+          "moving_geom_name": "gripper0_hand_collision",
+          "sample_fraction": 0.0,
+          "sample_index": 0,
+          "translated_reference_position": [
+            -0.3,
+            -0.1,
+            0.9600908477404537
+          ]
+        },
+        "minimum_clearance_m": -0.013471763744409573,
+        "path_end": [
+          -0.3,
+          -0.1,
+          0.9600908477404537
+        ],
+        "path_length_m": 0.0,
+        "path_start": [
+          -0.3,
+          -0.1,
+          0.9600908477404537
+        ],
+        "reference_position": [
+          -0.20960641372702207,
+          -0.005139944888850629,
+          1.165973673086924
+        ],
+        "sample_intervals": 1,
+        "sample_spacing_m": 0.0,
+        "sample_zero_is_current_pose": false,
+        "sample_zero_semantics": "synthetic translated path start; it equals current mjData geometry only when path_start equals reference_position"
+      },
+      "porcelain_xy_distance_m": 0.22850530226941984,
+      "post_open_eef_to_heuristic_grasp_high_m": 0.3227797662223348,
+      "reference_post_robot_open_qpos": -1.3627293032300833,
+      "target_position": [
+        -0.3,
+        -0.1,
+        0.9000908477404538
+      ]
+    },
+    {
+      "candidate_world_xy": [
+        -0.3,
+        -0.15
+      ],
+      "door_limiting_pair": {
+        "clearance_components": {
+          "continuous_guard_m": 0.0063200775010948595,
+          "native_geom_margin_m": 0.001,
+          "net_clearance_m": 0.09399607812830028,
+          "primitive_clearance_m": 0.10131615562939514
+        },
+        "clearance_m": 0.09399607812830028,
+        "continuous_guard_m": 0.0063200775010948595,
+        "door_angle_rad": 0.4362499999999999,
+        "door_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 167,
+          "geom_margin": 0.001,
+          "geom_name": "microwave_1_g17",
+          "geom_rbound": 0.159594799414016,
+          "geom_size": [
+            0.1295,
+            0.012,
+            0.0925
+          ],
+          "geom_type": 6
+        },
+        "door_geom_id": 167,
+        "door_geom_name": "microwave_1_g17",
+        "method": "compiled box-box separating-axis gap",
+        "sample_fraction": 0.20833333333333331,
+        "sample_index": 10,
+        "target_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 124,
+          "geom_margin": 0.0,
+          "geom_name": "white_yellow_mug_1_g14",
+          "geom_rbound": 0.044672436691991634,
+          "geom_size": [
+            0.00413,
+            0.00876,
+            0.04361
+          ],
+          "geom_type": 6
+        },
+        "target_geom_id": 124,
+        "target_geom_name": "white_yellow_mug_1_g14"
+      },
+      "door_sweep_clearance_m": 0.09399607812830028,
+      "door_sweep_compiled": true,
+      "eligible_for_grasp_compilation": true,
+      "grasp_clearance_eef": [
+        -0.3600994383578994,
+        -0.3355075672555301,
+        0.9600908477404537
+      ],
+      "grasp_corridor_compiled": true,
+      "grasp_direction_source": "compiled microwave outward direction",
+      "grasp_high_eef": [
+        -0.3600994383578994,
+        -0.3355075672555301,
+        1.1200908477404536
+      ],
+      "grasp_outward_offset_m": 0.19499999999999992,
+      "heuristic_grasp_high_eef": [
+        -0.3600994383578994,
+        -0.3355075672555301,
+        1.1200908477404539
+      ],
+      "microwave_outward_direction_xy": [
+        -0.30820224798922796,
+        -0.9513208577206673
+      ],
+      "nominal_grasp_eef": [
+        -0.3,
+        -0.15,
+        0.9600908477404537
+      ],
+      "nominal_grasp_reference_open_fixture_clearance_m": 0.024466257681075423,
+      "nominal_grasp_reference_open_fixture_geometry": {
+        "compatible_pair_evaluations": 60,
+        "continuous_sweep_guard_m": 0.0,
+        "limiting_pair": {
+          "clearance_components": {
+            "continuous_guard_m": 0.0,
+            "native_geom_margin_m": 0.001,
+            "net_clearance_m": 0.024466257681075423,
+            "primitive_clearance_m": 0.025466257681075424
+          },
+          "clearance_m": 0.024466257681075423,
+          "fixture_body_name": "microwave_1_microdoorroot",
+          "fixture_compiled_geometry": {
+            "geom_dataid": -1,
+            "geom_id": 164,
+            "geom_margin": 0.001,
+            "geom_name": "microwave_1_g14",
+            "geom_rbound": 0.075,
+            "geom_size": [
+              0.01,
+              0.065,
+              0.0
+            ],
+            "geom_type": 3
+          },
+          "fixture_geom_id": 164,
+          "fixture_geom_name": "microwave_1_g14",
+          "method": "conservative compiled bounding spheres",
+          "moving_body_name": "gripper0_right_gripper",
+          "moving_compiled_geometry": {
+            "convex_mesh": {
+              "convex_hull_face_count": 200,
+              "convex_hull_vertex_count": 102,
+              "geom_id": 75,
+              "geom_name": "gripper0_hand_collision",
+              "geom_rbound": 0.11905841176741497,
+              "geom_size": [
+                0.03164141183398503,
+                0.0486720137040898,
+                0.10394595495602695
+              ],
+              "geom_type": 7,
+              "mesh_graph_address": 37354,
+              "mesh_id": 64,
+              "mesh_vertex_count": 102
+            },
+            "geom_dataid": 64,
+            "geom_id": 75,
+            "geom_margin": 0.0,
+            "geom_name": "gripper0_hand_collision",
+            "geom_rbound": 0.11905841176741497,
+            "geom_size": [
+              0.03164141183398503,
+              0.0486720137040898,
+              0.10394595495602695
+            ],
+            "geom_type": 7
+          },
+          "moving_geom_id": 75,
+          "moving_geom_name": "gripper0_hand_collision",
+          "sample_fraction": 0.0,
+          "sample_index": 0,
+          "translated_reference_position": [
+            -0.3,
+            -0.15,
+            0.9600908477404537
+          ]
+        },
+        "minimum_clearance_m": 0.024466257681075423,
+        "path_end": [
+          -0.3,
+          -0.15,
+          0.9600908477404537
+        ],
+        "path_length_m": 0.0,
+        "path_start": [
+          -0.3,
+          -0.15,
+          0.9600908477404537
+        ],
+        "reference_position": [
+          -0.20960641372702207,
+          -0.005139944888850629,
+          1.165973673086924
+        ],
+        "sample_intervals": 1,
+        "sample_spacing_m": 0.0,
+        "sample_zero_is_current_pose": false,
+        "sample_zero_semantics": "synthetic translated path start; it equals current mjData geometry only when path_start equals reference_position"
+      },
+      "porcelain_xy_distance_m": 0.20258972097602151,
+      "post_open_eef_to_grasp_high_m": 0.3659182286147241,
+      "post_open_eef_to_heuristic_grasp_high_m": 0.3659182286147241,
+      "reference_post_robot_open_qpos": -1.3627293032300833,
+      "target_position": [
+        -0.3,
+        -0.15,
+        0.9000908477404538
+      ]
+    },
+    {
+      "candidate_world_xy": [
+        -0.15,
+        -0.25
+      ],
+      "door_limiting_pair": {
+        "clearance_components": {
+          "continuous_guard_m": 0.0063200775010948595,
+          "native_geom_margin_m": 0.001,
+          "net_clearance_m": 0.15361596961436177,
+          "primitive_clearance_m": 0.16093604711545664
+        },
+        "clearance_m": 0.15361596961436177,
+        "continuous_guard_m": 0.0063200775010948595,
+        "door_angle_rad": 0.916125,
+        "door_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 167,
+          "geom_margin": 0.001,
+          "geom_name": "microwave_1_g17",
+          "geom_rbound": 0.159594799414016,
+          "geom_size": [
+            0.1295,
+            0.012,
+            0.0925
+          ],
+          "geom_type": 6
+        },
+        "door_geom_id": 167,
+        "door_geom_name": "microwave_1_g17",
+        "method": "compiled box-box separating-axis gap",
+        "sample_fraction": 0.4375,
+        "sample_index": 21,
+        "target_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 125,
+          "geom_margin": 0.0,
+          "geom_name": "white_yellow_mug_1_g15",
+          "geom_rbound": 0.04467151329426842,
+          "geom_size": [
+            0.00412,
+            0.00876,
+            0.04361
+          ],
+          "geom_type": 6
+        },
+        "target_geom_id": 125,
+        "target_geom_name": "white_yellow_mug_1_g15"
+      },
+      "door_sweep_clearance_m": 0.15361596961436177,
+      "door_sweep_compiled": true,
+      "eligible_for_grasp_compilation": false,
+      "grasp_corridor_compiled": false,
+      "heuristic_grasp_high_eef": [
+        -0.15,
+        -0.445,
+        1.1200908477404539
+      ],
+      "microwave_outward_direction_xy": [
+        0.0,
+        -1.0
+      ],
+      "nominal_grasp_eef": [
+        -0.15,
+        -0.25,
+        0.9600908477404537
+      ],
+      "nominal_grasp_reference_open_fixture_clearance_m": 0.08346987015178435,
+      "nominal_grasp_reference_open_fixture_geometry": {
+        "compatible_pair_evaluations": 60,
+        "continuous_sweep_guard_m": 0.0,
+        "limiting_pair": {
+          "clearance_components": {
+            "continuous_guard_m": 0.0,
+            "native_geom_margin_m": 0.001,
+            "net_clearance_m": 0.08346987015178435,
+            "primitive_clearance_m": 0.08446987015178435
+          },
+          "clearance_m": 0.08346987015178435,
+          "fixture_body_name": "microwave_1_microdoorroot",
+          "fixture_compiled_geometry": {
+            "geom_dataid": -1,
+            "geom_id": 164,
+            "geom_margin": 0.001,
+            "geom_name": "microwave_1_g14",
+            "geom_rbound": 0.075,
+            "geom_size": [
+              0.01,
+              0.065,
+              0.0
+            ],
+            "geom_type": 3
+          },
+          "fixture_geom_id": 164,
+          "fixture_geom_name": "microwave_1_g14",
+          "method": "conservative compiled bounding spheres",
+          "moving_body_name": "gripper0_right_gripper",
+          "moving_compiled_geometry": {
+            "convex_mesh": {
+              "convex_hull_face_count": 200,
+              "convex_hull_vertex_count": 102,
+              "geom_id": 75,
+              "geom_name": "gripper0_hand_collision",
+              "geom_rbound": 0.11905841176741497,
+              "geom_size": [
+                0.03164141183398503,
+                0.0486720137040898,
+                0.10394595495602695
+              ],
+              "geom_type": 7,
+              "mesh_graph_address": 37354,
+              "mesh_id": 64,
+              "mesh_vertex_count": 102
+            },
+            "geom_dataid": 64,
+            "geom_id": 75,
+            "geom_margin": 0.0,
+            "geom_name": "gripper0_hand_collision",
+            "geom_rbound": 0.11905841176741497,
+            "geom_size": [
+              0.03164141183398503,
+              0.0486720137040898,
+              0.10394595495602695
+            ],
+            "geom_type": 7
+          },
+          "moving_geom_id": 75,
+          "moving_geom_name": "gripper0_hand_collision",
+          "sample_fraction": 0.0,
+          "sample_index": 0,
+          "translated_reference_position": [
+            -0.15,
+            -0.25,
+            0.9600908477404537
+          ]
+        },
+        "minimum_clearance_m": 0.08346987015178435,
+        "path_end": [
+          -0.15,
+          -0.25,
+          0.9600908477404537
+        ],
+        "path_length_m": 0.0,
+        "path_start": [
+          -0.15,
+          -0.25,
+          0.9600908477404537
+        ],
+        "reference_position": [
+          -0.20960641372702207,
+          -0.005139944888850629,
+          1.165973673086924
+        ],
+        "sample_intervals": 1,
+        "sample_spacing_m": 0.0,
+        "sample_zero_is_current_pose": false,
+        "sample_zero_semantics": "synthetic translated path start; it equals current mjData geometry only when path_start equals reference_position"
+      },
+      "porcelain_xy_distance_m": 0.035655482235577775,
+      "post_open_eef_to_heuristic_grasp_high_m": 0.44624547762588584,
+      "reference_post_robot_open_qpos": -1.3627293032300833,
+      "target_position": [
+        -0.15,
+        -0.25,
+        0.9000908477404538
+      ]
+    },
+    {
+      "candidate_world_xy": [
+        -0.2,
+        -0.25
+      ],
+      "door_limiting_pair": {
+        "clearance_components": {
+          "continuous_guard_m": 0.0063200775010948595,
+          "native_geom_margin_m": 0.001,
+          "net_clearance_m": 0.16390352608429265,
+          "primitive_clearance_m": 0.17122360358538752
+        },
+        "clearance_m": 0.16390352608429265,
+        "continuous_guard_m": 0.0063200775010948595,
+        "door_angle_rad": 0.7416249999999999,
+        "door_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 167,
+          "geom_margin": 0.001,
+          "geom_name": "microwave_1_g17",
+          "geom_rbound": 0.159594799414016,
+          "geom_size": [
+            0.1295,
+            0.012,
+            0.0925
+          ],
+          "geom_type": 6
+        },
+        "door_geom_id": 167,
+        "door_geom_name": "microwave_1_g17",
+        "method": "compiled box-box separating-axis gap",
+        "sample_fraction": 0.35416666666666663,
+        "sample_index": 17,
+        "target_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 125,
+          "geom_margin": 0.0,
+          "geom_name": "white_yellow_mug_1_g15",
+          "geom_rbound": 0.04467151329426842,
+          "geom_size": [
+            0.00412,
+            0.00876,
+            0.04361
+          ],
+          "geom_type": 6
+        },
+        "target_geom_id": 125,
+        "target_geom_name": "white_yellow_mug_1_g15"
+      },
+      "door_sweep_clearance_m": 0.16390352608429265,
+      "door_sweep_compiled": true,
+      "eligible_for_grasp_compilation": false,
+      "grasp_corridor_compiled": false,
+      "heuristic_grasp_high_eef": [
+        -0.21361271597137063,
+        -0.44452427602713956,
+        1.1200908477404539
+      ],
+      "microwave_outward_direction_xy": [
+        -0.06980879985318265,
+        -0.997560389882767
+      ],
+      "nominal_grasp_eef": [
+        -0.2,
+        -0.25,
+        0.9600908477404537
+      ],
+      "nominal_grasp_reference_open_fixture_clearance_m": 0.0840961617019965,
+      "nominal_grasp_reference_open_fixture_geometry": {
+        "compatible_pair_evaluations": 60,
+        "continuous_sweep_guard_m": 0.0,
+        "limiting_pair": {
+          "clearance_components": {
+            "continuous_guard_m": 0.0,
+            "native_geom_margin_m": 0.001,
+            "net_clearance_m": 0.0840961617019965,
+            "primitive_clearance_m": 0.0850961617019965
+          },
+          "clearance_m": 0.0840961617019965,
+          "fixture_body_name": "microwave_1_microdoorroot",
+          "fixture_compiled_geometry": {
+            "geom_dataid": -1,
+            "geom_id": 164,
+            "geom_margin": 0.001,
+            "geom_name": "microwave_1_g14",
+            "geom_rbound": 0.075,
+            "geom_size": [
+              0.01,
+              0.065,
+              0.0
+            ],
+            "geom_type": 3
+          },
+          "fixture_geom_id": 164,
+          "fixture_geom_name": "microwave_1_g14",
+          "method": "conservative compiled bounding spheres",
+          "moving_body_name": "gripper0_right_gripper",
+          "moving_compiled_geometry": {
+            "convex_mesh": {
+              "convex_hull_face_count": 200,
+              "convex_hull_vertex_count": 102,
+              "geom_id": 75,
+              "geom_name": "gripper0_hand_collision",
+              "geom_rbound": 0.11905841176741497,
+              "geom_size": [
+                0.03164141183398503,
+                0.0486720137040898,
+                0.10394595495602695
+              ],
+              "geom_type": 7,
+              "mesh_graph_address": 37354,
+              "mesh_id": 64,
+              "mesh_vertex_count": 102
+            },
+            "geom_dataid": 64,
+            "geom_id": 75,
+            "geom_margin": 0.0,
+            "geom_name": "gripper0_hand_collision",
+            "geom_rbound": 0.11905841176741497,
+            "geom_size": [
+              0.03164141183398503,
+              0.0486720137040898,
+              0.10394595495602695
+            ],
+            "geom_type": 7
+          },
+          "moving_geom_id": 75,
+          "moving_geom_name": "gripper0_hand_collision",
+          "sample_fraction": 0.0,
+          "sample_index": 0,
+          "translated_reference_position": [
+            -0.2,
+            -0.25,
+            0.9600908477404537
+          ]
+        },
+        "minimum_clearance_m": 0.0840961617019965,
+        "path_end": [
+          -0.2,
+          -0.25,
+          0.9600908477404537
+        ],
+        "path_length_m": 0.0,
+        "path_start": [
+          -0.2,
+          -0.25,
+          0.9600908477404537
+        ],
+        "reference_position": [
+          -0.20960641372702207,
+          -0.005139944888850629,
+          1.165973673086924
+        ],
+        "sample_intervals": 1,
+        "sample_spacing_m": 0.0,
+        "sample_zero_is_current_pose": false,
+        "sample_zero_semantics": "synthetic translated path start; it equals current mjData geometry only when path_start equals reference_position"
+      },
+      "porcelain_xy_distance_m": 0.08414484660760499,
+      "post_open_eef_to_heuristic_grasp_high_m": 0.4417916642143549,
+      "reference_post_robot_open_qpos": -1.3627293032300833,
+      "target_position": [
+        -0.2,
+        -0.25,
+        0.9000908477404538
+      ]
+    },
+    {
+      "candidate_world_xy": [
+        -0.25,
+        -0.2
+      ],
+      "door_limiting_pair": {
+        "clearance_components": {
+          "continuous_guard_m": 0.0063200775010948595,
+          "native_geom_margin_m": 0.001,
+          "net_clearance_m": 0.11951792458518228,
+          "primitive_clearance_m": 0.12683800208627713
+        },
+        "clearance_m": 0.11951792458518228,
+        "continuous_guard_m": 0.0063200775010948595,
+        "door_angle_rad": 0.6543749999999999,
+        "door_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 167,
+          "geom_margin": 0.001,
+          "geom_name": "microwave_1_g17",
+          "geom_rbound": 0.159594799414016,
+          "geom_size": [
+            0.1295,
+            0.012,
+            0.0925
+          ],
+          "geom_type": 6
+        },
+        "door_geom_id": 167,
+        "door_geom_name": "microwave_1_g17",
+        "method": "compiled box-box separating-axis gap",
+        "sample_fraction": 0.3125,
+        "sample_index": 15,
+        "target_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 124,
+          "geom_margin": 0.0,
+          "geom_name": "white_yellow_mug_1_g14",
+          "geom_rbound": 0.044672436691991634,
+          "geom_size": [
+            0.00413,
+            0.00876,
+            0.04361
+          ],
+          "geom_type": 6
+        },
+        "target_geom_id": 124,
+        "target_geom_name": "white_yellow_mug_1_g14"
+      },
+      "door_sweep_clearance_m": 0.11951792458518228,
+      "door_sweep_compiled": true,
+      "eligible_for_grasp_compilation": false,
+      "grasp_corridor_compiled": false,
+      "heuristic_grasp_high_eef": [
+        -0.28519526085392316,
+        -0.3917975328658435,
+        1.1200908477404539
+      ],
+      "microwave_outward_direction_xy": [
+        -0.18048851719960585,
+        -0.9835770916197102
+      ],
+      "nominal_grasp_eef": [
+        -0.25,
+        -0.2,
+        0.9600908477404537
+      ],
+      "nominal_grasp_reference_open_fixture_clearance_m": 0.04589631052015304,
+      "nominal_grasp_reference_open_fixture_geometry": {
+        "compatible_pair_evaluations": 60,
+        "continuous_sweep_guard_m": 0.0,
+        "limiting_pair": {
+          "clearance_components": {
+            "continuous_guard_m": 0.0,
+            "native_geom_margin_m": 0.001,
+            "net_clearance_m": 0.04589631052015304,
+            "primitive_clearance_m": 0.04689631052015304
+          },
+          "clearance_m": 0.04589631052015304,
+          "fixture_body_name": "microwave_1_microdoorroot",
+          "fixture_compiled_geometry": {
+            "geom_dataid": -1,
+            "geom_id": 164,
+            "geom_margin": 0.001,
+            "geom_name": "microwave_1_g14",
+            "geom_rbound": 0.075,
+            "geom_size": [
+              0.01,
+              0.065,
+              0.0
+            ],
+            "geom_type": 3
+          },
+          "fixture_geom_id": 164,
+          "fixture_geom_name": "microwave_1_g14",
+          "method": "conservative compiled bounding spheres",
+          "moving_body_name": "gripper0_right_gripper",
+          "moving_compiled_geometry": {
+            "convex_mesh": {
+              "convex_hull_face_count": 200,
+              "convex_hull_vertex_count": 102,
+              "geom_id": 75,
+              "geom_name": "gripper0_hand_collision",
+              "geom_rbound": 0.11905841176741497,
+              "geom_size": [
+                0.03164141183398503,
+                0.0486720137040898,
+                0.10394595495602695
+              ],
+              "geom_type": 7,
+              "mesh_graph_address": 37354,
+              "mesh_id": 64,
+              "mesh_vertex_count": 102
+            },
+            "geom_dataid": 64,
+            "geom_id": 75,
+            "geom_margin": 0.0,
+            "geom_name": "gripper0_hand_collision",
+            "geom_rbound": 0.11905841176741497,
+            "geom_size": [
+              0.03164141183398503,
+              0.0486720137040898,
+              0.10394595495602695
+            ],
+            "geom_type": 7
+          },
+          "moving_geom_id": 75,
+          "moving_geom_name": "gripper0_hand_collision",
+          "sample_fraction": 0.0,
+          "sample_index": 0,
+          "translated_reference_position": [
+            -0.25,
+            -0.2,
+            0.9600908477404537
+          ]
+        },
+        "minimum_clearance_m": 0.04589631052015304,
+        "path_end": [
+          -0.25,
+          -0.2,
+          0.9600908477404537
+        ],
+        "path_length_m": 0.0,
+        "path_start": [
+          -0.25,
+          -0.2,
+          0.9600908477404537
+        ],
+        "reference_position": [
+          -0.20960641372702207,
+          -0.005139944888850629,
+          1.165973673086924
+        ],
+        "sample_intervals": 1,
+        "sample_spacing_m": 0.0,
+        "sample_zero_is_current_pose": false,
+        "sample_zero_semantics": "synthetic translated path start; it equals current mjData geometry only when path_start equals reference_position"
+      },
+      "porcelain_xy_distance_m": 0.13806330116247334,
+      "post_open_eef_to_heuristic_grasp_high_m": 0.3966396321750194,
+      "reference_post_robot_open_qpos": -1.3627293032300833,
+      "target_position": [
+        -0.25,
+        -0.2,
+        0.9000908477404538
+      ]
+    },
+    {
+      "candidate_world_xy": [
+        -0.3,
+        -0.2
+      ],
+      "door_limiting_pair": {
+        "clearance_components": {
+          "continuous_guard_m": 0.0063200775010948595,
+          "native_geom_margin_m": 0.001,
+          "net_clearance_m": 0.1297554981255904,
+          "primitive_clearance_m": 0.13707557562668526
+        },
+        "clearance_m": 0.1297554981255904,
+        "continuous_guard_m": 0.0063200775010948595,
+        "door_angle_rad": 0.5671249999999999,
+        "door_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 167,
+          "geom_margin": 0.001,
+          "geom_name": "microwave_1_g17",
+          "geom_rbound": 0.159594799414016,
+          "geom_size": [
+            0.1295,
+            0.012,
+            0.0925
+          ],
+          "geom_type": 6
+        },
+        "door_geom_id": 167,
+        "door_geom_name": "microwave_1_g17",
+        "method": "compiled box-box separating-axis gap",
+        "sample_fraction": 0.2708333333333333,
+        "sample_index": 13,
+        "target_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 124,
+          "geom_margin": 0.0,
+          "geom_name": "white_yellow_mug_1_g14",
+          "geom_rbound": 0.044672436691991634,
+          "geom_size": [
+            0.00413,
+            0.00876,
+            0.04361
+          ],
+          "geom_type": 6
+        },
+        "target_geom_id": 124,
+        "target_geom_name": "white_yellow_mug_1_g14"
+      },
+      "door_sweep_clearance_m": 0.1297554981255904,
+      "door_sweep_compiled": true,
+      "eligible_for_grasp_compilation": true,
+      "grasp_corridor_compiled": false,
+      "heuristic_grasp_high_eef": [
+        -0.3542431730533377,
+        -0.3873037057217653,
+        1.1200908477404539
+      ],
+      "microwave_outward_direction_xy": [
+        -0.27817011822224463,
+        -0.9605318242141809
+      ],
+      "nominal_grasp_eef": [
+        -0.3,
+        -0.2,
+        0.9600908477404537
+      ],
+      "nominal_grasp_reference_open_fixture_clearance_m": 0.06649167952048173,
+      "nominal_grasp_reference_open_fixture_geometry": {
+        "compatible_pair_evaluations": 60,
+        "continuous_sweep_guard_m": 0.0,
+        "limiting_pair": {
+          "clearance_components": {
+            "continuous_guard_m": 0.0,
+            "native_geom_margin_m": 0.001,
+            "net_clearance_m": 0.06649167952048173,
+            "primitive_clearance_m": 0.06749167952048173
+          },
+          "clearance_m": 0.06649167952048173,
+          "fixture_body_name": "microwave_1_microdoorroot",
+          "fixture_compiled_geometry": {
+            "geom_dataid": -1,
+            "geom_id": 164,
+            "geom_margin": 0.001,
+            "geom_name": "microwave_1_g14",
+            "geom_rbound": 0.075,
+            "geom_size": [
+              0.01,
+              0.065,
+              0.0
+            ],
+            "geom_type": 3
+          },
+          "fixture_geom_id": 164,
+          "fixture_geom_name": "microwave_1_g14",
+          "method": "conservative compiled bounding spheres",
+          "moving_body_name": "gripper0_right_gripper",
+          "moving_compiled_geometry": {
+            "convex_mesh": {
+              "convex_hull_face_count": 200,
+              "convex_hull_vertex_count": 102,
+              "geom_id": 75,
+              "geom_name": "gripper0_hand_collision",
+              "geom_rbound": 0.11905841176741497,
+              "geom_size": [
+                0.03164141183398503,
+                0.0486720137040898,
+                0.10394595495602695
+              ],
+              "geom_type": 7,
+              "mesh_graph_address": 37354,
+              "mesh_id": 64,
+              "mesh_vertex_count": 102
+            },
+            "geom_dataid": 64,
+            "geom_id": 75,
+            "geom_margin": 0.0,
+            "geom_name": "gripper0_hand_collision",
+            "geom_rbound": 0.11905841176741497,
+            "geom_size": [
+              0.03164141183398503,
+              0.0486720137040898,
+              0.10394595495602695
+            ],
+            "geom_type": 7
+          },
+          "moving_geom_id": 75,
+          "moving_geom_name": "gripper0_hand_collision",
+          "sample_fraction": 0.0,
+          "sample_index": 0,
+          "translated_reference_position": [
+            -0.3,
+            -0.2,
+            0.9600908477404537
+          ]
+        },
+        "minimum_clearance_m": 0.06649167952048173,
+        "path_end": [
+          -0.3,
+          -0.2,
+          0.9600908477404537
+        ],
+        "path_length_m": 0.0,
+        "path_start": [
+          -0.3,
+          -0.2,
+          0.9600908477404537
+        ],
+        "reference_position": [
+          -0.20960641372702207,
+          -0.005139944888850629,
+          1.165973673086924
+        ],
+        "sample_intervals": 1,
+        "sample_spacing_m": 0.0,
+        "sample_zero_is_current_pose": false,
+        "sample_zero_semantics": "synthetic translated path start; it equals current mjData geometry only when path_start equals reference_position"
+      },
+      "porcelain_xy_distance_m": 0.18673649060921535,
+      "post_open_eef_to_heuristic_grasp_high_m": 0.41118629099734155,
+      "reference_post_robot_open_qpos": -1.3627293032300833,
+      "target_position": [
+        -0.3,
+        -0.2,
+        0.9000908477404538
+      ]
+    },
+    {
+      "candidate_world_xy": [
+        -0.35,
+        -0.2
+      ],
+      "door_limiting_pair": {
+        "clearance_components": {
+          "continuous_guard_m": 0.0063200775010948595,
+          "native_geom_margin_m": 0.001,
+          "net_clearance_m": 0.1481493806334767,
+          "primitive_clearance_m": 0.15546945813457158
+        },
+        "clearance_m": 0.1481493806334767,
+        "continuous_guard_m": 0.0063200775010948595,
+        "door_angle_rad": 0.4362499999999999,
+        "door_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 167,
+          "geom_margin": 0.001,
+          "geom_name": "microwave_1_g17",
+          "geom_rbound": 0.159594799414016,
+          "geom_size": [
+            0.1295,
+            0.012,
+            0.0925
+          ],
+          "geom_type": 6
+        },
+        "door_geom_id": 167,
+        "door_geom_name": "microwave_1_g17",
+        "method": "compiled box-box separating-axis gap",
+        "sample_fraction": 0.20833333333333331,
+        "sample_index": 10,
+        "target_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 124,
+          "geom_margin": 0.0,
+          "geom_name": "white_yellow_mug_1_g14",
+          "geom_rbound": 0.044672436691991634,
+          "geom_size": [
+            0.00413,
+            0.00876,
+            0.04361
+          ],
+          "geom_type": 6
+        },
+        "target_geom_id": 124,
+        "target_geom_name": "white_yellow_mug_1_g14"
+      },
+      "door_sweep_clearance_m": 0.1481493806334767,
+      "door_sweep_compiled": true,
+      "eligible_for_grasp_compilation": true,
+      "grasp_corridor_compiled": false,
+      "heuristic_grasp_high_eef": [
+        -0.4217482415001077,
+        -0.38132068233282773,
+        1.1200908477404539
+      ],
+      "microwave_outward_direction_xy": [
+        -0.3679397000005525,
+        -0.92984965298886
+      ],
+      "nominal_grasp_eef": [
+        -0.35,
+        -0.2,
+        0.9600908477404537
+      ],
+      "nominal_grasp_reference_open_fixture_clearance_m": 0.09435085261908525,
+      "nominal_grasp_reference_open_fixture_geometry": {
+        "compatible_pair_evaluations": 60,
+        "continuous_sweep_guard_m": 0.0,
+        "limiting_pair": {
+          "clearance_components": {
+            "continuous_guard_m": 0.0,
+            "native_geom_margin_m": 0.001,
+            "net_clearance_m": 0.09435085261908525,
+            "primitive_clearance_m": 0.09535085261908526
+          },
+          "clearance_m": 0.09435085261908525,
+          "fixture_body_name": "microwave_1_microdoorroot",
+          "fixture_compiled_geometry": {
+            "geom_dataid": -1,
+            "geom_id": 164,
+            "geom_margin": 0.001,
+            "geom_name": "microwave_1_g14",
+            "geom_rbound": 0.075,
+            "geom_size": [
+              0.01,
+              0.065,
+              0.0
+            ],
+            "geom_type": 3
+          },
+          "fixture_geom_id": 164,
+          "fixture_geom_name": "microwave_1_g14",
+          "method": "conservative compiled bounding spheres",
+          "moving_body_name": "gripper0_right_gripper",
+          "moving_compiled_geometry": {
+            "convex_mesh": {
+              "convex_hull_face_count": 200,
+              "convex_hull_vertex_count": 102,
+              "geom_id": 75,
+              "geom_name": "gripper0_hand_collision",
+              "geom_rbound": 0.11905841176741497,
+              "geom_size": [
+                0.03164141183398503,
+                0.0486720137040898,
+                0.10394595495602695
+              ],
+              "geom_type": 7,
+              "mesh_graph_address": 37354,
+              "mesh_id": 64,
+              "mesh_vertex_count": 102
+            },
+            "geom_dataid": 64,
+            "geom_id": 75,
+            "geom_margin": 0.0,
+            "geom_name": "gripper0_hand_collision",
+            "geom_rbound": 0.11905841176741497,
+            "geom_size": [
+              0.03164141183398503,
+              0.0486720137040898,
+              0.10394595495602695
+            ],
+            "geom_type": 7
+          },
+          "moving_geom_id": 75,
+          "moving_geom_name": "gripper0_hand_collision",
+          "sample_fraction": 0.0,
+          "sample_index": 0,
+          "translated_reference_position": [
+            -0.35,
+            -0.2,
+            0.9600908477404537
+          ]
+        },
+        "minimum_clearance_m": 0.09435085261908525,
+        "path_end": [
+          -0.35,
+          -0.2,
+          0.9600908477404537
+        ],
+        "path_length_m": 0.0,
+        "path_start": [
+          -0.35,
+          -0.2,
+          0.9600908477404537
+        ],
+        "reference_position": [
+          -0.20960641372702207,
+          -0.005139944888850629,
+          1.165973673086924
+        ],
+        "sample_intervals": 1,
+        "sample_spacing_m": 0.0,
+        "sample_zero_is_current_pose": false,
+        "sample_zero_semantics": "synthetic translated path start; it equals current mjData geometry only when path_start equals reference_position"
+      },
+      "porcelain_xy_distance_m": 0.2359651642133036,
+      "post_open_eef_to_heuristic_grasp_high_m": 0.43430557902998973,
+      "reference_post_robot_open_qpos": -1.3627293032300833,
+      "target_position": [
+        -0.35,
+        -0.2,
+        0.9000908477404538
+      ]
+    },
+    {
+      "candidate_world_xy": [
+        -0.3,
+        -0.25
+      ],
+      "door_limiting_pair": {
+        "clearance_components": {
+          "continuous_guard_m": 0.0063200775010948595,
+          "native_geom_margin_m": 0.001,
+          "net_clearance_m": 0.1626318102602615,
+          "primitive_clearance_m": 0.16995188776135636
+        },
+        "clearance_m": 0.1626318102602615,
+        "continuous_guard_m": 0.0063200775010948595,
+        "door_angle_rad": 0.6543749999999999,
+        "door_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 167,
+          "geom_margin": 0.001,
+          "geom_name": "microwave_1_g17",
+          "geom_rbound": 0.159594799414016,
+          "geom_size": [
+            0.1295,
+            0.012,
+            0.0925
+          ],
+          "geom_type": 6
+        },
+        "door_geom_id": 167,
+        "door_geom_name": "microwave_1_g17",
+        "method": "compiled box-box separating-axis gap",
+        "sample_fraction": 0.3125,
+        "sample_index": 15,
+        "target_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 124,
+          "geom_margin": 0.0,
+          "geom_name": "white_yellow_mug_1_g14",
+          "geom_rbound": 0.044672436691991634,
+          "geom_size": [
+            0.00413,
+            0.00876,
+            0.04361
+          ],
+          "geom_type": 6
+        },
+        "target_geom_id": 124,
+        "target_geom_name": "white_yellow_mug_1_g14"
+      },
+      "door_sweep_clearance_m": 0.1626318102602615,
+      "door_sweep_compiled": true,
+      "eligible_for_grasp_compilation": true,
+      "grasp_corridor_compiled": false,
+      "heuristic_grasp_high_eef": [
+        -0.34939036396493106,
+        -0.43864143751416773,
+        1.1200908477404539
+      ],
+      "microwave_outward_direction_xy": [
+        -0.25328391776887743,
+        -0.967391987252142
+      ],
+      "nominal_grasp_eef": [
+        -0.3,
+        -0.25,
+        0.9600908477404537
+      ],
+      "nominal_grasp_reference_open_fixture_clearance_m": 0.11092495380814242,
+      "nominal_grasp_reference_open_fixture_geometry": {
+        "compatible_pair_evaluations": 60,
+        "continuous_sweep_guard_m": 0.0,
+        "limiting_pair": {
+          "clearance_components": {
+            "continuous_guard_m": 0.0,
+            "native_geom_margin_m": 0.001,
+            "net_clearance_m": 0.11092495380814242,
+            "primitive_clearance_m": 0.11192495380814242
+          },
+          "clearance_m": 0.11092495380814242,
+          "fixture_body_name": "microwave_1_microdoorroot",
+          "fixture_compiled_geometry": {
+            "geom_dataid": -1,
+            "geom_id": 164,
+            "geom_margin": 0.001,
+            "geom_name": "microwave_1_g14",
+            "geom_rbound": 0.075,
+            "geom_size": [
+              0.01,
+              0.065,
+              0.0
+            ],
+            "geom_type": 3
+          },
+          "fixture_geom_id": 164,
+          "fixture_geom_name": "microwave_1_g14",
+          "method": "conservative compiled bounding spheres",
+          "moving_body_name": "gripper0_right_gripper",
+          "moving_compiled_geometry": {
+            "convex_mesh": {
+              "convex_hull_face_count": 200,
+              "convex_hull_vertex_count": 102,
+              "geom_id": 75,
+              "geom_name": "gripper0_hand_collision",
+              "geom_rbound": 0.11905841176741497,
+              "geom_size": [
+                0.03164141183398503,
+                0.0486720137040898,
+                0.10394595495602695
+              ],
+              "geom_type": 7,
+              "mesh_graph_address": 37354,
+              "mesh_id": 64,
+              "mesh_vertex_count": 102
+            },
+            "geom_dataid": 64,
+            "geom_id": 75,
+            "geom_margin": 0.0,
+            "geom_name": "gripper0_hand_collision",
+            "geom_rbound": 0.11905841176741497,
+            "geom_size": [
+              0.03164141183398503,
+              0.0486720137040898,
+              0.10394595495602695
+            ],
+            "geom_type": 7
+          },
+          "moving_geom_id": 75,
+          "moving_geom_name": "gripper0_hand_collision",
+          "sample_fraction": 0.0,
+          "sample_index": 0,
+          "translated_reference_position": [
+            -0.3,
+            -0.25,
+            0.9600908477404537
+          ]
+        },
+        "minimum_clearance_m": 0.11092495380814242,
+        "path_end": [
+          -0.3,
+          -0.25,
+          0.9600908477404537
+        ],
+        "path_length_m": 0.0,
+        "path_start": [
+          -0.3,
+          -0.25,
+          0.9600908477404537
+        ],
+        "reference_position": [
+          -0.20960641372702207,
+          -0.005139944888850629,
+          1.165973673086924
+        ],
+        "sample_intervals": 1,
+        "sample_spacing_m": 0.0,
+        "sample_zero_is_current_pose": false,
+        "sample_zero_semantics": "synthetic translated path start; it equals current mjData geometry only when path_start equals reference_position"
+      },
+      "porcelain_xy_distance_m": 0.18357134527193752,
+      "post_open_eef_to_heuristic_grasp_high_m": 0.45778633718610123,
+      "reference_post_robot_open_qpos": -1.3627293032300833,
+      "target_position": [
+        -0.3,
+        -0.25,
+        0.9000908477404538
+      ]
+    },
+    {
+      "candidate_world_xy": [
+        -0.35,
+        -0.25
+      ],
+      "door_limiting_pair": {
+        "clearance_components": {
+          "continuous_guard_m": 0.0063200775010948595,
+          "native_geom_margin_m": 0.001,
+          "net_clearance_m": 0.18366558433650454,
+          "primitive_clearance_m": 0.1909856618375994
+        },
+        "clearance_m": 0.18366558433650454,
+        "continuous_guard_m": 0.0063200775010948595,
+        "door_angle_rad": 0.5235,
+        "door_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 167,
+          "geom_margin": 0.001,
+          "geom_name": "microwave_1_g17",
+          "geom_rbound": 0.159594799414016,
+          "geom_size": [
+            0.1295,
+            0.012,
+            0.0925
+          ],
+          "geom_type": 6
+        },
+        "door_geom_id": 167,
+        "door_geom_name": "microwave_1_g17",
+        "method": "compiled box-box separating-axis gap",
+        "sample_fraction": 0.25,
+        "sample_index": 12,
+        "target_compiled_geometry": {
+          "geom_dataid": -1,
+          "geom_id": 124,
+          "geom_margin": 0.0,
+          "geom_name": "white_yellow_mug_1_g14",
+          "geom_rbound": 0.044672436691991634,
+          "geom_size": [
+            0.00413,
+            0.00876,
+            0.04361
+          ],
+          "geom_type": 6
+        },
+        "target_geom_id": 124,
+        "target_geom_name": "white_yellow_mug_1_g14"
+      },
+      "door_sweep_clearance_m": 0.18366558433650454,
+      "door_sweep_compiled": true,
+      "eligible_for_grasp_compilation": true,
+      "grasp_corridor_compiled": false,
+      "heuristic_grasp_high_eef": [
+        -0.41568320304817996,
+        -0.4336047843530543,
+        1.1200908477404539
+      ],
+      "microwave_outward_direction_xy": [
+        -0.3368369387086152,
+        -0.9415629966823297
+      ],
+      "nominal_grasp_eef": [
+        -0.35,
+        -0.25,
+        0.9600908477404537
+      ],
+      "nominal_grasp_reference_open_fixture_clearance_m": 0.13505534448786938,
+      "nominal_grasp_reference_open_fixture_geometry": {
+        "compatible_pair_evaluations": 60,
+        "continuous_sweep_guard_m": 0.0,
+        "limiting_pair": {
+          "clearance_components": {
+            "continuous_guard_m": 0.0,
+            "native_geom_margin_m": 0.001,
+            "net_clearance_m": 0.13505534448786938,
+            "primitive_clearance_m": 0.13605534448786938
+          },
+          "clearance_m": 0.13505534448786938,
+          "fixture_body_name": "microwave_1_microdoorroot",
+          "fixture_compiled_geometry": {
+            "geom_dataid": -1,
+            "geom_id": 164,
+            "geom_margin": 0.001,
+            "geom_name": "microwave_1_g14",
+            "geom_rbound": 0.075,
+            "geom_size": [
+              0.01,
+              0.065,
+              0.0
+            ],
+            "geom_type": 3
+          },
+          "fixture_geom_id": 164,
+          "fixture_geom_name": "microwave_1_g14",
+          "method": "conservative compiled bounding spheres",
+          "moving_body_name": "gripper0_right_gripper",
+          "moving_compiled_geometry": {
+            "convex_mesh": {
+              "convex_hull_face_count": 200,
+              "convex_hull_vertex_count": 102,
+              "geom_id": 75,
+              "geom_name": "gripper0_hand_collision",
+              "geom_rbound": 0.11905841176741497,
+              "geom_size": [
+                0.03164141183398503,
+                0.0486720137040898,
+                0.10394595495602695
+              ],
+              "geom_type": 7,
+              "mesh_graph_address": 37354,
+              "mesh_id": 64,
+              "mesh_vertex_count": 102
+            },
+            "geom_dataid": 64,
+            "geom_id": 75,
+            "geom_margin": 0.0,
+            "geom_name": "gripper0_hand_collision",
+            "geom_rbound": 0.11905841176741497,
+            "geom_size": [
+              0.03164141183398503,
+              0.0486720137040898,
+              0.10394595495602695
+            ],
+            "geom_type": 7
+          },
+          "moving_geom_id": 75,
+          "moving_geom_name": "gripper0_hand_collision",
+          "sample_fraction": 0.0,
+          "sample_index": 0,
+          "translated_reference_position": [
+            -0.35,
+            -0.25,
+            0.9600908477404537
+          ]
+        },
+        "minimum_clearance_m": 0.13505534448786938,
+        "path_end": [
+          -0.35,
+          -0.25,
+          0.9600908477404537
+        ],
+        "path_length_m": 0.0,
+        "path_start": [
+          -0.35,
+          -0.25,
+          0.9600908477404537
+        ],
+        "reference_position": [
+          -0.20960641372702207,
+          -0.005139944888850629,
+          1.165973673086924
+        ],
+        "sample_intervals": 1,
+        "sample_spacing_m": 0.0,
+        "sample_zero_is_current_pose": false,
+        "sample_zero_semantics": "synthetic translated path start; it equals current mjData geometry only when path_start equals reference_position"
+      },
+      "porcelain_xy_distance_m": 0.23346837173826063,
+      "post_open_eef_to_heuristic_grasp_high_m": 0.47765572896781777,
+      "reference_post_robot_open_qpos": -1.3627293032300833,
+      "target_position": [
+        -0.35,
+        -0.25,
+        0.9000908477404538
+      ]
+    }
+  ],
+  "do_not_count_as_safe_reference": true,
+  "door_qpos": -2.094,
+  "ec_states": "/Users/qingyuewang/Documents/Submit/openvla-oft/experiments/robot/libero/tasks/l3b3_microwave_open_control_states.hdf5",
+  "ec_states_sha256": "a8059b83eab91f922fa4c8c60db1732e0c3bc6ba34535ed21c54601328c8d9bd",
+  "formal_authorized": false,
+  "grasp_candidate_xy": [
+    -0.3,
+    -0.15
+  ],
+  "grasp_top_k": 1,
+  "human_review_approved": false,
+  "scenario": "L3-B3-MICROWAVE-PRECONDITION",
+  "source_post_wait_eef_position": [
+    -0.20960641372702207,
+    -0.005139944888850629,
+    1.165973673086924
+  ],
+  "source_target_position": [
+    -0.24996301621691475,
+    -0.09999671945317712,
+    0.9000908314231135
+  ],
+  "state_index": 0,
+  "status": "CALIBRATION_ONLY_NOT_SAFE_EVIDENCE"
+}

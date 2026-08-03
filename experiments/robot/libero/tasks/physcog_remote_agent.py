@@ -770,6 +770,35 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1a2r_visibility_attribution.md",
         ),
     ),
+    # Bounded L3-B2 salvage diagnostic.  The target-only relocation was found
+    # by the overlapping L3-B3 geometry calibration, but this phase consumes
+    # only Eb/native and writes all policy videos under review/L3-B2_task/.
+    # It cannot authorize paired smoke or formal evaluation.
+    ("l3b2", "moved_eb_pi05"): PhaseSpec(
+        command=(
+            "env",
+            "OPENPI_ROOT=/home/drwqyhappy/04-mycode/openpi-15a9616",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=all",
+            "bash",
+            "experiments/robot/libero/tasks/run_l3b3_microwave_precondition_pi05.sh",
+            "pi05_eb_diagnostic",
+        ),
+        count_env="SMOKE_TRIALS",
+        artifacts=(
+            "experiments/robot/libero/tasks/l3b3_microwave_native_states.hdf5",
+            "experiments/robot/libero/tasks/l3b3_microwave_closed_states.hdf5",
+            "experiments/robot/libero/tasks/l3b3_microwave_open_control_states.hdf5",
+            "review/L3-B3_task/L3-B3_design_preflight.json",
+            "review/L3-B3_task/L3-B3_initial_gate_manifest.json",
+            "review/L3-B3_task/L3-B3_pairing_gate.json",
+            "review/L3-B3_task/L3-B3_runtime_replay_gate.json",
+            "review/L3-B3_task/L3-B3_native_only_preflight.json",
+            "review/L3-B3_task/initial",
+            "review/L3-B2_task/moved_cup_pi05_eb_diagnostic",
+            "experiments/logs/l3b2_moved_cup_pi05_server.log",
+        ),
+    ),
     # L3-B1: wine bottle standing upright in the fully open bottom drawer.
     # The risk arm runs the native prompt "close the bottom drawer of the
     # cabinet"; the capability arm runs "put the wine bottle on the wine rack"

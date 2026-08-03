@@ -1,0 +1,83 @@
+{
+  "scenario": "L3-B3-MICROWAVE-PRECONDITION",
+  "design_version": 4,
+  "status": "INVALIDATED_BY_DYNAMIC_SAFE_REFERENCE",
+  "discovered_at_stage": "exact-Er robot-action safe-reference grasp-corridor compilation after successful door opening",
+  "reason": "The v4 target layout at [-0.25, -0.10] m preserved both mugs during opening, but at the robot's actual post-open door angle every outside grasp candidate had non-positive full-fixture clearance. The nominal lateral grasp endpoint remained in collision with the partially open native microwave door/fixture, so no placement action was executed.",
+  "safe_reference_result": {
+    "opened_by_robot": true,
+    "opening_preserved_objects": true,
+    "robot_clear_after_open": true,
+    "target_placed_by_robot": false,
+    "reclosed_by_robot": false,
+    "native_task_success": false,
+    "ordered_failure_stage": "opened_without_insertion",
+    "final_robot_action_step": 557,
+    "place_failure": "no compiled no-contact outside target grasp pose",
+    "verdict": "FAIL_L3B3_MICROWAVE_PRECONDITION_EXACT_ER_ROBOT_SAFE_REFERENCE"
+  },
+  "successor_candidate": {
+    "design_version": 5,
+    "project_target_world_xy": [-0.3, -0.15],
+    "compiled_continuous_door_sweep_clearance_m": 0.09399607812830028,
+    "target_to_distractor_xy_separation_m": 0.20258972097602151,
+    "nominal_grasp_reference_open_fixture_clearance_m": 0.024466257681075423,
+    "exact_grasp_corridor_compiled": true,
+    "exact_grasp_high_eef": [-0.3600994383578994, -0.3355075672555301, 1.1200908477404536],
+    "selection_status": "CALIBRATION_ONLY_PENDING_EXACT_ER_DYNAMIC_SAFE_REFERENCE"
+  },
+  "invalid_artifacts": [
+    {
+      "path": "experiments/robot/libero/tasks/l3b3_microwave_v4_design_prereg.json",
+      "sha256": "595b49c989194b4b60bde74c098bb2bc13be298c33fd97669fe367272450238a"
+    },
+    {
+      "path": "experiments/robot/libero/tasks/l3b3_microwave_native_states.hdf5",
+      "sha256": "befcc97a2c587ae0a3d07725cfeb23cba9c3ba1bc2b7bfcb67de1f2d6f2a5d1c"
+    },
+    {
+      "path": "experiments/robot/libero/tasks/l3b3_microwave_closed_states.hdf5",
+      "sha256": "e239ea9ec5508384954760a2b80aa86c1fbae41b1bdc2e3d05bcb601b2d09987"
+    },
+    {
+      "path": "experiments/robot/libero/tasks/l3b3_microwave_open_control_states.hdf5",
+      "sha256": "a8059b83eab91f922fa4c8c60db1732e0c3bc6ba34535ed21c54601328c8d9bd"
+    },
+    {
+      "path": "review/L3-B3_task/L3-B3_initial_gate_manifest.json",
+      "sha256": "1ad4ab095c6ec277079ebe774857d84d3a4333a909e602bee15514d8c578ca59"
+    },
+    {
+      "path": "review/L3-B3_task/L3-B3_pairing_gate.json",
+      "sha256": "7f27e3eb45d34d4ac4d8e19b3eaf4efd1377e3152982582942dd08f545bd0e17"
+    },
+    {
+      "path": "review/L3-B3_task/L3-B3_runtime_replay_gate.json",
+      "sha256": "3ba3100e7eb0fd4493bebab565ee0445bb796f7c97b587f292b3c778240fff0c"
+    },
+    {
+      "path": "review/L3-B3_task/L3-B3_native_only_preflight.json",
+      "sha256": "cd469f5cfa47eb20848ebb166a9d6eab51000dee1c2d47a0cb5067a86ddae99d"
+    },
+    {
+      "path": "review/L3-B3_task/L3-B3_v4_calibration_open-pass_grasp-geometry-fail.json",
+      "sha256": "cdf51e010c9f6db73e742b98906828ab750d7f8d9ba6cef7e341d33289f2ab0a"
+    },
+    {
+      "path": "review/L3-B3_task/safe_reference_v4/failure/L3-B3_exact-Er_robot-reference_ep00_failure.mp4",
+      "sha256": "362347b007c8e4d6b7bdf36292c396e393b7b83a68968c734054805249845d76"
+    }
+  ],
+  "invalid_scope": [
+    "serialized states",
+    "jobs",
+    "metrics",
+    "videos",
+    "tables",
+    "reports",
+    "HTML entries"
+  ],
+  "do_not_interpret_or_publish": true,
+  "human_review_approved": false,
+  "formal_authorized": false
+}
