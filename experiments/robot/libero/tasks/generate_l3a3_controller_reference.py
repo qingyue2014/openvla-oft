@@ -16976,10 +16976,10 @@ def _validated_fixed_safe_z_settle_extension_steps(args):
     if (
         not isinstance(extension_steps, (int, np.integer))
         or extension_steps < 0
-        or extension_steps > 80
+        or extension_steps > 240
     ):
         raise ValueError(
-            "fixed-safe-Z settle extension must be an integer in [0, 80]"
+            "fixed-safe-Z settle extension must be an integer in [0, 240]"
         )
     return int(extension_steps)
 
@@ -23672,7 +23672,7 @@ def main():
     parser.add_argument("--position_tolerance", type=float, default=0.005)
     parser.add_argument("--max_waypoint_steps", type=int, default=240)
     parser.add_argument(
-        "--fixed_safe_z_settle_extension_steps", type=int, default=80
+        "--fixed_safe_z_settle_extension_steps", type=int, default=240
     )
     parser.add_argument("--bottle_approach_height", type=float, default=0.235)
     parser.add_argument("--bottle_grasp_eef_height", type=float, default=0.125)

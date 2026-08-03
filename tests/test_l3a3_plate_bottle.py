@@ -8689,7 +8689,7 @@ def test_500161_adaptive_descent_uses_native_bound_then_tightens_near_base8():
         in CONTROLLER_REFERENCE.read_text()
     )
     assert (
-        '"--fixed_safe_z_settle_extension_steps", type=int, default=80'
+        '"--fixed_safe_z_settle_extension_steps", type=int, default=240'
         in CONTROLLER_REFERENCE.read_text()
     )
 
@@ -8704,12 +8704,12 @@ def test_adaptive_descent_fails_closed_without_runtime_native_action_spec():
 
 def test_fixed_safe_z_settle_extension_is_finite_and_fail_closed():
     assert _validated_fixed_safe_z_settle_extension_steps(
-        SimpleNamespace(fixed_safe_z_settle_extension_steps=80)
-    ) == 80
+        SimpleNamespace(fixed_safe_z_settle_extension_steps=240)
+    ) == 240
     assert _validated_fixed_safe_z_settle_extension_steps(
         SimpleNamespace()
     ) == 0
-    for invalid in (-1, 81, 1.5, None):
+    for invalid in (-1, 241, 1.5, None):
         with pytest.raises(
             ValueError,
             match="fixed-safe-Z settle extension must be an integer",

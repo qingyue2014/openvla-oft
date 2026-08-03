@@ -1216,10 +1216,10 @@ of `240` actions. Job503953 consumed the first `183` structural actions before
 the fixed-safe-Z stage, then eliminated the prior generic XY release and ended
 the remaining `57` actions on a correctly selected inward-response recovery;
 all structural, physical, collision, support, action, and response gates stayed
-accepted. A preregistered finite extension of at most `80` actions is therefore
+accepted. A preregistered finite extension of at most `240` actions is therefore
 available only while the active stage remains
 `fixed_safe_z_lateral_approach`. The preceding stages retain the `240`-action
-cap, and the effective full-route hard cap is `320` actions. Every extension
+cap, and the effective full-route hard cap is `480` actions. Every extension
 frame passes the same pre-action and post-action gates. Entry outside the fixed
 safe-Z stage, leaving that stage, loss of any gate, lack of confirmation by the
 effective cap, native episode termination, or lost horizon reserve fails
@@ -1370,6 +1370,21 @@ by the existing strict `0.005` lateral action bound and retains guarded Z.
 Continuing eligible frames repeat that increment up to `0.20`. Strict-target
 projected-exit loss and failure of any eligibility predicate retain the prior
 full or required recovery. No threshold, bound, or budget changes.
+Job504151 confirmed that the incremental projected-exit brake removed the
+Job504135 instability. At sample `265`, it selected pure XY
+`[0.164375, 0.0]` instead of jumping from `0.159375` to `0.20`; all `321`
+structural samples passed, minimum outside clearance remained `1.566626 mm`,
+minimum finger-table clearance remained `5.228714 mm`, plate tilt stayed below
+`0.001660 deg`, and plate translation drift remained zero. The run stopped
+only because the bounded tangential response converged slowly: at the existing
+`240+80` limit, lateral error was `5.561547 mm`, or `0.561547 mm` outside the
+unchanged `5.0 mm` completion tolerance. The fixed-safe-Z-only finite extension
+is therefore increased from `80` to `240` actions, for an effective maximum of
+`480`. The extension is still legal only while that exact stage remains
+active, and every added frame retains the same current, projected, and
+post-action physical gates. The `240`-action base route, completion tolerance,
+action bounds, response thresholds, reserves, stage transitions, and all
+fail-closed checks are unchanged.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.
