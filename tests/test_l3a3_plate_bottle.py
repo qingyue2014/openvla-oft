@@ -2505,7 +2505,7 @@ def test_fixed_safe_z_lateral_hold_waits_after_job503911_unload_step():
         0.189375
     )
     assert evidence["proof"][
-        "every_coupled_xy_decrement_requires_stable_responses"
+        "every_coupled_xy_decrement_requires_stable_or_positive_response"
     ] is True
 
 
@@ -2753,7 +2753,7 @@ def test_fixed_safe_z_lateral_hold_waits_after_job503927_recovery_release():
     assert evidence["coupled_xy_neutralization_step_stable"] is False
     assert evidence["coupled_xy_neutralization_requested"] is False
     assert evidence["proof"][
-        "every_coupled_xy_decrement_requires_repeated_preceding_xy"
+        "every_coupled_xy_followup_decrement_requires_repeated_preceding_xy"
     ] is True
 
 
@@ -2830,6 +2830,87 @@ def test_fixed_safe_z_lateral_hold_settles_job503929_full_recovery():
     ] is True
     assert evidence["proof"][
         "full_outward_coupled_handoff_requires_refill_reserve"
+    ] is True
+
+
+def test_fixed_safe_z_lateral_hold_damps_job503938_positive_response():
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": (-np.ones(7, dtype=float)).tolist(),
+        "high": np.ones(7, dtype=float).tolist(),
+        "runtime_resolved": True,
+    }
+    action, evidence = _fixed_safe_z_lateral_hold_action(
+        current_eef=np.array(
+            [0.13353623364945888, -0.023582829519726067, 0.9211319627458641]
+        ),
+        lateral_target_xy=np.array(
+            [0.13242106705090634, -0.02850777957668001]
+        ),
+        lateral_position_tolerance_m=0.005,
+        fixed_safe_z_m=0.920581288496378,
+        vertical_position_tolerance_m=0.0004,
+        measured_vertical_step_progress_m=0.0005935209310579115,
+        measured_outward_step_progress_m=0.00012269144889817674,
+        outside_side_guard={
+            "minimum_outside_clearance_m": 0.0021970137409590557,
+            "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+            "finger_table_vertical_clearance_m": 0.008455158052204204,
+            "required_finger_table_clearance_m": np.nextafter(
+                0.0, np.inf
+            ),
+        },
+        outward_direction_xy=np.array([1.0, 0.0]),
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_lateral_translation_action=0.005,
+        maximum_safety_brake_action=0.20,
+        strict_outside_clearance_m=0.0004,
+        strict_table_clearance_m=0.0004,
+        closed_loop_hazard_response_bound_m=0.0011,
+        full_outward_brake_clearance_m=0.00095,
+        progress_resolution_m=0.00005,
+        derivative_gain=2.0,
+        native_action_spec=native_spec,
+        previous_commanded_action_xyz=np.array(
+            [0.184375, 0.0, 0.19541523842521427]
+        ),
+        preceding_commanded_action_xyz=np.array(
+            [0.184375, 0.0, 0.20]
+        ),
+        maximum_positive_safety_release_action=0.05,
+    )
+    assert action[:3] == pytest.approx(
+        [0.16875, -0.004876548672984583, 0.1736937870301906]
+    )
+    assert evidence["coupled_xy_neutralization_in_progress"] is True
+    assert evidence["coupled_xy_preceding_action_repeated"] is True
+    assert evidence[
+        "coupled_xy_positive_outward_response_damping_requested"
+    ] is True
+    assert evidence["coupled_xy_neutralization_hold_requested"] is True
+    assert evidence["coupled_xy_neutralization_step_stable"] is False
+    assert evidence["coupled_xy_neutralization_requested"] is True
+    assert evidence["coupled_xy_neutralization_action"] == pytest.approx(
+        0.16875
+    )
+    assert evidence[
+        "projected_lateral_error_after_measured_outward_response_m"
+    ] > evidence["coupled_xy_neutralization_lateral_hold_tolerance_m"]
+    assert evidence[
+        "projected_lateral_error_after_measured_outward_response_m"
+    ] <= evidence[
+        "coupled_xy_positive_response_projected_lateral_tolerance_m"
+    ]
+    assert evidence["proof"][
+        "positive_response_damping_uses_single_coupled_step"
+    ] is True
+    assert evidence["proof"][
+        "positive_response_damping_requires_repeated_preceding_xy"
+    ] is True
+    assert evidence["proof"][
+        "positive_response_projection_uses_one_resolution_margin"
     ] is True
 
 

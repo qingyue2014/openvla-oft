@@ -1080,6 +1080,21 @@ response and repeated-predecessor gates before any further decrement. No
 physical threshold, route, budget, task, inventory, state, prompt, goal, or
 intervention changes.
 
+Job503938 confirmed that the single coupled handoff changed X to `0.184375`
+without the prior full-action hold. Three subsequent frames retained that
+reduced action, but outward responses remained positive. At sample 233 current
+lateral error was still inside the existing coupled hysteresis at
+`5.049627 mm`; only its positive-response projection, `5.078132 mm`, exceeded
+the `5.05 mm` band. Leaving the coupled state invoked the generic `0.05`
+release to `0.134375` and the response reversed inward. The projection test may
+now use exactly one additional existing `0.05 mm` response-resolution unit
+while current lateral error remains inside the unchanged hysteresis. After two
+identical reduced XY commands, a positive, nonhazardous response with valid
+current/projected refill reserve is damped by one existing `0.015625` coupled
+step. A further damping or stable decrement again requires a repeated XY frame.
+No physical threshold, route, budget, task, inventory, state, prompt, goal, or
+intervention changes.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
