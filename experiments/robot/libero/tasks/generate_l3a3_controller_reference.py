@@ -5516,6 +5516,7 @@ def _fixed_safe_z_lateral_hold_action(
     bounded_inward_response_brake_requested = bool(
         release_slew_enabled
         and measured_inward_response
+        and not lateral_target_reached
         and previous_outward_action_for_recovery
         > min(strict_safety_brake_bound, 2.0 * strict_lateral_bound)
         and previous_outward_action_for_recovery

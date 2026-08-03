@@ -1333,6 +1333,17 @@ response adds exactly the existing strict `0.005` lateral action bound, capped
 at `0.20`; guarded Z remains unchanged. Failure of any eligibility predicate
 retains immediate pure `0.20` full recovery. No response, reserve, lateral,
 height, action, route, or budget threshold changes.
+Job504122 exposed an overbroad application of that brake: sample `225` was
+already inside the strict `5.0 mm` lateral target, but its `-0.072541 mm`
+inward response received only `0.158125` instead of the previously validated
+pure `0.20` recovery. The changed early sequence later lost the unchanged
+one-controller-step corridor reserve at sample `287`, where post-action outside
+clearance was `0.055689 mm`; the hard physical gate stopped the run. The
+incremental brake is therefore restricted to frames where the strict lateral
+target is false. Strict-target inward responses retain the prior pure `0.20`
+selection, while the intended wider dynamic-release regime retains every
+Job504113 incremental-brake eligibility predicate. No other controller field or
+threshold changes.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.
