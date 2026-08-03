@@ -24,7 +24,8 @@ from experiments.robot.libero.tasks.l3b3_microwave_precondition_common import (
     PROJECT_TARGET_MIN_DISTRACTOR_XY_SEPARATION_M,
     PROJECT_TARGET_MIN_DOOR_SWEEP_CLEARANCE_M,
     PROJECT_TARGET_NOMINAL_GRASP_FIXTURE_CLEARANCE_M,
-    PROJECT_TARGET_EXACT_GRASP_HIGH_EEF,
+    PROJECT_TARGET_GRASP_CORRIDOR_COMPILED,
+    PROJECT_TARGET_GRASP_HIGH_EEF,
     PROJECT_TARGET_SELECTION_CALIBRATION,
     PROJECT_TARGET_SELECTION_CALIBRATION_SHA256,
     PROJECT_TARGET_WORLD_XY,
@@ -117,7 +118,7 @@ def validate_spec(path: str | Path) -> dict[str, object]:
     ):
         raise ValueError("L3-B3 must identify its immediately invalidated predecessor")
     expected_invalidation = (
-        f"l3b3_microwave_v{DESIGN_VERSION - 1}_state_invalidation.json"
+        f"l3b3_microwave_v{DESIGN_VERSION - 1}_candidate_invalidation.json"
     )
     if invalidation.get("artifact") != expected_invalidation:
         raise ValueError("L3-B3 predecessor invalidation artifact mismatch")
@@ -128,7 +129,9 @@ def validate_spec(path: str | Path) -> dict[str, object]:
         invalidation_path.read_text(encoding="utf-8")
     )
     if (
-        invalidation_record.get("do_not_interpret_or_publish") is not True
+        invalidation_record.get("do_not_promote_as_l3b2") is not True
+        or invalidation_record.get("do_not_pool_as_formal_model_evidence")
+        is not True
         or invalidation_record.get("formal_authorized") is not False
     ):
         raise ValueError("L3-B3 predecessor invalidation is not fail-closed")
@@ -136,7 +139,7 @@ def validate_spec(path: str | Path) -> dict[str, object]:
         raise ValueError("L3-B3 predecessor invalidation must remain fail-closed")
     selection = record.get("candidate_selection")
     expected_selection = {
-        "status": "CALIBRATION_ONLY_PENDING_EXACT_ER_DYNAMIC_SAFE_REFERENCE",
+        "status": "PI05_EB_DIAGNOSTIC_ONLY_NOT_SAFE_REFERENCE",
         "artifact": PROJECT_TARGET_SELECTION_CALIBRATION,
         "artifact_sha256": PROJECT_TARGET_SELECTION_CALIBRATION_SHA256,
         "selected_project_target_world_xy": list(PROJECT_TARGET_WORLD_XY),
@@ -149,13 +152,12 @@ def validate_spec(path: str | Path) -> dict[str, object]:
         "nominal_grasp_reference_open_fixture_clearance_m": (
             PROJECT_TARGET_NOMINAL_GRASP_FIXTURE_CLEARANCE_M
         ),
-        "exact_grasp_corridor_compiled": True,
-        "exact_grasp_high_eef": list(PROJECT_TARGET_EXACT_GRASP_HIGH_EEF),
+        "exact_grasp_corridor_compiled": PROJECT_TARGET_GRASP_CORRIDOR_COMPILED,
+        "heuristic_grasp_high_eef": list(PROJECT_TARGET_GRASP_HIGH_EEF),
         "selection_rule": (
-            "require positive complete-fixture nominal grasp clearance and a "
-            "successfully compiled exact no-contact grasp corridor at the "
-            "actual post-robot-open door angle; this calibration cannot "
-            "qualify Safe"
+            "user-approved final pi0.5 Eb capability candidate closer to the "
+            "official target layout, with positive compiled door-sweep and "
+            "target-to-distractor clearance; it cannot qualify Safe"
         ),
         "dynamic_safe_reference_required": True,
     }
@@ -268,7 +270,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--spec",
-        default=str(Path(__file__).with_name("l3b3_microwave_v6_design_prereg.json")),
+        default=str(Path(__file__).with_name("l3b3_microwave_v7_design_prereg.json")),
     )
     parser.add_argument("--native-bddl", required=True)
     parser.add_argument("--output")

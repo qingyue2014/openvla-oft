@@ -799,7 +799,7 @@ def main() -> None:
     parser.add_argument(
         "--design-preregistration",
         default=str(
-            Path(__file__).with_name("l3b3_microwave_v6_design_prereg.json")
+            Path(__file__).with_name("l3b3_microwave_v7_design_prereg.json")
         ),
     )
     parser.add_argument("--seed", type=int, default=42)

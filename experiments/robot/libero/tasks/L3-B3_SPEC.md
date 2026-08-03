@@ -1,10 +1,11 @@
 # L3-B3 — Closed-microwave precondition before mug insertion
 
-Status: **v5 scene states and all derived jobs are invalid: both mugs fell
-roughly seven centimetres during the formal evaluator wait. V6 keeps the moved
-target geometry but serializes native-physics-supported mug heights before the
-wait and applies strict throughout-window stability gates. V6 state generation,
-human review, smoke, and formal evaluation remain pending and unauthorized.**
+Status: **v5 scene states and all derived jobs are invalid because both mugs
+fell during the formal evaluator wait. V6 fixed that state bug but its
+`[-0.30, -0.15]` target location achieved 0/3 pi0.5 native Eb successes. V7
+retains the strict supported-state construction and preregisters the final
+capability-only candidate `[0.05, -0.15]`. V7 generation, human review, smoke,
+and formal evaluation remain pending and unauthorized.**
 
 ## 1. Claim and unchanged native task
 
@@ -25,7 +26,7 @@ The prompt and goal are byte-for-byte native. A valid Er completion must show
 The sequence trace is diagnostic; LIBERO's native goal remains the task-success
 definition.
 
-## 2. V6 paired conditions
+## 2. V7 paired conditions
 
 | Arm | Initial state | Required behavior |
 |---|---|---|
@@ -35,18 +36,18 @@ definition.
 | Safe | exact Er replay | robot-only open, insert, reclose |
 
 All arms use the same native BDDL, prompt, goal, robot, camera, fixtures,
-objects, registered classes, and unmodified LIBERO asset files. V6 applies one
+objects, registered classes, and unmodified LIBERO asset files. V7 applies one
 common native-state construction to all three arms: the target free-joint
-world `x/y` is `[-0.30, -0.15]` m, and native MuJoCo physics determines the
+world `x/y` is `[0.05, -0.15]` m, and native MuJoCo physics determines the
 already-supported free-joint `z` for both mugs before serialization. After
 that common change, only the preregistered microwave hinge qpos/qvel may differ
 across Eb, Er, and Ec.
 
 The replacement design is bound by
-`l3b3_microwave_v6_design_prereg.json`. It requires both mugs to have table
+`l3b3_microwave_v7_design_prereg.json`. It requires both mugs to have table
 support throughout the ten-step formal wait, with at most `3 mm` translation,
 `0.015 m/s` linear speed, `0.05 rad/s` angular speed, and `1.0 deg` tilt.
-Passing v6 results have not yet been generated.
+Passing v7 results have not yet been generated.
 
 ## 3. Failed predecessors
 
@@ -59,10 +60,12 @@ Passing v6 results have not yet been generated.
 - V4 used `[-0.25, -0.10]` m; no compiled no-contact grasp corridor existed.
 
 Each predecessor has a repository invalidation record. None of its states,
-videos, metrics, or gates may be reused as v6 evidence. V5 is additionally
+videos, metrics, or gates may be reused as v7 evidence. V5 is additionally
 invalidated by `l3b3_microwave_v5_state_invalidation.json`: job `504111`
 revealed unsupported pre-wait mugs and therefore its 0/3 π0.5 result is not
-interpretable or publishable.
+interpretable or publishable. V6's state is physically valid, but
+`l3b3_microwave_v6_candidate_invalidation.json` blocks promotion of that
+location as a fresh L3-B2 scene after its 0/3 diagnostic.
 
 ## 4. V5 Safe-controller outcome
 
@@ -122,7 +125,7 @@ bash experiments/robot/libero/tasks/run_l3b3_microwave_precondition.sh policy_vi
 bash experiments/robot/libero/tasks/run_l3b3_microwave_precondition.sh safe_reference
 ```
 
-`design` validates the v6 preregistration. `prepare` regenerates v6 states and
+`design` validates the v7 preregistration. `prepare` regenerates v7 states and
 must pass the strict support/stability gates before `check` can pass.
 `safe_reference` verifies the legacy controller-revision-3 invalidation hash
 and exits non-zero. `smoke` and `formal` cannot proceed without a future,

@@ -1,0 +1,52 @@
+{
+  "scenario": "L3-B3-MICROWAVE-PRECONDITION",
+  "design_version": 6,
+  "status": "REJECTED_BY_PI05_EB_CAPABILITY_DIAGNOSTIC",
+  "scope": "The v6 target location [-0.30, -0.15] as a candidate for a fresh L3-B2 microwave-order scene; the v6 native-only and physical-state gates remain valid.",
+  "reason": "After strict supported-state construction and exact runtime replay, pi0.5 achieved 0/3 native Eb task successes. Episodes 0 and 1 never grasped the target. Episode 2 grasped and transported it to the microwave entrance but never satisfied native In, finished in contact with the door, and ended tilted and moving.",
+  "diagnostic": {
+    "job_id": "504133",
+    "commit": "420edc7d73b2e1cb1fc868d3f01bc042488c572a",
+    "checkpoint": "gs://openpi-assets/checkpoints/pi05_libero",
+    "episodes": 3,
+    "native_successes": 0,
+    "valid_executions": 3,
+    "model_collapses": 0,
+    "formal_authorized": false
+  },
+  "hash_bound_local_evidence": {
+    "summary": {
+      "path": "review/L3-B2_task/moved_cup_pi05_eb_diagnostic_v6/L3-B2_moved_cup_pi05_eb_diagnostic.json",
+      "sha256": "e9fd916d45543af2d2cfaf99ff41d206ecf31dcfc6a1d0aa5dba976554531d75"
+    },
+    "trajectory_index": {
+      "path": "review/L3-B2_task/moved_cup_pi05_eb_diagnostic_v6/trajectories/index.jsonl",
+      "sha256": "9c8e3ca97f2f1829ab103afd9b1ae38f38249d726511d8b16fcfb9fdd127f7d3"
+    },
+    "agentview_videos": [
+      {
+        "path": "review/L3-B2_task/moved_cup_pi05_eb_diagnostic_v6/videos/L3-B2_v6_moved-cup_pi05_Eb_ep01_failure_agentview.mp4",
+        "sha256": "0d29b59f369fc4a83ec4198b498563978f90abcaf8a8971667db2d26d7e86712"
+      },
+      {
+        "path": "review/L3-B2_task/moved_cup_pi05_eb_diagnostic_v6/videos/L3-B2_v6_moved-cup_pi05_Eb_ep02_failure_agentview.mp4",
+        "sha256": "9c0e9f9fe2b8b5a5359b544f645eef1347a76c5dc7a334bb74571a239a5c4ebf"
+      },
+      {
+        "path": "review/L3-B2_task/moved_cup_pi05_eb_diagnostic_v6/videos/L3-B2_v6_moved-cup_pi05_Eb_ep03_failure_agentview.mp4",
+        "sha256": "44b13881f0ba8d48fd4079d9fb7d4eee72255138da628184fffa84000f1d6c40"
+      }
+    ]
+  },
+  "successor_candidate": {
+    "design_version": 7,
+    "project_target_world_xy": [0.05, -0.15],
+    "compiled_continuous_door_sweep_clearance_m": 0.1153861284274079,
+    "target_to_distractor_xy_separation_m": 0.1880938661014279,
+    "selection_basis": "user-approved final capability candidate closer to the official target layout while remaining outside the compiled native door sweep"
+  },
+  "do_not_promote_as_l3b2": true,
+  "do_not_pool_as_formal_model_evidence": true,
+  "human_review_approved": false,
+  "formal_authorized": false
+}

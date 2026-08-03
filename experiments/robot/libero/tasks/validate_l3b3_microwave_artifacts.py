@@ -349,7 +349,7 @@ def _validate_manifest(path: Path, bundles: dict[str, Path]) -> dict:
     if record.get("native_asset_manifest_sha256") != native_asset_manifest_sha256():
         raise ValueError("initial manifest native asset hash mismatch")
     prereg = Path(__file__).with_name(
-        "l3b3_microwave_v6_design_prereg.json"
+        "l3b3_microwave_v7_design_prereg.json"
     ).resolve(strict=True)
     prereg_binding = record.get("design_preregistration_artifact", {})
     if Path(prereg_binding.get("path", "")).resolve() != prereg:

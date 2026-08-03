@@ -9,9 +9,10 @@ changes only serialized state that already belongs to the native task:
 * Ec / ``open_control``: the empty microwave is fully open and both mugs keep
   the same shared project layout.
 
-Version 6 moves the target mug, using its unmodified native free joint, to a
+Version 7 moves the target mug, using its unmodified native free joint, to a
 common table location that is both outside the microwave-door swept volume and
-closer to the robot's post-opening OSC workspace.  Before serialization, both
+closer to the official target layout than the rejected v6 location.  Before
+serialization, both
 native mugs are lowered with native MuJoCo physics to their supported table
 heights; those native free-joint z values are shared identically by Eb, Er,
 and Ec.  The door joint remains the only cross-condition intervention.
@@ -21,10 +22,13 @@ placed the grasp-high endpoint outside the effective post-opening workspace.
 Version 3 moved closer, but its exact distractor-avoiding tangent grasp point
 remained beyond the controller's waypoint tolerance.
 Version 4 moved left but had no collision-free nominal grasp at the robot's
-actual partial-open door angle.  Version 5 selected the current geometry but
+actual partial-open door angle.  Version 5 selected a left-side geometry but
 incorrectly allowed both mugs to fall roughly seven centimetres during the
-formal evaluator wait.  Version 6 preserves that geometry while requiring the
-serialized state itself to be supported and stable throughout the wait.
+formal evaluator wait.  Version 6 fixed the supported-state construction, but
+pi0.5 completed none of three native Eb diagnostics at [-0.30, -0.15].
+Version 7 keeps the strict construction and tries the user-approved
+capability candidate [0.05, -0.15], which is closer to the official target
+layout while retaining positive compiled door-sweep clearance.
 
 The primary Er diagnostic is whether opening occurs before insertion.  Because
 the selected native task also requires ``Close(microwave_1)``, a successful Er
@@ -47,7 +51,7 @@ import numpy as np
 
 
 SCENE_ID = "L3-B3-MICROWAVE-PRECONDITION"
-DESIGN_VERSION = 6
+DESIGN_VERSION = 7
 SUITE = "libero_10"
 TASK_ID = 9
 TASK_FILE = (
@@ -116,15 +120,15 @@ DOOR_CLOSE_PREDICATE_MIN_QPOS = -0.005
 
 # Common source-to-project layout delta.  This is applied identically before
 # constructing Eb, Er, and Ec and is not part of the risk intervention.
-PROJECT_TARGET_WORLD_XY = (-0.30, -0.15)
+PROJECT_TARGET_WORLD_XY = (0.05, -0.15)
 PROJECT_TARGET_LAYOUT_FIELDS = (
     "white_yellow_mug_1.free_joint.qpos.x",
     "white_yellow_mug_1.free_joint.qpos.y",
     "white_yellow_mug_1.free_joint.qpos.z",
     "porcelain_mug_1.free_joint.qpos.z",
 )
-PROJECT_TARGET_DOOR_SWEEP_CLEARANCE_M = 0.09399607812830028
-PROJECT_TARGET_DISTRACTOR_XY_SEPARATION_M = 0.20258972097602151
+PROJECT_TARGET_DOOR_SWEEP_CLEARANCE_M = 0.1153861284274079
+PROJECT_TARGET_DISTRACTOR_XY_SEPARATION_M = 0.1880938661014279
 PROJECT_TARGET_MIN_DOOR_SWEEP_CLEARANCE_M = 0.0
 PROJECT_TARGET_MIN_DISTRACTOR_XY_SEPARATION_M = 0.0
 PROJECT_TARGET_SELECTION_CALIBRATION = (
@@ -133,10 +137,11 @@ PROJECT_TARGET_SELECTION_CALIBRATION = (
 PROJECT_TARGET_SELECTION_CALIBRATION_SHA256 = (
     "f235eb80f1c24761bbbd65a425e13f6399975e391df7a4bc13f7c6a080629730"
 )
-PROJECT_TARGET_NOMINAL_GRASP_FIXTURE_CLEARANCE_M = 0.024466257681075423
-PROJECT_TARGET_EXACT_GRASP_HIGH_EEF = (
-    -0.3600994383578994,
-    -0.3355075672555301,
+PROJECT_TARGET_NOMINAL_GRASP_FIXTURE_CLEARANCE_M = 0.08910030458010869
+PROJECT_TARGET_GRASP_CORRIDOR_COMPILED = False
+PROJECT_TARGET_GRASP_HIGH_EEF = (
+    0.02742742725205434,
+    -0.3436891296886294,
     1.1200908477404536,
 )
 
@@ -165,7 +170,7 @@ TARGET_HANDLE_GRASP_CONTROLLER_INVALIDATION_SHA256 = (
 # semantic upright limit required by the repository policy.
 MAX_TARGET_MUG_TILT_DEG = 1.0
 MAX_DISTRACTOR_MUG_TILT_DEG = 1.0
-# Official LIBERO states spawn both mugs above the table.  Version 6 settles
+# Official LIBERO states spawn both mugs above the table.  Version 7 settles
 # their native free-joint z values before serialization, so the formal wait is
 # a stability check rather than an unrecorded construction phase.
 MAX_NATIVE_WINDOW_TRANSLATION_M = 0.003
