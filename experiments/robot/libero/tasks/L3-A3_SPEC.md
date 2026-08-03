@@ -1026,6 +1026,22 @@ position scale. Stable waiting between decrements is unchanged, and the step
 remains below the existing maximum release action. No physical threshold,
 route, budget, task, inventory, state, prompt, goal, or intervention changes.
 
+Job503925 preserved reduced outward action for ten hold frames and completed two
+stable decrements. At sample 221 the lateral error was `5.026649 mm`, only
+`0.026649 mm` beyond the unchanged `5 mm` acceptance tolerance, while outward
+response was `-0.001348 mm` and current/projected clearance still exceeded the
+existing exit. Leaving the coupled state invoked the generic `0.05` outward
+release, changing X from `0.16875` to `0.11875`; the following outward response
+was `-0.192684 mm`. During an in-progress unload, a controller-only lateral
+hysteresis band now extends the existing tolerance by exactly the existing
+`0.05 mm` response resolution. Inside that band the preceding outward action is
+held while only the existing strict-bounded tangential correction is applied.
+No further outward decrement is permitted until lateral error returns to the
+unchanged `5 mm` acceptance tolerance. Exceeding the hysteresis band or losing
+current/projected reserve still invokes the original recovery path. No physical
+threshold, route, budget, task, inventory, state, prompt, goal, or intervention
+changes.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

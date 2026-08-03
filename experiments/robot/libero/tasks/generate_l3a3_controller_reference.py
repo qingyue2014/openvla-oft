@@ -5584,9 +5584,28 @@ def _fixed_safe_z_lateral_hold_action(
         and outside_response_projected_clearance_m
         > outside_refill_target_clearance
     )
+    coupled_xy_neutralization_lateral_hold_tolerance_m = float(
+        lateral_position_tolerance_m + progress_resolution_m
+    )
+    coupled_xy_neutralization_lateral_hold_accepted = bool(
+        lateral_target_reached
+        or (
+            coupled_xy_neutralization_in_progress
+            and lateral_error_m
+            <= coupled_xy_neutralization_lateral_hold_tolerance_m
+        )
+    )
+    coupled_xy_neutralization_projected_lateral_hold_accepted = bool(
+        projected_lateral_error_after_measured_outward_response_m
+        <= (
+            coupled_xy_neutralization_lateral_hold_tolerance_m
+            if coupled_xy_neutralization_in_progress
+            else lateral_position_tolerance_m
+        )
+    )
     coupled_xy_neutralization_hold_requested = bool(
         release_slew_enabled
-        and lateral_target_reached
+        and coupled_xy_neutralization_lateral_hold_accepted
         and live_outside_clearance > outside_recovery_exit_clearance
         and outside_response_projected_clearance_m
         > outside_recovery_exit_clearance
@@ -5594,8 +5613,7 @@ def _fixed_safe_z_lateral_hold_action(
         and not measured_inward_response
         and abs(measured_outward_step_progress_m)
         <= closed_loop_hazard_response_bound_m
-        and projected_lateral_error_after_measured_outward_response_m
-        <= lateral_position_tolerance_m
+        and coupled_xy_neutralization_projected_lateral_hold_accepted
         and previous_outward_action_for_response_tracking
         > neutral_z_confirmation_xy_action_bound
         and previous_outward_action_for_response_tracking
@@ -5608,15 +5626,18 @@ def _fixed_safe_z_lateral_hold_action(
     )
     coupled_xy_neutralization_requested = bool(
         coupled_xy_neutralization_hold_requested
+        and lateral_target_reached
         and coupled_xy_neutralization_step_stable
     )
     coupled_xy_neutralization_action = None
     pre_coupled_xy_neutralization_xy_action = commanded_xy_action.copy()
     if coupled_xy_neutralization_hold_requested:
-        previous_tangential_xy_action = (
+        neutralization_tangential_xy_action = (
             previous_commanded_action_xyz[:2]
             - previous_outward_action_for_response_tracking
             * outward_direction_xy
+            if lateral_target_reached
+            else tangential_xy_action_before_recovery.copy()
         )
         coupled_xy_neutralization_action = (
             float(
@@ -5630,7 +5651,7 @@ def _fixed_safe_z_lateral_hold_action(
             else previous_outward_action_for_response_tracking
         )
         commanded_xy_action = (
-            previous_tangential_xy_action
+            neutralization_tangential_xy_action
             + coupled_xy_neutralization_action * outward_direction_xy
         )
     captured_outward_response_tracking_requested = bool(
@@ -6183,6 +6204,15 @@ def _fixed_safe_z_lateral_hold_action(
         "coupled_xy_neutralization_entry_stable": (
             coupled_xy_neutralization_entry_stable
         ),
+        "coupled_xy_neutralization_lateral_hold_tolerance_m": (
+            coupled_xy_neutralization_lateral_hold_tolerance_m
+        ),
+        "coupled_xy_neutralization_lateral_hold_accepted": (
+            coupled_xy_neutralization_lateral_hold_accepted
+        ),
+        "coupled_xy_neutralization_projected_lateral_hold_accepted": (
+            coupled_xy_neutralization_projected_lateral_hold_accepted
+        ),
         "coupled_xy_neutralization_step_stable": (
             coupled_xy_neutralization_step_stable
         ),
@@ -6277,6 +6307,8 @@ def _fixed_safe_z_lateral_hold_action(
             "coupled_xy_neutralization_entry_requires_stable_responses": True,
             "every_coupled_xy_decrement_requires_stable_responses": True,
             "coupled_xy_neutralization_preserves_bounded_progress": True,
+            "coupled_xy_lateral_hysteresis_preserves_outward_progress": True,
+            "coupled_xy_lateral_hysteresis_uses_strict_tangential_bound": True,
             "neutral_z_confirmation_requires_small_coupled_xy_action": True,
             "strict_outside_loss_disables_inside_band_z_tracking": True,
             "projected_outside_band_downward_tail_retains_full_brake": True,
