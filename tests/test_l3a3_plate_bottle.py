@@ -3181,6 +3181,74 @@ def test_fixed_safe_z_lateral_hold_restores_job504122_strict_recovery():
     )
 
 
+def test_fixed_safe_z_lateral_hold_isolates_job504132_projected_exit():
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": (-np.ones(7, dtype=float)).tolist(),
+        "high": np.ones(7, dtype=float).tolist(),
+        "runtime_resolved": True,
+    }
+    action, evidence = _fixed_safe_z_lateral_hold_action(
+        current_eef=np.array(
+            [0.1329083834376621, -0.023260946932036307, 0.9206029699816838]
+        ),
+        lateral_target_xy=np.array(
+            [0.13242106705090634, -0.02850777957668001]
+        ),
+        lateral_position_tolerance_m=0.005,
+        fixed_safe_z_m=0.920581288496378,
+        vertical_position_tolerance_m=0.0004,
+        measured_vertical_step_progress_m=-1.5027591827809772e-05,
+        measured_outward_step_progress_m=-2.040453872401149e-05,
+        outside_side_guard={
+            "minimum_outside_clearance_m": 0.0015666257926954391,
+            "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+            "finger_table_vertical_clearance_m": 0.00784871543027943,
+            "required_finger_table_clearance_m": np.nextafter(
+                0.0, np.inf
+            ),
+        },
+        outward_direction_xy=np.array([1.0, 0.0]),
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_lateral_translation_action=0.005,
+        maximum_safety_brake_action=0.20,
+        strict_outside_clearance_m=0.0004,
+        strict_table_clearance_m=0.0004,
+        closed_loop_hazard_response_bound_m=0.0011,
+        full_outward_brake_clearance_m=0.00095,
+        progress_resolution_m=0.00005,
+        derivative_gain=2.0,
+        native_action_spec=native_spec,
+        previous_commanded_action_xyz=np.array(
+            [0.159375, -0.0049767124668837325, 0.13101311571464944]
+        ),
+        preceding_commanded_action_xyz=np.array(
+            [0.159375, -0.004974397113493229, 0.13112167944459138]
+        ),
+        maximum_positive_safety_release_action=0.05,
+    )
+    assert action[:3] == pytest.approx(
+        [0.20, 0.0, 0.1311177869440223]
+    )
+    assert evidence["measured_inward_response"] is False
+    assert evidence["coupled_xy_unload_projected_exit_loss"] is True
+    assert evidence["full_outward_recovery_active"] is True
+    assert evidence[
+        "outward_xy_recovery_authority_isolation_projected_exit_entry"
+    ] is True
+    assert evidence[
+        "outward_xy_recovery_authority_isolation_requested"
+    ] is True
+    assert evidence[
+        "outward_xy_recovery_authority_isolation_action_xyz"
+    ] == pytest.approx([0.20, 0.0, 0.1311177869440223])
+    assert evidence["proof"][
+        "projected_exit_loss_isolates_full_recovery_to_pure_outward_xy"
+    ] is True
+
+
 def test_fixed_safe_z_lateral_hold_waits_after_job503927_recovery_release():
     native_spec = {
         "source": "env.action_spec",

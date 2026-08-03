@@ -6170,8 +6170,16 @@ def _fixed_safe_z_lateral_hold_action(
         minimum_released_outward_action = None
         minimum_released_positive_z_action = None
 
+    outward_xy_recovery_authority_isolation_projected_exit_entry = bool(
+        full_outward_recovery_active
+        and coupled_xy_unload_projected_exit_loss
+    )
     outward_xy_recovery_authority_isolation_entry = bool(
-        full_outward_recovery_active and measured_inward_response
+        full_outward_recovery_active
+        and (
+            measured_inward_response
+            or outward_xy_recovery_authority_isolation_projected_exit_entry
+        )
     )
     outward_xy_recovery_authority_isolation_latched = bool(
         previous_outward_xy_recovery_authority_isolation_action
@@ -6439,6 +6447,9 @@ def _fixed_safe_z_lateral_hold_action(
         "outward_xy_recovery_authority_isolation_entry": (
             outward_xy_recovery_authority_isolation_entry
         ),
+        "outward_xy_recovery_authority_isolation_projected_exit_entry": (
+            outward_xy_recovery_authority_isolation_projected_exit_entry
+        ),
         "outward_xy_recovery_authority_isolation_latched": (
             outward_xy_recovery_authority_isolation_latched
         ),
@@ -6625,6 +6636,8 @@ def _fixed_safe_z_lateral_hold_action(
             "inward_response_isolates_full_recovery_to_pure_outward_xy": (
                 True
             ),
+            "projected_exit_loss_isolates_full_recovery_to_pure_outward_"
+            "xy": True,
             "isolated_outward_recovery_zeros_tangential_xy": True,
             "isolated_outward_xy_recovery_retains_guarded_z": True,
             "isolated_outward_recovery_latches_until_refill_and_noninward_"

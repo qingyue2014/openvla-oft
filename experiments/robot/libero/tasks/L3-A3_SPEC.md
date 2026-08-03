@@ -1344,6 +1344,18 @@ target is false. Strict-target inward responses retain the prior pure `0.20`
 selection, while the intended wider dynamic-release regime retains every
 Job504113 incremental-brake eligibility predicate. No other controller field or
 threshold changes.
+Job504132 then reached the intended dynamic regime, but sample `265` exposed a
+second full-recovery entry. Live outside clearance was `1.566626 mm` and its
+measured response projected `1.546221 mm`, below the unchanged `1.550000 mm`
+exit target. The projected-exit-loss gate correctly selected `0.20`, yet the
+response itself remained inside the deadband, so the earlier inward-response
+XY-isolation entry was false and retained `-0.004979` tangential Y. Subsequent
+coupled oscillation lost the one-controller-step corridor reserve at sample
+`304`. A full recovery selected by the existing projected-exit-loss predicate
+therefore enters the same pure-outward XY isolation as a meaningful inward
+response. Only tangential XY is zeroed; guarded Z and the existing latch until
+refill reserve plus a noninward response remain unchanged. No new predicate,
+threshold, action bound, or budget is introduced.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.
