@@ -5869,9 +5869,26 @@ def _fixed_safe_z_lateral_hold_action(
             or coupled_xy_positive_outward_response_damping_requested
         )
     )
+    strict_target_refill_neighborhood_decrement_requested = bool(
+        coupled_xy_neutralization_requested
+        and lateral_target_reached
+        and live_outside_clearance
+        <= captured_outward_response_tracking_ceiling_m
+        and previous_outward_action_for_response_tracking
+        < strict_safety_brake_bound
+        and np.linalg.norm(
+            previous_commanded_action_xyz[:2]
+            - previous_outward_action_for_response_tracking
+            * outward_direction_xy
+        )
+        > 0.0
+    )
     coupled_xy_selected_neutral_release_action_step = (
         coupled_xy_transient_neutral_release_action_step
-        if coupled_xy_transient_lateral_decrement_requested
+        if (
+            coupled_xy_transient_lateral_decrement_requested
+            or strict_target_refill_neighborhood_decrement_requested
+        )
         else coupled_xy_neutral_release_action_step
     )
     coupled_xy_neutralization_action = None
@@ -6557,6 +6574,9 @@ def _fixed_safe_z_lateral_hold_action(
         "coupled_xy_selected_neutral_release_action_step": (
             coupled_xy_selected_neutral_release_action_step
         ),
+        "strict_target_refill_neighborhood_decrement_requested": (
+            strict_target_refill_neighborhood_decrement_requested
+        ),
         "coupled_xy_neutralization_requested": (
             coupled_xy_neutralization_requested
         ),
@@ -6746,6 +6766,8 @@ def _fixed_safe_z_lateral_hold_action(
             "captured_outward_hold_respects_lateral_tolerance": True,
             "strict_target_coupled_hold_uses_captured_refill_pd_while_"
             "decrement_waits": True,
+            "strict_target_refill_neighborhood_decrement_uses_strict_"
+            "lateral_bound": True,
             "coupled_xy_neutralization_uses_existing_action_bounds": True,
             "coupled_xy_neutralization_requires_projected_exit_reserve": True,
             "coupled_xy_projected_exit_loss_uses_full_recovery": True,

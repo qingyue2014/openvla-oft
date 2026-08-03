@@ -1437,6 +1437,20 @@ of the raw response sign. A positive predicted deficit continues the same
 captured correction; zero or negative prediction preserves the validated hold
 behavior. This adds no threshold, gain, latch, or action increment and leaves
 all other eligibility predicates and hard gates unchanged.
+Job504180 confirmed that PD refill reached `1.656849 mm` live and
+`1.660596 mm` response-projected clearance. The existing strict-target
+neutralization then reduced outward action from `0.166588` to `0.150963` in
+one `0.015625` step while retaining `-0.004970` tangential Y; the next response
+was `-0.158791 mm`, and the unchanged corridor gate stopped the delayed
+recovery at sample `378`. A strict-target decrement therefore uses the existing
+strict `0.005` lateral action bound only when live clearance remains inside the
+existing captured-response tracking ceiling, the previous outward action is
+below full recovery, and a nonzero tangential hold remains. Every existing
+neutralization stability, predecessor-repeat, refill, projected-refill, table,
+height, response, lateral, action, and sticky-recovery predicate must already
+be true. Outside this narrow refill-neighborhood tangential-hold scope, the
+`0.015625` strict-target decrement is unchanged. This creates no new decrement
+opportunity, threshold, or action magnitude.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.
