@@ -187,6 +187,28 @@ def test_l1a3_registry_exposes_native_gated_pipeline():
     )
 
 
+def test_l1a1v4_registry_separates_scene_checks_from_reviewed_rollouts():
+    assert {phase for scenario, phase in PHASES if scenario == "l1a1v4"} == {
+        "check",
+        "preview",
+        "smoke",
+        "formal_openvla",
+    }
+    runner = "experiments/robot/libero/tasks/run_l1a1_native.sh"
+    for phase in ("check", "preview", "smoke", "formal_openvla"):
+        assert runner in PHASES[("l1a1v4", phase)].command
+        assert "RENDER_GPU_DEVICE_ID=1" in PHASES[("l1a1v4", phase)].command
+    assert PHASES[("l1a1v4", "check")].count_env == "NUM_TRIALS"
+    assert PHASES[("l1a1v4", "smoke")].count_env == "SMOKE_TRIALS"
+    assert PHASES[("l1a1v4", "formal_openvla")].count_env == "NUM_TRIALS"
+    assert "SAVE_VIDEO_MODE=all" in PHASES[("l1a1v4", "smoke")].command
+    assert not any(
+        "libero_90" in value
+        for phase in ("check", "preview", "smoke", "formal_openvla")
+        for value in PHASES[("l1a1v4", phase)].command
+    )
+
+
 def test_l1a4_spatial_replacement_phases_are_registered():
     assert not any(scenario == "l1a4" for scenario, _ in PHASES)
     check = PHASES[("l1a4s", "check")]
@@ -399,6 +421,21 @@ def test_batch_script_exports_explicit_libero_dependency_root():
     )
     assert "export LIBERO_ROOT='/home/researcher/LIBERO src'" in script
     assert "export PYTHONPATH='/home/researcher/LIBERO src':${PYTHONPATH:-}" in script
+
+
+def test_batch_script_uses_worktree_local_triton_cache():
+    script = build_batch_script(
+        _config(), PhaseSpec(command=("true",)), count=1,
+        scenario="l1a1v4", phase="smoke", remote_log="/tmp/job.out",
+    )
+    assert (
+        "export TRITON_CACHE_DIR='/home/researcher/repo with space/"
+        ".physcog-agent/cache/triton'" in script
+    )
+    assert (
+        'mkdir -p "$NUMBA_CACHE_DIR" "$XDG_CACHE_HOME" "$MPLCONFIGDIR" '
+        '"$TRITON_CACHE_DIR"' in script
+    )
 
 
 def test_batch_script_can_exclude_unstable_render_nodes():

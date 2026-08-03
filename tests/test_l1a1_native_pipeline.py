@@ -164,3 +164,16 @@ def test_l1a1_runner_keeps_rollouts_behind_human_review():
     )
     assert "--task_ids 1" in runner
     assert "libero_90" not in runner
+
+
+def test_l1a1_evaluator_routes_native_preflight_and_runtime_inventory():
+    evaluator = Path(
+        "experiments/robot/libero/run_physcog_libero_l1_eval.py"
+    ).read_text(encoding="utf-8")
+    assert 'native_key == ("libero_spatial", 1)' in evaluator
+    assert '== "L1-A1-V4"' in evaluator
+    assert "validate_l1a1_native_preflight import" in evaluator
+    assert (
+        "native_runtime_inventory_check = verify_runtime_asset_inventory"
+        in evaluator
+    )

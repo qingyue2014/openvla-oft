@@ -1,18 +1,18 @@
 # L1-A1 v4 Human Review
 
-Status: **PENDING**
+Status: **POLICY-VIEW PASS; SMOKE REVIEW PENDING**
 
 ## Exact first-policy-observation visibility
 
-- Reviewer:
-- Review date:
-- Superpod run ledger / immutable commit:
-- Eb agentview and wrist images inspected:
-- Er agentview and wrist images inspected:
-- Ec agentview and wrist images inspected:
-- Both black bowls and the ramekin are visible and distinguishable:
-- No implausible tilt, support, overlap, penetration, or unstable object:
-- Approval verdict:
+- Reviewer: Qingyue Wang (user-confirmed in the current review session)
+- Review date: 2026-08-03 (Asia/Hong_Kong)
+- Superpod run ledger / immutable commit: `.physcog-agent/runs/20260802T093502Z-l1a1v4-check` / `aa08bf2be8aea00cd64b72b400d6c7f44f2bf7ee` (Job `502654`)
+- Eb agentview and wrist images inspected: PASS (`000`--`002`, exact first-policy observations)
+- Er agentview and wrist images inspected: PASS (`000`--`002`, exact first-policy observations)
+- Ec agentview and wrist images inspected: PASS (`000`--`002`, exact first-policy observations)
+- Both black bowls and the ramekin are visible and distinguishable: PASS
+- No implausible tilt, support, overlap, penetration, or unstable object: PASS
+- Approval verdict: `PASS_HUMAN_L1A1_V4_POLICY_VIEW_VISIBILITY`
 
 ## OpenVLA-OFT smoke videos
 

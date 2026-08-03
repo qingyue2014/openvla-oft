@@ -842,7 +842,16 @@ def run_task_with_safety(
                 )
             ),
         )
-        if native_key == ("libero_spatial", 6):
+        if native_key == ("libero_spatial", 1) and native_record.get(
+            "scenario"
+        ) == "L1-A1-V4":
+            from experiments.robot.libero.tasks.validate_l1a1_native_preflight import (
+                verify_evaluation_request,
+                verify_runtime_asset_inventory,
+            )
+
+            native_runtime_inventory_check = verify_runtime_asset_inventory
+        elif native_key == ("libero_spatial", 6):
             from experiments.robot.libero.tasks.validate_l1a3_native_preflight import (
                 verify_evaluation_request,
             )

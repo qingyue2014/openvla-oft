@@ -1388,6 +1388,82 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "rollouts/libero_spatial/L1-A2-upright-cookie-matched-safe-seed42",
         ),
     ),
+    ("l1a1v4", "check"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1a1_native.sh",
+            "check",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1a1_v4_native_preflight.md",
+            "experiments/robot/libero/tasks/l1a1_v4_native_preflight.json",
+            "experiments/robot/libero/tasks/l1a1_v4_pairing.json",
+            "experiments/robot/libero/tasks/l1a1_v4_eb_states.hdf5",
+            "experiments/robot/libero/tasks/l1a1_v4_er_states.hdf5",
+            "experiments/robot/libero/tasks/l1a1_v4_ec_states.hdf5",
+            "review/L1-A1_task/libero_v4/policy_view_preview",
+        ),
+    ),
+    ("l1a1v4", "preview"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1a1_native.sh",
+            "preview",
+        ),
+        artifacts=("review/L1-A1_task/libero_v4/policy_view_preview",),
+    ),
+    ("l1a1v4", "smoke"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=all",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1a1_native.sh",
+            "smoke",
+        ),
+        count_env="SMOKE_TRIALS",
+        artifacts=(
+            "experiments/logs/l1a1_v4_openvla_eb_to_er_replay_smoke.csv",
+            "experiments/logs/l1a1_v4_openvla_eb_to_er_replay_smoke.md",
+            "experiments/logs/l1a1_v4_safe_reference_smoke.csv",
+            "experiments/logs/l1a1_v4_safe_reference_smoke.md",
+            "experiments/logs/l1a1_v4_safe_reference_smoke_trajectories",
+            "review/L1-A1_task/libero_v4/safe_reference_smoke",
+            "review/L1-A1_task/libero_v4/openvla/smoke",
+            "rollouts/libero_spatial/L1-A1-v4-ramekin-eb-native-openvla-smoke",
+            "rollouts/libero_spatial/L1-A1-v4-ramekin-stale-lure-er-openvla-smoke",
+            "rollouts/libero_spatial/L1-A1-v4-ramekin-matched-safe-ec-openvla-smoke",
+        ),
+    ),
+    ("l1a1v4", "formal_openvla"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=all",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1a1_native.sh",
+            "formal_openvla",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1a1_v4_openvla_eb_to_er_replay.csv",
+            "experiments/logs/l1a1_v4_openvla_eb_to_er_replay.md",
+            "experiments/logs/l1a1_v4_safe_reference.csv",
+            "experiments/logs/l1a1_v4_safe_reference.md",
+            "experiments/logs/l1a1_v4_safe_reference_trajectories",
+            "experiments/logs/l1a1_v4_openvla_attribution.md",
+            "review/L1-A1_task/libero_v4/safe_reference",
+            "review/L1-A1_task/libero_v4/openvla/formal",
+            "rollouts/libero_spatial/L1-A1-v4-ramekin-eb-native-openvla",
+            "rollouts/libero_spatial/L1-A1-v4-ramekin-stale-lure-er-openvla",
+            "rollouts/libero_spatial/L1-A1-v4-ramekin-matched-safe-ec-openvla",
+        ),
+    ),
     ("l1a3", "check"): PhaseSpec(
         command=(
             "bash",
@@ -1840,7 +1916,11 @@ def build_batch_script(
             "export MPLCONFIGDIR="
             f"{shlex.quote(cfg.remote_repo.rstrip('/') + '/.physcog-agent/cache/matplotlib')}"
         ),
-        'mkdir -p "$NUMBA_CACHE_DIR" "$XDG_CACHE_HOME" "$MPLCONFIGDIR"',
+        (
+            "export TRITON_CACHE_DIR="
+            f"{shlex.quote(cfg.remote_repo.rstrip('/') + '/.physcog-agent/cache/triton')}"
+        ),
+        'mkdir -p "$NUMBA_CACHE_DIR" "$XDG_CACHE_HOME" "$MPLCONFIGDIR" "$TRITON_CACHE_DIR"',
         *(
             [
                 f"export LIBERO_ROOT={shlex.quote(cfg.libero_root)}",
