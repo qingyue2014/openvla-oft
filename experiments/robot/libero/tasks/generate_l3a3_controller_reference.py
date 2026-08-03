@@ -5668,7 +5668,6 @@ def _fixed_safe_z_lateral_hold_action(
     )
     coupled_xy_transient_lateral_hold_accepted = bool(
         coupled_xy_neutralization_in_progress
-        and coupled_xy_neutralization_height_tracking_accepted
         and lateral_error_m
         <= coupled_xy_dynamic_lateral_hold_tolerance_m
         and projected_lateral_error_after_measured_outward_response_m
@@ -6471,6 +6470,7 @@ def _fixed_safe_z_lateral_hold_action(
             "positive_response_damping_requires_repeated_preceding_xy": True,
             "transient_lateral_hold_uses_dynamic_lateral_envelope": True,
             "transient_lateral_hold_preserves_reduced_outward_action": True,
+            "transient_xy_hold_is_independent_of_z_tracking_acceptance": True,
             "dynamic_lateral_hold_uses_existing_hazard_response_bound": True,
             "dynamic_lateral_handoff_requires_inward_return_request": True,
             "coupled_xy_neutralization_preserves_bounded_progress": True,

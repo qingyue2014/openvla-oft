@@ -1374,9 +1374,13 @@ def test_fixed_safe_z_lateral_hold_unloads_job503872_upward_overshoot():
         - 2.0 * 0.0005949002649012769
     ) / 0.08
     assert action[:3] == pytest.approx(
-        [0.10, -0.004961583747930209, expected_guard_bounded_z]
+        [0.15, -0.004961583747930209, expected_guard_bounded_z]
     )
     assert evidence["above_safe_z_band"] is True
+    assert evidence[
+        "coupled_xy_transient_lateral_hold_accepted"
+    ] is True
+    assert evidence["coupled_xy_neutralization_hold_requested"] is True
     assert evidence["positive_z_release_slew_applied"] is False
     assert evidence[
         "positive_z_release_slew_bypass_requested"
@@ -3070,6 +3074,74 @@ def test_fixed_safe_z_lateral_hold_handoffs_job503942_dynamic_recovery():
     ] is True
     assert evidence["proof"][
         "dynamic_lateral_handoff_requires_inward_return_request"
+    ] is True
+
+
+def test_fixed_safe_z_lateral_hold_decouples_job503950_xy_from_z_tracking():
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": (-np.ones(7, dtype=float)).tolist(),
+        "high": np.ones(7, dtype=float).tolist(),
+        "runtime_resolved": True,
+    }
+    action, evidence = _fixed_safe_z_lateral_hold_action(
+        current_eef=np.array(
+            [0.13367699144842696, -0.02340999438790064, 0.9215103201366324]
+        ),
+        lateral_target_xy=np.array(
+            [0.13242106705090634, -0.02850777957668001]
+        ),
+        lateral_position_tolerance_m=0.005,
+        fixed_safe_z_m=0.920581288496378,
+        vertical_position_tolerance_m=0.0004,
+        measured_vertical_step_progress_m=0.00043121024305248223,
+        measured_outward_step_progress_m=0.00011161902602660478,
+        outside_side_guard={
+            "minimum_outside_clearance_m": 0.002375725997314171,
+            "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+            "finger_table_vertical_clearance_m": 0.008792677618192912,
+            "required_finger_table_clearance_m": np.nextafter(
+                0.0, np.inf
+            ),
+        },
+        outward_direction_xy=np.array([1.0, 0.0]),
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_lateral_translation_action=0.005,
+        maximum_safety_brake_action=0.20,
+        strict_outside_clearance_m=0.0004,
+        strict_table_clearance_m=0.0004,
+        closed_loop_hazard_response_bound_m=0.0011,
+        full_outward_brake_clearance_m=0.00095,
+        progress_resolution_m=0.00005,
+        derivative_gain=2.0,
+        native_action_spec=native_spec,
+        previous_commanded_action_xyz=np.array(
+            [0.184375, -0.004877139828273735, 0.16857308247333455]
+        ),
+        preceding_commanded_action_xyz=np.array(
+            [0.184375, -0.004907128050761536, 0.1890117003105011]
+        ),
+        maximum_positive_safety_release_action=0.05,
+    )
+    assert action[:3] == pytest.approx(
+        [0.184375, -0.004854834486759004, -0.022393151579491732]
+    )
+    assert evidence[
+        "coupled_xy_neutralization_height_tracking_accepted"
+    ] is False
+    assert evidence[
+        "coupled_xy_transient_lateral_hold_accepted"
+    ] is True
+    assert evidence["coupled_xy_neutralization_hold_requested"] is True
+    assert evidence["coupled_xy_neutralization_requested"] is False
+    assert evidence["coupled_xy_neutralization_action"] == pytest.approx(
+        0.184375
+    )
+    assert evidence["outward_release_slew_applied"] is False
+    assert evidence["proof"][
+        "transient_xy_hold_is_independent_of_z_tracking_acceptance"
     ] is True
 
 

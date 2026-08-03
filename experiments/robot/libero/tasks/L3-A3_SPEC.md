@@ -1125,6 +1125,19 @@ positive damping follows the same envelope. Stable decrements still require
 the original `5 mm` acceptance. No physical threshold, route, budget, task,
 inventory, state, prompt, goal, or intervention changes.
 
+Job503950 confirmed that the `6.1 mm` dynamic envelope performed the recovered
+handoff at sample 236 and retained `X=0.184375` at sample 237. At sample 238,
+current/projected lateral errors (`5.250215/5.278029 mm`), XY response, outside
+reserve, and table reserve all remained valid, but the independent captured-Z
+tracking predicate was false during a bounded safe-Z overshoot. Coupling that
+Z-only predicate into transient XY eligibility disabled the hold, invoked the
+generic release to `0.134375`, and produced a `-0.178475 mm` inward response.
+Transient XY holding is now independent of captured-Z tracking acceptance; it
+still requires the dynamic lateral envelope, nonhazardous XY/vertical response,
+valid outside/table reserve, and no measured inward response. Z continues
+through the unchanged guarded path. No physical threshold, route, budget, task,
+inventory, state, prompt, goal, or intervention changes.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
