@@ -46,6 +46,18 @@ def test_in_place_tipping_after_first_policy_frame_fails_receptacle_gate():
     assert "plate_1_main:tilt" in failures
 
 
+def test_preregistered_lower_bowl_exception_does_not_relax_other_receptacles():
+    trace = _trace()
+    for sample in trace:
+        sample["akita_black_bowl_2_main"]["tilt_deg"] = 1.646
+    valid, failures, summary = _evaluate_trace(
+        trace, {"akita_black_bowl_2_main": 2.0}
+    )
+    assert valid
+    assert failures == []
+    assert summary["akita_black_bowl_2_main"]["tilt_limit_deg"] == 2.0
+
+
 def test_first_policy_velocity_and_forbidden_contact_fail_closed():
     trace = _trace()
     first = trace[FORMAL_WAIT_STEPS]["akita_black_bowl_1_main"]

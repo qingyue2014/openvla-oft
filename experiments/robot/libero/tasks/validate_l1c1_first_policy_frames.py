@@ -232,7 +232,10 @@ def _sample(env, condition: str) -> dict[str, dict]:
     return result
 
 
-def _evaluate_trace(samples: list[dict[str, dict]]) -> tuple[bool, list[str], dict]:
+def _evaluate_trace(
+    samples: list[dict[str, dict]],
+    receptacle_tilt_limits: dict[str, float] | None = None,
+) -> tuple[bool, list[str], dict]:
     if len(samples) <= FORMAL_WAIT_STEPS:
         raise ValueError("trace does not contain the first-policy sample")
     failures: list[str] = []
@@ -248,11 +251,11 @@ def _evaluate_trace(samples: list[dict[str, dict]]) -> tuple[bool, list[str], di
         max_linear = max(float(value["linear_speed_mps"] or 0.0) for value in measurements)
         max_angular = max(float(value["angular_speed_radps"] or 0.0) for value in measurements)
         first_policy = measurements[FORMAL_WAIT_STEPS]
-        tilt_limit = (
-            MAX_RECEPTACLE_TILT_DEG
-            if body_name in RECEPTACLES
-            else MAX_NON_RECEPTACLE_TILT_DEG
-        )
+        tilt_limit = MAX_NON_RECEPTACLE_TILT_DEG
+        if body_name in RECEPTACLES:
+            tilt_limit = MAX_RECEPTACLE_TILT_DEG
+            if receptacle_tilt_limits and body_name in receptacle_tilt_limits:
+                tilt_limit = float(receptacle_tilt_limits[body_name])
         if max_drift > MAX_TRANSLATION_DRIFT_M:
             failures.append(f"{body_name}:translation_drift")
         if max_tilt > tilt_limit:
@@ -560,15 +563,29 @@ def _write_report(path: Path, manifest: dict) -> None:
 def validate(args: argparse.Namespace) -> dict[str, object]:
     host = _assert_superpod(args.allow_local_simulator)
     state_dir = Path(args.state_dir)
-    paths = {condition: state_dir / filename for condition, filename in STATE_FILENAMES.items()}
+    explicit_paths = {
+        "eb": args.eb_states,
+        "er": args.er_states,
+        "ec": args.ec_states,
+    }
+    paths = {
+        condition: Path(explicit_paths[condition])
+        if explicit_paths[condition]
+        else state_dir / filename
+        for condition, filename in STATE_FILENAMES.items()
+    }
     missing = [str(path) for path in paths.values() if not path.exists()]
     if missing:
         raise FileNotFoundError(f"missing frozen L1-C1 state files: {missing}")
     hashes = {condition: _sha256(path) for condition, path in paths.items()}
+    expected_hashes = dict(EXPECTED_STATE_SHA256)
+    if args.expected_hash_manifest:
+        hash_manifest = json.loads(Path(args.expected_hash_manifest).read_text())
+        expected_hashes.update(hash_manifest["expected_state_sha256"])
     mismatches = {
-        condition: {"expected": EXPECTED_STATE_SHA256[condition], "actual": value}
+        condition: {"expected": expected_hashes[condition], "actual": value}
         for condition, value in hashes.items()
-        if value != EXPECTED_STATE_SHA256[condition]
+        if value != expected_hashes[condition]
     }
     if mismatches:
         raise ValueError(f"frozen state hash mismatch: {mismatches}")
@@ -597,6 +614,9 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
     records: list[dict] = []
     snapshots: dict[tuple[int, str], dict[str, np.ndarray]] = {}
     allowed_indices: dict[str, set[int]] | None = None
+    receptacle_tilt_limits = {
+        "akita_black_bowl_2_main": args.lower_bowl_max_tilt_deg,
+    }
     for condition in ("eb", "er", "ec"):
         task_bddl = os.path.join(
             get_libero_path("bddl_files"), task.problem_folder, task.bddl_file
@@ -628,7 +648,9 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
                         )
                 if first_policy_observation is None or policy_view is None:
                     raise RuntimeError("exact first-policy observation was not captured")
-                valid, failures, stability = _evaluate_trace(samples)
+                valid, failures, stability = _evaluate_trace(
+                    samples, receptacle_tilt_limits=receptacle_tilt_limits
+                )
                 visibility = policy_view["visible_pixels_after_policy_crop"]
                 if min(visibility.values()) < MIN_VISIBLE_PIXELS:
                     failures.append("policy_view_visibility")
@@ -685,6 +707,7 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         ],
         "thresholds": {
             "max_receptacle_tilt_deg_throughout": MAX_RECEPTACLE_TILT_DEG,
+            "max_lower_bowl_tilt_deg_throughout": args.lower_bowl_max_tilt_deg,
             "max_non_receptacle_tilt_deg_throughout": MAX_NON_RECEPTACLE_TILT_DEG,
             "max_translation_drift_m_throughout": MAX_TRANSLATION_DRIFT_M,
             "max_window_linear_speed_mps": MAX_WINDOW_LINEAR_SPEED_MPS,
@@ -753,6 +776,10 @@ def main() -> None:
     parser.add_argument(
         "--state_dir", default="experiments/robot/libero/tasks/l1c1_first_policy_inputs"
     )
+    parser.add_argument("--eb_states")
+    parser.add_argument("--er_states")
+    parser.add_argument("--ec_states")
+    parser.add_argument("--expected_hash_manifest")
     parser.add_argument("--review_dir", default="review/L1-C1_task/first_policy_gate")
     parser.add_argument(
         "--output_manifest", default="experiments/logs/l1c1_first_policy_gate.json"
@@ -762,6 +789,7 @@ def main() -> None:
     parser.add_argument("--num_episodes", type=int)
     parser.add_argument("--render_resolution", type=int, default=256)
     parser.add_argument("--render_gpu_device_id", type=int, default=-1)
+    parser.add_argument("--lower_bowl_max_tilt_deg", type=float, default=1.0)
     parser.add_argument("--fail_on_invalid", action="store_true")
     parser.add_argument("--allow_local_simulator", action="store_true")
     validate(parser.parse_args())

@@ -31,6 +31,40 @@ class PhaseSpec:
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
+    ("l1c1", "repair_eb"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1c1_task2.sh",
+            "bowl_stack_repair_eb",
+        ),
+        count_env="NUM_TRIALS",
+        inputs=(
+            (
+                "artifacts/physcog/l1c1/formal/20260727T091817Z-d6ec632a/initial_layouts/l1c1_task2_bowl_stack_candidate_states.hdf5",
+                "experiments/robot/libero/tasks/l1c1_first_policy_inputs/l1c1_task2_bowl_stack_candidate_states.hdf5",
+            ),
+            (
+                "artifacts/physcog/l1c1/formal/20260727T091817Z-d6ec632a/initial_layouts/l1c1_task2_bowl_stack_eb_states.hdf5",
+                "experiments/robot/libero/tasks/l1c1_first_policy_inputs/l1c1_task2_bowl_stack_eb_states.hdf5",
+            ),
+            (
+                "artifacts/physcog/l1c1/formal/20260727T091817Z-d6ec632a/initial_layouts/l1c1_task2_bowl_stack_ec_states.hdf5",
+                "experiments/robot/libero/tasks/l1c1_first_policy_inputs/l1c1_task2_bowl_stack_ec_states.hdf5",
+            ),
+        ),
+        artifacts=(
+            "experiments/robot/libero/tasks/l1c1_task2_bowl_stack_eb_repaired_states.hdf5",
+            "experiments/logs/l1c1_eb_repair_build.json",
+            "experiments/logs/l1c1_native_preflight.json",
+            "experiments/logs/l1c1_native_preflight.md",
+            "experiments/logs/l1c1_repaired_eb_first_policy_gate.json",
+            "experiments/logs/l1c1_repaired_eb_first_policy_gate.csv",
+            "experiments/logs/l1c1_repaired_eb_first_policy_gate.md",
+            "review/L1-C1_task/repaired_eb_gate",
+        ),
+    ),
     ("l1c1", "first_policy_gate"): PhaseSpec(
         command=(
             "env",

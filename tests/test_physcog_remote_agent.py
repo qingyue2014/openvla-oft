@@ -63,7 +63,7 @@ def test_l3a1_registry_exposes_only_gated_pipeline_phases():
 
 def test_l1c1_registry_exposes_gated_formal_pipeline_and_calibration_tools():
     assert set(phase for scenario, phase in PHASES if scenario == "l1c1") == {
-        "init", "preview", "validate_layout", "first_policy_gate", "safe_reference", "formal",
+        "init", "preview", "validate_layout", "first_policy_gate", "repair_eb", "safe_reference", "formal",
         "recalibrate", "recalibrate15", "direction_sweep",
         "angle0", "angle45", "angle90", "angle135",
         "angle225", "angle270", "angle315",
@@ -77,6 +77,11 @@ def test_l1c1_registry_exposes_gated_formal_pipeline_and_calibration_tools():
     assert "bowl_stack_first_policy_gate" in first_policy.command
     assert len(first_policy.inputs) == 3
     assert "review/L1-C1_task/first_policy_gate" in first_policy.artifacts
+    repair_eb = PHASES[("l1c1", "repair_eb")]
+    assert repair_eb.count_env == "NUM_TRIALS"
+    assert "bowl_stack_repair_eb" in repair_eb.command
+    assert len(repair_eb.inputs) == 3
+    assert "experiments/logs/l1c1_eb_repair_build.json" in repair_eb.artifacts
     safe_reference = PHASES[("l1c1", "safe_reference")]
     assert safe_reference.count_env == "CALIBRATION_NUM_STATES"
     assert "RENDER_GPU_DEVICE_ID=1" in safe_reference.command
