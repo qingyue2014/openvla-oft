@@ -37,6 +37,7 @@ SETTLE_CONFIRM_STEPS = 50
 MAX_NATIVE_XY_SETTLE_DRIFT_M = 0.005
 MAX_INVARIANT_QPOS_DIFF = 1e-12
 MAX_INVARIANT_QVEL_DIFF = 1e-12
+REGISTERED_RADIAL_OFFSETS_M = (0.0, 0.005, 0.010, 0.015, 0.020, 0.025, 0.030)
 
 
 def _assert_superpod(allow_local_simulator: bool) -> dict[str, object]:
@@ -174,67 +175,109 @@ def repair(args: argparse.Namespace) -> dict[str, object]:
                 env.sim.data.qpos[qpos_address : qpos_address + 7], dtype=float
             ).copy()
             native_xy = native_lower_qpos[:2].copy()
+            plate_id = int(env.sim.model.body_name2id("plate_1_main"))
+            plate_xy = np.asarray(env.sim.data.body_xpos[plate_id], dtype=float)[:2]
+            direction = native_xy - plate_xy
+            direction_norm = float(np.linalg.norm(direction))
+            if direction_norm <= 1e-9:
+                direction = np.array([0.0, 1.0], dtype=float)
+            else:
+                direction = direction / direction_norm
 
-            env.reset()
-            env.set_init_state(ec_state)
-            env.sim.data.qpos[qpos_address : qpos_address + 7] = native_lower_qpos
-            env.sim.data.qvel[qvel_address : qvel_address + 6] = 0.0
-            env.sim.forward()
-            for _ in range(SETTLE_STEPS + SETTLE_CONFIRM_STEPS):
-                env.sim.step()
-            settled_lower_qpos = np.asarray(
-                env.sim.data.qpos[qpos_address : qpos_address + 7], dtype=float
-            ).copy()
+            accepted = None
+            attempt_failures: list[dict[str, object]] = []
+            for radial_offset_m in REGISTERED_RADIAL_OFFSETS_M:
+                proposed_qpos = native_lower_qpos.copy()
+                proposed_qpos[:2] = native_xy + direction * radial_offset_m
+                env.reset()
+                env.set_init_state(ec_state)
+                env.sim.data.qpos[qpos_address : qpos_address + 7] = proposed_qpos
+                env.sim.data.qvel[qvel_address : qvel_address + 6] = 0.0
+                env.sim.forward()
+                for _ in range(SETTLE_STEPS + SETTLE_CONFIRM_STEPS):
+                    env.sim.step()
+                settled_lower_qpos = np.asarray(
+                    env.sim.data.qpos[qpos_address : qpos_address + 7], dtype=float
+                ).copy()
 
-            # Reapply the exact paired invariant state, then change only the
-            # lower bowl. The saved qvel is zero so formal no-op waiting begins
-            # from a truly settled state.
-            env.reset()
-            env.set_init_state(ec_state)
-            baseline_qpos = np.asarray(env.sim.data.qpos, dtype=float).copy()
-            baseline_qvel = np.asarray(env.sim.data.qvel, dtype=float).copy()
-            env.sim.data.qpos[qpos_address : qpos_address + 7] = settled_lower_qpos
-            env.sim.data.qvel[qvel_address : qvel_address + 6] = 0.0
-            env.sim.forward()
-            candidate_qpos = np.asarray(env.sim.data.qpos, dtype=float).copy()
-            candidate_qvel = np.asarray(env.sim.data.qvel, dtype=float).copy()
-            invariant_qpos_diff = _outside_max(
-                baseline_qpos, candidate_qpos, qpos_allowed
-            )
-            invariant_qvel_diff = _outside_max(
-                baseline_qvel, candidate_qvel, qvel_allowed
-            )
-            if invariant_qpos_diff > MAX_INVARIANT_QPOS_DIFF:
-                raise RuntimeError(f"ep{episode_idx:03d}: invariant qpos changed")
-            if invariant_qvel_diff > MAX_INVARIANT_QVEL_DIFF:
-                raise RuntimeError(f"ep{episode_idx:03d}: invariant qvel changed")
-            candidate = env.sim.get_state().flatten().copy()
-
-            observation = restore_formal_observation(env, candidate)
-            samples = [_sample(env, "eb")]
-            for _ in range(FORMAL_WAIT_STEPS + CONFIRM_STEPS):
-                observation, _, _, _ = env.step([0, 0, 0, 0, 0, 0, -1])
-                samples.append(_sample(env, "eb"))
-            valid, failures, stability = _evaluate_trace(samples)
-            settled_xy = np.asarray(
-                stability[LOWER_BOWL]["pre_wait"]["position"], dtype=float
-            )[:2]
-            native_xy_drift = float(np.linalg.norm(settled_xy - native_xy))
-            if native_xy_drift > MAX_NATIVE_XY_SETTLE_DRIFT_M:
-                failures.append("lower_bowl:native_xy_settle_drift")
-                valid = False
-            if not valid:
-                raise RuntimeError(
-                    f"ep{episode_idx:03d}: repaired Eb failed exact gate: "
-                    + ", ".join(sorted(set(failures)))
+                # Reapply the exact paired invariant state, then change only
+                # the lower bowl. The saved qvel is zero so formal no-op
+                # waiting begins from a truly settled state.
+                env.reset()
+                env.set_init_state(ec_state)
+                baseline_qpos = np.asarray(env.sim.data.qpos, dtype=float).copy()
+                baseline_qvel = np.asarray(env.sim.data.qvel, dtype=float).copy()
+                env.sim.data.qpos[
+                    qpos_address : qpos_address + 7
+                ] = settled_lower_qpos
+                env.sim.data.qvel[qvel_address : qvel_address + 6] = 0.0
+                env.sim.forward()
+                candidate_qpos = np.asarray(env.sim.data.qpos, dtype=float).copy()
+                candidate_qvel = np.asarray(env.sim.data.qvel, dtype=float).copy()
+                invariant_qpos_diff = _outside_max(
+                    baseline_qpos, candidate_qpos, qpos_allowed
                 )
+                invariant_qvel_diff = _outside_max(
+                    baseline_qvel, candidate_qvel, qvel_allowed
+                )
+                if invariant_qpos_diff > MAX_INVARIANT_QPOS_DIFF:
+                    raise RuntimeError(f"ep{episode_idx:03d}: invariant qpos changed")
+                if invariant_qvel_diff > MAX_INVARIANT_QVEL_DIFF:
+                    raise RuntimeError(f"ep{episode_idx:03d}: invariant qvel changed")
+                candidate = env.sim.get_state().flatten().copy()
+
+                observation = restore_formal_observation(env, candidate)
+                samples = [_sample(env, "eb")]
+                for _ in range(FORMAL_WAIT_STEPS + CONFIRM_STEPS):
+                    observation, _, _, _ = env.step([0, 0, 0, 0, 0, 0, -1])
+                    samples.append(_sample(env, "eb"))
+                valid, failures, stability = _evaluate_trace(samples)
+                settled_xy = np.asarray(
+                    stability[LOWER_BOWL]["pre_wait"]["position"], dtype=float
+                )[:2]
+                proposed_xy = proposed_qpos[:2]
+                settle_xy_drift = float(np.linalg.norm(settled_xy - proposed_xy))
+                if settle_xy_drift > MAX_NATIVE_XY_SETTLE_DRIFT_M:
+                    failures.append("lower_bowl:proposed_xy_settle_drift")
+                    valid = False
+                if valid:
+                    accepted = {
+                        "candidate": candidate,
+                        "stability": stability,
+                        "settled_xy": settled_xy,
+                        "settle_xy_drift": settle_xy_drift,
+                        "radial_offset_m": radial_offset_m,
+                        "invariant_qpos_diff": invariant_qpos_diff,
+                        "invariant_qvel_diff": invariant_qvel_diff,
+                    }
+                    break
+                attempt_failures.append(
+                    {
+                        "radial_offset_m": radial_offset_m,
+                        "failures": sorted(set(failures)),
+                    }
+                )
+            if accepted is None:
+                raise RuntimeError(
+                    f"ep{episode_idx:03d}: all registered Eb repairs failed: "
+                    f"{attempt_failures}"
+                )
+            candidate = accepted["candidate"]
+            stability = accepted["stability"]
+            settled_xy = accepted["settled_xy"]
+            native_xy_drift = float(np.linalg.norm(settled_xy - native_xy))
+            invariant_qpos_diff = float(accepted["invariant_qpos_diff"])
+            invariant_qvel_diff = float(accepted["invariant_qvel_diff"])
             repaired.append(candidate)
             records.append(
                 {
                     "episode_idx": episode_idx,
                     "native_lower_bowl_xy": native_xy.tolist(),
                     "repaired_lower_bowl_xy": settled_xy.tolist(),
-                    "native_xy_settle_drift_m": native_xy_drift,
+                    "native_to_repaired_xy_m": native_xy_drift,
+                    "registered_radial_offset_m": accepted["radial_offset_m"],
+                    "proposed_xy_settle_drift_m": accepted["settle_xy_drift"],
+                    "rejected_registered_offsets": attempt_failures,
                     "invariant_qpos_max_abs_diff": invariant_qpos_diff,
                     "invariant_qvel_max_abs_diff": invariant_qvel_diff,
                     "first_policy_lower_bowl": stability[LOWER_BOWL][
@@ -289,6 +332,9 @@ def repair(args: argparse.Namespace) -> dict[str, object]:
             "formal_wait_steps": FORMAL_WAIT_STEPS,
             "formal_confirmation_steps": CONFIRM_STEPS,
             "max_native_xy_settle_drift_m": MAX_NATIVE_XY_SETTLE_DRIFT_M,
+            "registered_radial_offsets_away_from_plate_m": list(
+                REGISTERED_RADIAL_OFFSETS_M
+            ),
             "max_receptacle_tilt_deg": 1.0,
         },
         "episode_count": len(records),
