@@ -134,7 +134,9 @@ def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
     assert "export N=8" in script
     assert "export PYTHONUNBUFFERED=1" in script
     assert 'export NUMBA_CACHE_DIR="${SLURM_TMPDIR:-/tmp}/physcog-numba-' in script
+    assert 'export TRITON_CACHE_DIR="${SLURM_TMPDIR:-/tmp}/physcog-triton-' in script
     assert 'mkdir -p "$NUMBA_CACHE_DIR"' in script
+    assert 'mkdir -p "$TRITON_CACHE_DIR"' in script
     assert "'/home/researcher/repo with space'" in script
     assert "'path with space/runner.sh'" in script
     assert "__PHYSCOG_COMPUTE_NODE__" in script

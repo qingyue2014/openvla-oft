@@ -368,7 +368,7 @@ def _save_policy_views(
     from experiments.robot.libero.run_libero_eval import prepare_observation
     from experiments.robot.openvla_utils import center_crop_image
 
-    prepared, _ = prepare_observation(observation, MODEL_IMAGE_SIZE, "openvla")
+    prepared, _ = prepare_observation(observation, MODEL_IMAGE_SIZE)
     agent = np.asarray(center_crop_image(prepared["full_image"]), dtype=np.uint8)
     wrist = np.asarray(center_crop_image(prepared["wrist_image"]), dtype=np.uint8)
     condition_dir = output_dir / "exact_first_policy_frames" / condition
