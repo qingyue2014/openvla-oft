@@ -416,6 +416,8 @@ def build_batch_script(
             if cfg.libero_root else []
         ),
         "export PYTHONUNBUFFERED=1",
+        'export NUMBA_CACHE_DIR="${SLURM_TMPDIR:-/tmp}/physcog-numba-${SLURM_JOB_ID:-manual}"',
+        'mkdir -p "$NUMBA_CACHE_DIR"',
         *env,
         "printf '__PHYSCOG_COMPUTE_NODE__=%s\\n' \"$(hostname)\"",
         "printf '__PHYSCOG_COMMIT__=%s\\n' \"$(git rev-parse HEAD)\"",
