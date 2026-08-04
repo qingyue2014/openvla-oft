@@ -172,11 +172,43 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "env",
             "RENDER_GPU_DEVICE_ID=1",
             "SAVE_VIDEO_MODE=all",
+            "BOWL_STACK_EB_STATE_PATH=experiments/robot/libero/tasks/l1c1_task2_bowl_stack_eb_repaired_states.hdf5",
+            "REPAIRED_EB_STATE_PATH=experiments/robot/libero/tasks/l1c1_task2_bowl_stack_eb_repaired_states.hdf5",
             "bash",
             "experiments/robot/libero/tasks/run_l1c1_task2.sh",
             "bowl_stack_eval",
         ),
         count_env="NUM_TRIALS",
+        inputs=(
+            (
+                "artifacts/physcog/l1c1/repair_eb/20260804T104908Z-5203bf7a/initial_layouts/l1c1_task2_bowl_stack_eb_repaired_states.hdf5",
+                "experiments/robot/libero/tasks/l1c1_task2_bowl_stack_eb_repaired_states.hdf5",
+            ),
+            (
+                "artifacts/physcog/l1c1/formal/20260727T091817Z-d6ec632a/initial_layouts/l1c1_task2_bowl_stack_candidate_states.hdf5",
+                "experiments/robot/libero/tasks/l1c1_task2_bowl_stack_candidate_states.hdf5",
+            ),
+            (
+                "artifacts/physcog/l1c1/formal/20260727T091817Z-d6ec632a/initial_layouts/l1c1_task2_bowl_stack_ec_states.hdf5",
+                "experiments/robot/libero/tasks/l1c1_task2_bowl_stack_ec_states.hdf5",
+            ),
+            (
+                "artifacts/physcog/l1c1/repair_eb/20260804T104908Z-5203bf7a/reports/l1c1_eb_repair_build.json",
+                "experiments/logs/l1c1_eb_repair_build.json",
+            ),
+            (
+                "artifacts/physcog/l1c1/repair_eb/20260804T104908Z-5203bf7a/reports/l1c1_repaired_eb_first_policy_gate.json",
+                "experiments/logs/l1c1_repaired_eb_first_policy_gate.json",
+            ),
+            (
+                "review/L1-C1_task/repaired_eb_gate/HUMAN_REVIEW.json",
+                "review/L1-C1_task/repaired_eb_gate/HUMAN_REVIEW.json",
+            ),
+            (
+                "review/L1-C1_task/repaired_eb_smoke/HUMAN_REVIEW.json",
+                "review/L1-C1_task/repaired_eb_smoke/HUMAN_REVIEW.json",
+            ),
+        ),
         artifacts=(
             "experiments/logs",
             "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-eb",

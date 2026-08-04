@@ -80,6 +80,9 @@ FIRST_POLICY_REVIEW_DIR="${FIRST_POLICY_REVIEW_DIR:-review/L1-C1_task/first_poli
 REPAIRED_EB_STATE_PATH="${REPAIRED_EB_STATE_PATH:-experiments/robot/libero/tasks/l1c1_task2_bowl_stack_eb_repaired_states.hdf5}"
 REPAIRED_EB_BUILD_MANIFEST="${REPAIRED_EB_BUILD_MANIFEST:-${LOG_DIR:-experiments/logs}/l1c1_eb_repair_build.json}"
 REPAIRED_EB_REVIEW_DIR="${REPAIRED_EB_REVIEW_DIR:-review/L1-C1_task/repaired_eb_gate}"
+REPAIRED_EB_FIRST_POLICY_MANIFEST="${REPAIRED_EB_FIRST_POLICY_MANIFEST:-${LOG_DIR}/l1c1_repaired_eb_first_policy_gate.json}"
+REPAIRED_EB_FIRST_POLICY_REVIEW="${REPAIRED_EB_FIRST_POLICY_REVIEW:-${REPAIRED_EB_REVIEW_DIR}/HUMAN_REVIEW.json}"
+L1C1_SMOKE_HUMAN_REVIEW="${L1C1_SMOKE_HUMAN_REVIEW:-review/L1-C1_task/repaired_eb_smoke/HUMAN_REVIEW.json}"
 if [[ -n "${PHYSCOG_SHARED_REPO:-}" ]]; then
   DEFAULT_BOWL_STACK_SOURCE_INDICES="${PHYSCOG_SHARED_REPO}/experiments/robot/libero/tasks/l1c1_task2_bowl_stack_source_indices.json"
   DEFAULT_BOWL_STACK_EB_TRAJECTORY_DIR="${PHYSCOG_SHARED_REPO}/rollouts/libero_spatial/L1-C1-hidden-bowl-stack-eb/trajectories"
@@ -529,6 +532,20 @@ run_bowl_stack_repair_eb() {
     --fail_on_invalid
 }
 
+require_repaired_eb_formal_gate() {
+  [[ "${BOWL_STACK_EB_STATE_PATH}" == "${REPAIRED_EB_STATE_PATH}" ]] || {
+    echo "FAIL_L1C1_FORMAL_GATE: BOWL_STACK_EB_STATE_PATH must equal REPAIRED_EB_STATE_PATH" >&2
+    return 2
+  }
+  python experiments/robot/libero/tasks/check_l1c1_formal_gate.py \
+    --eb_state "${REPAIRED_EB_STATE_PATH}" \
+    --repair_manifest "${REPAIRED_EB_BUILD_MANIFEST}" \
+    --first_policy_manifest "${REPAIRED_EB_FIRST_POLICY_MANIFEST}" \
+    --first_policy_review "${REPAIRED_EB_FIRST_POLICY_REVIEW}" \
+    --smoke_review "${L1C1_SMOKE_HUMAN_REVIEW}" \
+    --expected_episodes "${NUM_TRIALS}"
+}
+
 prepare_bowl_stack_formal_outputs() {
   local rollout_root="rollouts/libero_spatial"
   rm -rf \
@@ -623,6 +640,7 @@ case "${MODE}" in
     ;;
   bowl_stack_analyze) run_bowl_stack_analysis ;;
   bowl_stack_eval)
+    require_repaired_eb_formal_gate
     run_bowl_stack_native_preflight
     require_bowl_stack_bundle
     run_bowl_stack_validation

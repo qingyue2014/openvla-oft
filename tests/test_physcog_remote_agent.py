@@ -91,6 +91,16 @@ def test_l1c1_registry_exposes_gated_formal_pipeline_and_calibration_tools():
     assert formal.count_env == "NUM_TRIALS"
     assert "RENDER_GPU_DEVICE_ID=1" in formal.command
     assert "SAVE_VIDEO_MODE=all" in formal.command
+    assert any("bowl_stack_eb_repaired_states.hdf5" in item for item in formal.command)
+    assert len(formal.inputs) == 7
+    assert any(
+        target.endswith("l1c1_task2_bowl_stack_eb_repaired_states.hdf5")
+        for _, target in formal.inputs
+    )
+    assert any(
+        target.endswith("repaired_eb_smoke/HUMAN_REVIEW.json")
+        for _, target in formal.inputs
+    )
     assert "bowl_stack_eval" in formal.command
     phase = PHASES[("l1c1", "recalibrate")]
     assert phase.count_env == "NUM_TRIALS"
@@ -115,6 +125,7 @@ def test_l1c1_preview_and_formal_reuse_the_generated_state_bundle():
     assert "generate_bowl_stack_candidate" not in preview_body
     assert "require_states" in preview_body
     assert "generate_bowl_stack_candidate" not in formal_body
+    assert "require_repaired_eb_formal_gate" in formal_body
     assert "run_bowl_stack_validation" in formal_body
     assert "prepare_bowl_stack_formal_outputs" in formal_body
 
