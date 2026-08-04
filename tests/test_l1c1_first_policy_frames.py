@@ -6,6 +6,7 @@ from experiments.robot.libero.tasks.validate_l1c1_first_policy_frames import (
     FORMAL_WAIT_STEPS,
     TRACKED_BODIES,
     _center_crop,
+    _compare_condition_states,
     _evaluate_trace,
 )
 
@@ -117,3 +118,28 @@ def test_shared_restore_forces_forward_and_fresh_observation():
         ("update", True),
         "observe",
     ]
+
+
+def test_er_plate_deterministic_consequence_is_bounded_and_condition_specific():
+    base = {"qpos": np.zeros(14), "qvel": np.zeros(12)}
+    base["qpos"][10] = 1.0
+    er = {key: value.copy() for key, value in base.items()}
+    ec = {key: value.copy() for key, value in base.items()}
+    er["qpos"][7] = 0.00005
+    er["qvel"][6] = 0.000001
+    snapshots = {(0, "eb"): base, (0, "er"): er, (0, "ec"): ec}
+    failures = _compare_condition_states(
+        snapshots,
+        1,
+        {"qpos": set(range(7)), "qvel": set(range(6)), "act": set()},
+        {"qpos": set(range(7, 14)), "qvel": set(range(6, 12)), "act": set()},
+    )
+    assert failures == []
+    ec["qpos"][7] = 0.00005
+    failures = _compare_condition_states(
+        snapshots,
+        1,
+        {"qpos": set(range(7)), "qvel": set(range(6)), "act": set()},
+        {"qpos": set(range(7, 14)), "qvel": set(range(6, 12)), "act": set()},
+    )
+    assert failures[0]["condition"] == "ec"

@@ -76,6 +76,10 @@ MAX_FIRST_POLICY_LINEAR_SPEED_MPS = 0.01
 MAX_FIRST_POLICY_ANGULAR_SPEED_RADPS = 0.05
 MIN_VISIBLE_PIXELS = 50
 STATE_DIFF_ATOL = 1e-9
+MAX_ER_PLATE_CONSEQUENCE_TRANSLATION_M = 0.0001
+MAX_ER_PLATE_CONSEQUENCE_ORIENTATION_DEG = 0.01
+MAX_ER_PLATE_CONSEQUENCE_LINEAR_SPEED_MPS = 1e-5
+MAX_ER_PLATE_CONSEQUENCE_ANGULAR_SPEED_RADPS = 1e-5
 
 
 def _assert_superpod(allow_local_simulator: bool) -> dict[str, object]:
@@ -446,12 +450,12 @@ def _runtime_state(env) -> dict[str, np.ndarray]:
     return result
 
 
-def _allowed_state_indices(env) -> dict[str, set[int]]:
+def _free_joint_indices(env, body_name: str) -> dict[str, set[int]]:
     model = env.sim.model
-    body_id = int(model.body_name2id("akita_black_bowl_2_main"))
+    body_id = int(model.body_name2id(body_name))
     joint_id = int(model.body_jntadr[body_id])
     if joint_id < 0 or int(model.jnt_type[joint_id]) != 0:
-        raise RuntimeError("L1-C1 intervention body does not have a free joint")
+        raise RuntimeError(f"{body_name} does not have a free joint")
     qpos_address = int(model.jnt_qposadr[joint_id])
     qvel_address = int(model.jnt_dofadr[joint_id])
     return {
@@ -465,6 +469,7 @@ def _compare_condition_states(
     snapshots: dict[tuple[int, str], dict[str, np.ndarray]],
     count: int,
     allowed: dict[str, set[int]],
+    er_plate_consequence: dict[str, set[int]],
 ) -> list[dict[str, object]]:
     failures: list[dict[str, object]] = []
     for episode_idx in range(count):
@@ -473,10 +478,13 @@ def _compare_condition_states(
             other = snapshots[(episode_idx, condition)]
             for field in sorted(eb):
                 difference = np.abs(other[field] - eb[field])
+                field_allowed = set(allowed.get(field, set()))
+                if condition == "er":
+                    field_allowed.update(er_plate_consequence.get(field, set()))
                 disallowed = [
                     index
                     for index, value in enumerate(difference)
-                    if index not in allowed.get(field, set()) and value > STATE_DIFF_ATOL
+                    if index not in field_allowed and value > STATE_DIFF_ATOL
                 ]
                 if disallowed:
                     failures.append(
@@ -486,6 +494,49 @@ def _compare_condition_states(
                             "field": field,
                             "indices": disallowed,
                             "max_abs_diff": float(difference[disallowed].max()),
+                        }
+                    )
+            if condition == "er":
+                plate_qpos = sorted(er_plate_consequence["qpos"])
+                plate_qvel = sorted(er_plate_consequence["qvel"])
+                eb_position = eb["qpos"][plate_qpos[:3]]
+                er_position = other["qpos"][plate_qpos[:3]]
+                translation = float(np.linalg.norm(er_position - eb_position))
+                eb_quat = eb["qpos"][plate_qpos[3:7]]
+                er_quat = other["qpos"][plate_qpos[3:7]]
+                eb_quat = eb_quat / np.linalg.norm(eb_quat)
+                er_quat = er_quat / np.linalg.norm(er_quat)
+                dot = float(np.clip(abs(np.dot(eb_quat, er_quat)), 0.0, 1.0))
+                orientation_deg = float(np.degrees(2.0 * np.arccos(dot)))
+                velocity = other["qvel"][plate_qvel] - eb["qvel"][plate_qvel]
+                linear_speed = float(np.linalg.norm(velocity[:3]))
+                angular_speed = float(np.linalg.norm(velocity[3:6]))
+                consequence_metrics = {
+                    "translation_m": translation,
+                    "orientation_deg": orientation_deg,
+                    "linear_speed_mps": linear_speed,
+                    "angular_speed_radps": angular_speed,
+                }
+                consequence_limits = {
+                    "translation_m": MAX_ER_PLATE_CONSEQUENCE_TRANSLATION_M,
+                    "orientation_deg": MAX_ER_PLATE_CONSEQUENCE_ORIENTATION_DEG,
+                    "linear_speed_mps": MAX_ER_PLATE_CONSEQUENCE_LINEAR_SPEED_MPS,
+                    "angular_speed_radps": MAX_ER_PLATE_CONSEQUENCE_ANGULAR_SPEED_RADPS,
+                }
+                exceeded = {
+                    key: value
+                    for key, value in consequence_metrics.items()
+                    if value > consequence_limits[key]
+                }
+                if exceeded:
+                    failures.append(
+                        {
+                            "episode_idx": episode_idx,
+                            "condition": condition,
+                            "field": "plate_deterministic_consequence",
+                            "metrics": consequence_metrics,
+                            "limits": consequence_limits,
+                            "exceeded": exceeded,
                         }
                     )
     return failures
@@ -614,6 +665,7 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
     records: list[dict] = []
     snapshots: dict[tuple[int, str], dict[str, np.ndarray]] = {}
     allowed_indices: dict[str, set[int]] | None = None
+    er_plate_consequence_indices: dict[str, set[int]] | None = None
     receptacle_tilt_limits = {
         "akita_black_bowl_2_main": args.lower_bowl_max_tilt_deg,
     }
@@ -633,7 +685,12 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
             for episode_idx, state in enumerate(states[condition][:episode_count]):
                 observation = restore_formal_observation(env, state)
                 if allowed_indices is None:
-                    allowed_indices = _allowed_state_indices(env)
+                    allowed_indices = _free_joint_indices(
+                        env, "akita_black_bowl_2_main"
+                    )
+                    er_plate_consequence_indices = _free_joint_indices(
+                        env, "plate_1_main"
+                    )
                 snapshots[(episode_idx, condition)] = _runtime_state(env)
                 samples = [_sample(env, condition)]
                 first_policy_observation = None
@@ -669,9 +726,14 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         finally:
             env.close()
 
-    if allowed_indices is None:
+    if allowed_indices is None or er_plate_consequence_indices is None:
         raise RuntimeError("no L1-C1 episodes were evaluated")
-    state_failures = _compare_condition_states(snapshots, episode_count, allowed_indices)
+    state_failures = _compare_condition_states(
+        snapshots,
+        episode_count,
+        allowed_indices,
+        er_plate_consequence_indices,
+    )
     passed = all(record["valid"] for record in records) and not state_failures
     manifest = {
         "schema_version": 1,
@@ -721,6 +783,21 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
             "description": "only akita_black_bowl_2_main free-joint pose/velocity may differ",
             "runtime_indices": {
                 key: sorted(value) for key, value in allowed_indices.items()
+            },
+            "deterministic_consequence": {
+                "condition": "er",
+                "body": "plate_1_main",
+                "reason": "native lower bowl is load-bearing on the plate only in Er",
+                "runtime_indices": {
+                    key: sorted(value)
+                    for key, value in er_plate_consequence_indices.items()
+                },
+                "limits": {
+                    "translation_m": MAX_ER_PLATE_CONSEQUENCE_TRANSLATION_M,
+                    "orientation_deg": MAX_ER_PLATE_CONSEQUENCE_ORIENTATION_DEG,
+                    "linear_speed_mps": MAX_ER_PLATE_CONSEQUENCE_LINEAR_SPEED_MPS,
+                    "angular_speed_radps": MAX_ER_PLATE_CONSEQUENCE_ANGULAR_SPEED_RADPS,
+                },
             },
         },
         "cross_condition_state_failures": state_failures,
