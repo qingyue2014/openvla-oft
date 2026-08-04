@@ -75,6 +75,8 @@ CALIBRATION_STATE_PATH="${CALIBRATION_STATE_PATH:-experiments/robot/libero/tasks
 BOWL_STACK_STATE_PATH="${BOWL_STACK_STATE_PATH:-experiments/robot/libero/tasks/l1c1_task2_bowl_stack_candidate_states.hdf5}"
 BOWL_STACK_EB_STATE_PATH="${BOWL_STACK_EB_STATE_PATH:-experiments/robot/libero/tasks/l1c1_task2_bowl_stack_eb_states.hdf5}"
 BOWL_STACK_EC_STATE_PATH="${BOWL_STACK_EC_STATE_PATH:-experiments/robot/libero/tasks/l1c1_task2_bowl_stack_ec_states.hdf5}"
+FIRST_POLICY_STATE_DIR="${FIRST_POLICY_STATE_DIR:-experiments/robot/libero/tasks/l1c1_first_policy_inputs}"
+FIRST_POLICY_REVIEW_DIR="${FIRST_POLICY_REVIEW_DIR:-review/L1-C1_task/first_policy_gate}"
 if [[ -n "${PHYSCOG_SHARED_REPO:-}" ]]; then
   DEFAULT_BOWL_STACK_SOURCE_INDICES="${PHYSCOG_SHARED_REPO}/experiments/robot/libero/tasks/l1c1_task2_bowl_stack_source_indices.json"
   DEFAULT_BOWL_STACK_EB_TRAJECTORY_DIR="${PHYSCOG_SHARED_REPO}/rollouts/libero_spatial/L1-C1-hidden-bowl-stack-eb/trajectories"
@@ -479,6 +481,23 @@ run_bowl_stack_validation() {
   run_bowl_stack_replay
 }
 
+run_bowl_stack_first_policy_gate() {
+  BOWL_STACK_STATE_PATH="${FIRST_POLICY_STATE_DIR}/l1c1_task2_bowl_stack_candidate_states.hdf5"
+  BOWL_STACK_EB_STATE_PATH="${FIRST_POLICY_STATE_DIR}/l1c1_task2_bowl_stack_eb_states.hdf5"
+  BOWL_STACK_EC_STATE_PATH="${FIRST_POLICY_STATE_DIR}/l1c1_task2_bowl_stack_ec_states.hdf5"
+  require_bowl_stack_bundle
+  run_bowl_stack_native_preflight
+  python experiments/robot/libero/tasks/validate_l1c1_first_policy_frames.py \
+    --state_dir "${FIRST_POLICY_STATE_DIR}" \
+    --review_dir "${FIRST_POLICY_REVIEW_DIR}" \
+    --output_manifest "${LOG_DIR}/l1c1_first_policy_gate.json" \
+    --output_csv "${LOG_DIR}/l1c1_first_policy_gate.csv" \
+    --output_report "${LOG_DIR}/l1c1_first_policy_gate.md" \
+    --num_episodes "${NUM_TRIALS}" \
+    --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
+    --fail_on_invalid
+}
+
 prepare_bowl_stack_formal_outputs() {
   local rollout_root="rollouts/libero_spatial"
   rm -rf \
@@ -551,6 +570,7 @@ case "${MODE}" in
   bowl_stack_check) generate_bowl_stack_candidate ;;
   bowl_stack_preview) run_bowl_stack_preview ;;
   bowl_stack_validate) run_bowl_stack_validation ;;
+  bowl_stack_first_policy_gate) run_bowl_stack_first_policy_gate ;;
   bowl_stack_calibrate) run_bowl_stack_calibration ;;
   bowl_stack_native_preflight) run_bowl_stack_native_preflight ;;
   bowl_stack_safe_reference) run_bowl_stack_safe_reference ;;
@@ -591,7 +611,7 @@ case "${MODE}" in
   record) record_results ;;
   *)
     echo "Unknown mode: ${MODE}" >&2
-    echo "Expected check|debug|preview|sweep|calibrate|calibrate_candidate|bowl_stack_check|bowl_stack_preview|bowl_stack_validate|bowl_stack_calibrate|bowl_stack_native_preflight|bowl_stack_safe_reference|bowl_stack_replay|bowl_stack_recalibrate|bowl_stack_direction_sweep|bowl_stack_risk|bowl_stack_smoke|bowl_stack_analyze|bowl_stack_eval|baseline|control|risk|smoke|eval|all|record" >&2
+    echo "Expected check|debug|preview|sweep|calibrate|calibrate_candidate|bowl_stack_check|bowl_stack_preview|bowl_stack_validate|bowl_stack_first_policy_gate|bowl_stack_calibrate|bowl_stack_native_preflight|bowl_stack_safe_reference|bowl_stack_replay|bowl_stack_recalibrate|bowl_stack_direction_sweep|bowl_stack_risk|bowl_stack_smoke|bowl_stack_analyze|bowl_stack_eval|baseline|control|risk|smoke|eval|all|record" >&2
     exit 2
     ;;
 esac

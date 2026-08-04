@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import os
 import re
@@ -26,9 +27,42 @@ class PhaseSpec:
     command: tuple[str, ...]
     count_env: str | None = None
     artifacts: tuple[str, ...] = ()
+    inputs: tuple[tuple[str, str], ...] = ()
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
+    ("l1c1", "first_policy_gate"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1c1_task2.sh",
+            "bowl_stack_first_policy_gate",
+        ),
+        count_env="NUM_TRIALS",
+        inputs=(
+            (
+                "artifacts/physcog/l1c1/formal/20260727T091817Z-d6ec632a/initial_layouts/l1c1_task2_bowl_stack_candidate_states.hdf5",
+                "experiments/robot/libero/tasks/l1c1_first_policy_inputs/l1c1_task2_bowl_stack_candidate_states.hdf5",
+            ),
+            (
+                "artifacts/physcog/l1c1/formal/20260727T091817Z-d6ec632a/initial_layouts/l1c1_task2_bowl_stack_eb_states.hdf5",
+                "experiments/robot/libero/tasks/l1c1_first_policy_inputs/l1c1_task2_bowl_stack_eb_states.hdf5",
+            ),
+            (
+                "artifacts/physcog/l1c1/formal/20260727T091817Z-d6ec632a/initial_layouts/l1c1_task2_bowl_stack_ec_states.hdf5",
+                "experiments/robot/libero/tasks/l1c1_first_policy_inputs/l1c1_task2_bowl_stack_ec_states.hdf5",
+            ),
+        ),
+        artifacts=(
+            "experiments/logs/l1c1_native_preflight.json",
+            "experiments/logs/l1c1_native_preflight.md",
+            "experiments/logs/l1c1_first_policy_gate.json",
+            "experiments/logs/l1c1_first_policy_gate.csv",
+            "experiments/logs/l1c1_first_policy_gate.md",
+            "review/L1-C1_task/first_policy_gate",
+        ),
+    ),
     ("l1c1", "init"): PhaseSpec(
         command=(
             "env",
@@ -576,6 +610,14 @@ def _transfer_file(cfg: RemoteConfig, source: Path, remote_path: str) -> bool:
     return subprocess.run(argv, check=False).returncode == 0
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _fetch_remote_file(cfg: RemoteConfig, remote_path: str, destination: Path) -> bool:
     destination.parent.mkdir(parents=True, exist_ok=True)
     argv = [
@@ -713,6 +755,10 @@ def command_run(args: argparse.Namespace) -> int:
         print(sync_script)
         print("# uploaded batch script")
         print(batch_script, end="")
+        if spec.inputs:
+            print("# uploaded immutable inputs")
+            for source, destination in spec.inputs:
+                print(f"{source} -> {cfg.remote_repo.rstrip('/')}/{destination}")
         print("# remote submit")
         print(submit_script)
         return 0
@@ -725,6 +771,30 @@ def command_run(args: argparse.Namespace) -> int:
     if sync_result.returncode != 0:
         (run_dir / "submit.log").write_text(sync_output, encoding="utf-8")
         return sync_result.returncode
+    uploaded_inputs: list[dict[str, str]] = []
+    for source_value, destination_value in spec.inputs:
+        source = Path(source_value)
+        if not source.is_file():
+            print(f"[physcog-agent] missing registered input: {source}", file=sys.stderr)
+            return 1
+        remote_destination = f"{cfg.remote_repo.rstrip('/')}/{destination_value}"
+        mkdir_result = _remote_capture(
+            cfg,
+            shell_join(("mkdir", "-p", str(PurePosixPath(remote_destination).parent))),
+        )
+        if mkdir_result.returncode != 0 or not _transfer_file(cfg, source, remote_destination):
+            print(
+                f"[physcog-agent] failed to upload registered input: {source}",
+                file=sys.stderr,
+            )
+            return 1
+        uploaded_inputs.append(
+            {
+                "source": str(source),
+                "destination": destination_value,
+                "sha256": _sha256_file(source),
+            }
+        )
     if not _transfer_file(cfg, run_dir / "job.sh", remote_job_script):
         print("[physcog-agent] failed to upload batch script", file=sys.stderr)
         return 1
@@ -758,6 +828,7 @@ def command_run(args: argparse.Namespace) -> int:
         "remote_config": {**asdict(cfg), "control_socket": cfg.control_socket},
         "registered_command": list(spec.command),
         "count_env": spec.count_env,
+        "uploaded_inputs": uploaded_inputs,
     }
     (run_dir / "run.json").write_text(
         json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8"

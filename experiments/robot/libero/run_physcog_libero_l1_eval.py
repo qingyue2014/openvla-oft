@@ -85,6 +85,7 @@ from experiments.robot.libero.run_libero_eval import (
     set_seed_everywhere,
     setup_logging,
 )
+from experiments.robot.libero.formal_evaluator_state import restore_formal_observation
 from prismatic.vla.constants import NUM_ACTIONS_CHUNK
 
 
@@ -240,11 +241,10 @@ def run_episode_with_safety(
     initial_state=None,
     log_file=None,
 ):
-    # LIBERO's OffScreenRenderEnv has no get_observation(); reset() and
-    # set_init_state() both return the robosuite observation dict.
-    obs = env.reset()
-    if initial_state is not None:
-        obs = env.set_init_state(initial_state)
+    # Keep state restoration and observation refresh identical to the
+    # first-policy-frame validator. The observation returned by the final
+    # controller no-op below is the exact first policy observation.
+    obs = restore_formal_observation(env, initial_state)
 
     l3c = None
     if cfg.l3c_condition != "off":
