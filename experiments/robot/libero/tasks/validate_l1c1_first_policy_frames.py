@@ -365,12 +365,41 @@ def _save_policy_views(
     condition: str,
     episode_idx: int,
 ) -> dict[str, object]:
-    from experiments.robot.libero.run_libero_eval import prepare_observation
-    from experiments.robot.openvla_utils import center_crop_image
+    import tensorflow as tf
 
-    prepared, _ = prepare_observation(observation, MODEL_IMAGE_SIZE)
-    agent = np.asarray(center_crop_image(prepared["full_image"]), dtype=np.uint8)
-    wrist = np.asarray(center_crop_image(prepared["wrist_image"]), dtype=np.uint8)
+    def exact_openvla_image(key: str) -> np.ndarray:
+        # Match get_libero_{image,wrist_image}, resize_image_for_policy, and
+        # center_crop_image without importing the policy/DeepSpeed stack.
+        image = np.asarray(observation[key], dtype=np.uint8)[::-1, ::-1]
+        tensor = tf.image.encode_jpeg(image)
+        tensor = tf.io.decode_image(tensor, expand_animations=False, dtype=tf.uint8)
+        tensor = tf.image.resize(
+            tensor,
+            (MODEL_IMAGE_SIZE, MODEL_IMAGE_SIZE),
+            method="lanczos3",
+            antialias=True,
+        )
+        tensor = tf.cast(tf.clip_by_value(tf.round(tensor), 0, 255), tf.uint8)
+        original_dtype = tensor.dtype
+        tensor = tf.image.convert_image_dtype(tensor, tf.float32)
+        crop_scale = tf.sqrt(tf.constant(CENTER_CROP_AREA, dtype=tf.float32))
+        offset = (1.0 - crop_scale) / 2.0
+        boxes = tf.reshape(
+            tf.stack((offset, offset, offset + crop_scale, offset + crop_scale)),
+            (1, 4),
+        )
+        tensor = tf.image.crop_and_resize(
+            tf.expand_dims(tensor, axis=0),
+            boxes,
+            tf.range(1),
+            (MODEL_IMAGE_SIZE, MODEL_IMAGE_SIZE),
+        )[0]
+        tensor = tf.clip_by_value(tensor, 0, 1)
+        tensor = tf.image.convert_image_dtype(tensor, original_dtype, saturate=True)
+        return np.asarray(tensor.numpy(), dtype=np.uint8)
+
+    agent = exact_openvla_image("agentview_image")
+    wrist = exact_openvla_image("robot0_eye_in_hand_image")
     condition_dir = output_dir / "exact_first_policy_frames" / condition
     condition_dir.mkdir(parents=True, exist_ok=True)
     stem = f"L1-C1_{condition}_ep{episode_idx:03d}_exact_first_policy"
@@ -555,9 +584,9 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
             raise ValueError(f"requested {args.num_episodes} episodes, bundle has {episode_count}")
         episode_count = args.num_episodes
 
-    from libero.libero import benchmark
+    from libero.libero import benchmark, get_libero_path
+    from libero.libero.envs import OffScreenRenderEnv
     from experiments.robot.libero.formal_evaluator_state import restore_formal_observation
-    from experiments.robot.libero.libero_utils import get_libero_dummy_action, get_libero_env
 
     suite = benchmark.get_benchmark_dict()[TASK_SUITE]()
     task = suite.get_task(TASK_ID)
@@ -569,14 +598,17 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
     snapshots: dict[tuple[int, str], dict[str, np.ndarray]] = {}
     allowed_indices: dict[str, set[int]] | None = None
     for condition in ("eb", "er", "ec"):
-        env, task_description = get_libero_env(
-            task,
-            "openvla",
-            resolution=args.render_resolution,
+        task_bddl = os.path.join(
+            get_libero_path("bddl_files"), task.problem_folder, task.bddl_file
+        )
+        env = OffScreenRenderEnv(
+            bddl_file_name=task_bddl,
+            camera_heights=args.render_resolution,
+            camera_widths=args.render_resolution,
+            hard_reset=False,
             render_gpu_device_id=args.render_gpu_device_id,
         )
-        if task_description != TASK_PROMPT:
-            raise ValueError("policy-facing task prompt mismatch")
+        env.seed(0)
         try:
             for episode_idx, state in enumerate(states[condition][:episode_count]):
                 observation = restore_formal_observation(env, state)
@@ -587,7 +619,7 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
                 first_policy_observation = None
                 policy_view = None
                 for wait_step in range(1, FORMAL_WAIT_STEPS + CONFIRM_STEPS + 1):
-                    observation, _, _, _ = env.step(get_libero_dummy_action("openvla"))
+                    observation, _, _, _ = env.step([0, 0, 0, 0, 0, 0, -1])
                     samples.append(_sample(env, condition))
                     if wait_step == FORMAL_WAIT_STEPS:
                         first_policy_observation = observation
