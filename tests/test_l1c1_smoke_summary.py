@@ -71,6 +71,36 @@ def test_smoke_summary_requires_complete_video_and_trajectory_evidence(tmp_path)
     assert manifest["failures"] == []
 
 
+def test_smoke_summary_records_followup_model_and_distinct_notes(tmp_path):
+    states, rollouts = _bundle(tmp_path)
+    followup_notes = {condition: f"{note}-pi05" for condition, note in NOTES.items()}
+    for condition in NOTES:
+        original = rollouts[condition]
+        renamed = original.with_name(followup_notes[condition])
+        original.rename(renamed)
+        rollouts[condition] = renamed
+        for trajectory in (renamed / "trajectories").glob("*.npz"):
+            with np.load(trajectory, allow_pickle=False) as payload:
+                metadata = json.loads(str(payload["metadata"].item()))
+            metadata["run_id_note"] = followup_notes[condition]
+            np.savez_compressed(trajectory, metadata=np.array(json.dumps(metadata)))
+    manifest = summarize_smoke(
+        eb_rollout_dir=rollouts["eb"],
+        er_rollout_dir=rollouts["er"],
+        ec_rollout_dir=rollouts["ec"],
+        eb_state=states["eb"],
+        er_state=states["er"],
+        ec_state=states["ec"],
+        episodes=2,
+        model="pi0.5",
+        eb_note=followup_notes["eb"],
+        er_note=followup_notes["er"],
+        ec_note=followup_notes["ec"],
+    )
+    assert manifest["verdict"] == PASS_VERDICT
+    assert manifest["model"] == "pi0.5"
+
+
 def test_smoke_summary_fails_closed_on_model_collapse(tmp_path):
     states, rollouts = _bundle(tmp_path, collapse_condition="ec")
     manifest = _summarize(states, rollouts)

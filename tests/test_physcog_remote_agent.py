@@ -63,7 +63,7 @@ def test_l3a1_registry_exposes_only_gated_pipeline_phases():
 
 def test_l1c1_registry_exposes_gated_formal_pipeline_and_calibration_tools():
     assert set(phase for scenario, phase in PHASES if scenario == "l1c1") == {
-        "init", "preview", "validate_layout", "first_policy_gate", "repair_eb", "safe_reference", "smoke", "eligibility", "formal",
+        "init", "preview", "validate_layout", "first_policy_gate", "repair_eb", "safe_reference", "smoke", "eligibility", "formal", "pi05_smoke",
         "recalibrate", "recalibrate15", "direction_sweep",
         "angle0", "angle45", "angle90", "angle135",
         "angle225", "angle270", "angle315",
@@ -110,6 +110,15 @@ def test_l1c1_registry_exposes_gated_formal_pipeline_and_calibration_tools():
     assert any("bowl_stack_eb_repaired_states.hdf5" in item for item in formal.command)
     assert len(formal.inputs) == 63
     assert all(not target.startswith("experiments/logs/") for _, target in formal.inputs)
+
+    pi05_smoke = PHASES[("l1c1", "pi05_smoke")]
+    assert pi05_smoke.count_env == "SMOKE_TRIALS"
+    assert "experiments/robot/libero/tasks/run_l1c1_pi05.sh" in pi05_smoke.command
+    assert "SAVE_VIDEO_MODE=capped" in pi05_smoke.command
+    assert any(item.endswith("check_l1c1_cascade_gate.py") for item in pi05_smoke.local_gate)
+    assert any(item.endswith("HUMAN_REVIEW.json") for item in pi05_smoke.local_gate)
+    assert len(pi05_smoke.inputs) == 5
+    assert len(pi05_smoke.artifacts) == 5
     assert any(
         target.endswith("l1c1_task2_bowl_stack_eb_repaired_states.hdf5")
         for _, target in formal.inputs

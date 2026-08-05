@@ -65,6 +65,7 @@ from experiments.robot.openvla_utils import (
     get_proprio_projector,
     resize_image_for_policy,
 )
+from experiments.robot.pi05_utils import normalize_model_family, resize_with_pad
 from experiments.robot.robot_utils import (
     DATE_TIME,
     get_action,
@@ -114,6 +115,11 @@ class GenerateConfig:
     #################################################################################################################
     model_family: str = "openvla"                    # Model family
     pretrained_checkpoint: Union[str, Path] = ""     # Pretrained checkpoint path
+    pi05_host: str = "127.0.0.1"                    # OpenPI policy server host
+    pi05_port: int = 8000                            # OpenPI policy server port
+    pi05_api_key: str = ""                           # Optional policy-server API key
+    pi05_replan_steps: int = 5                       # Official LIBERO client replans every 5 actions
+    pi05_connect_timeout_s: float = 900.0            # Finite wait for server startup
 
     use_l1_regression: bool = True                   # If True, uses continuous action head with L1 regression objective
     use_diffusion: bool = False                      # If True, uses continuous action head with diffusion modeling objective (DDIM)
@@ -162,7 +168,14 @@ class GenerateConfig:
 
 def validate_config(cfg: GenerateConfig) -> None:
     """Validate configuration parameters."""
-    assert cfg.pretrained_checkpoint is not None, "pretrained_checkpoint must not be None!"
+    cfg.model_family = normalize_model_family(cfg.model_family)
+    assert cfg.model_family in {"openvla", "pi05"}, f"Unsupported model family: {cfg.model_family}"
+    if cfg.model_family == "openvla":
+        assert cfg.pretrained_checkpoint is not None, "pretrained_checkpoint must not be None!"
+    else:
+        assert cfg.pi05_replan_steps > 0, "pi05_replan_steps must be positive"
+        assert cfg.pi05_connect_timeout_s > 0, "pi05_connect_timeout_s must be positive"
+        cfg.num_open_loop_steps = cfg.pi05_replan_steps
 
     if "image_aug" in str(cfg.pretrained_checkpoint):
         assert cfg.center_crop, "Expecting `center_crop==True` because model was trained with image augmentations!"
@@ -175,13 +188,14 @@ def validate_config(cfg: GenerateConfig) -> None:
 
 def initialize_model(cfg: GenerateConfig):
     """Initialize model and associated components."""
-    configure_checkpoint_compat(cfg)
+    if cfg.model_family == "openvla":
+        configure_checkpoint_compat(cfg)
     # Load model
     model = get_model(cfg)
 
     # Load proprio projector if needed
     proprio_projector = None
-    if cfg.use_proprio:
+    if cfg.model_family == "openvla" and cfg.use_proprio:
         proprio_projector = get_proprio_projector(
             cfg,
             model.llm_dim,
@@ -190,12 +204,12 @@ def initialize_model(cfg: GenerateConfig):
 
     # Load action head if needed
     action_head = None
-    if cfg.use_l1_regression or cfg.use_diffusion:
+    if cfg.model_family == "openvla" and (cfg.use_l1_regression or cfg.use_diffusion):
         action_head = get_action_head(cfg, model.llm_dim)
 
     # Load noisy action projector if using diffusion
     noisy_action_projector = None
-    if cfg.use_diffusion:
+    if cfg.model_family == "openvla" and cfg.use_diffusion:
         noisy_action_projector = get_noisy_action_projector(cfg, model.llm_dim)
 
     # Get OpenVLA processor if needed
@@ -285,15 +299,19 @@ def load_initial_states(cfg: GenerateConfig, task_suite, task_id: int, log_file=
         return initial_states, None
 
 
-def prepare_observation(obs, resize_size):
+def prepare_observation(obs, resize_size, model_family="openvla"):
     """Prepare observation for policy input."""
     # Get preprocessed images
     img = get_libero_image(obs)
     wrist_img = get_libero_wrist_image(obs)
 
     # Resize images to size expected by model
-    img_resized = resize_image_for_policy(img, resize_size)
-    wrist_img_resized = resize_image_for_policy(wrist_img, resize_size)
+    if model_family == "pi05":
+        img_resized = resize_with_pad(img, resize_size)
+        wrist_img_resized = resize_with_pad(wrist_img, resize_size)
+    else:
+        img_resized = resize_image_for_policy(img, resize_size)
+        wrist_img_resized = resize_image_for_policy(wrist_img, resize_size)
 
     # Prepare observations dict
     observation = {
@@ -309,6 +327,11 @@ def prepare_observation(obs, resize_size):
 
 def process_action(action, model_family):
     """Process action before sending to environment."""
+    # OpenPI's official LIBERO output transform already emits the exact 7-D
+    # environment action convention used by OffScreenRenderEnv.
+    if model_family == "pi05":
+        return np.asarray(action, dtype=np.float32)
+
     # Normalize gripper action [0,1] -> [-1,+1] because the environment expects the latter
     action = normalize_gripper_action(action, binarize=True)
 
@@ -344,7 +367,10 @@ def run_episode(
         obs = env.get_observation()
 
     # Initialize action queue
-    if cfg.num_open_loop_steps != NUM_ACTIONS_CHUNK:
+    if cfg.model_family == "pi05":
+        model.reset()
+
+    if cfg.model_family == "openvla" and cfg.num_open_loop_steps != NUM_ACTIONS_CHUNK:
         print(f"WARNING: cfg.num_open_loop_steps ({cfg.num_open_loop_steps}) does not match the NUM_ACTIONS_CHUNK "
               f"({NUM_ACTIONS_CHUNK}) constant defined in prismatic.vla.constants! For best performance (in terms of "
                "both speed and success rate), we recommend executing the full action chunk.")
@@ -366,7 +392,7 @@ def run_episode(
                 continue
 
             # Prepare observation
-            observation, img = prepare_observation(obs, resize_size)
+            observation, img = prepare_observation(obs, resize_size, cfg.model_family)
             replay_images.append(img)
 
             # If action queue is empty, requery model
@@ -479,7 +505,12 @@ def run_task(
 
         # Save replay video
         save_rollout_video(
-            replay_images, total_episodes, success=success, task_description=task_description, log_file=log_file
+            replay_images,
+            total_episodes,
+            success=success,
+            task_description=task_description,
+            log_file=log_file,
+            model_family=cfg.model_family,
         )
 
         # Log results

@@ -25,6 +25,26 @@ MODE="${1:-}"
 RISK_STATE_PATH="${RISK_STATE_PATH:-experiments/robot/libero/tasks/l1c1_task2_risk_states.hdf5}"
 CONTROL_STATE_PATH="${CONTROL_STATE_PATH:-experiments/robot/libero/tasks/l1c1_task2_control_states.hdf5}"
 CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-spatial}"
+MODEL_FAMILY="${MODEL_FAMILY:-openvla}"
+MODEL_NAME="${MODEL_NAME:-OpenVLA-OFT}"
+PI05_HOST="${PI05_HOST:-127.0.0.1}"
+PI05_PORT="${PI05_PORT:-8000}"
+PI05_API_KEY="${PI05_API_KEY:-}"
+PI05_REPLAN_STEPS="${PI05_REPLAN_STEPS:-5}"
+PI05_CONNECT_TIMEOUT_S="${PI05_CONNECT_TIMEOUT_S:-900}"
+POLICY_ARGS=(
+  --model_family "${MODEL_FAMILY}"
+  --pretrained_checkpoint "${CHECKPOINT}"
+)
+if [[ "${MODEL_FAMILY}" == "pi05" ]]; then
+  POLICY_ARGS+=(
+    --pi05_host "${PI05_HOST}"
+    --pi05_port "${PI05_PORT}"
+    --pi05_api_key "${PI05_API_KEY}"
+    --pi05_replan_steps "${PI05_REPLAN_STEPS}"
+    --pi05_connect_timeout_s "${PI05_CONNECT_TIMEOUT_S}"
+  )
+fi
 LIBERO_ROOT="${LIBERO_ROOT:-}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
@@ -392,7 +412,7 @@ run_bowl_stack_risk() {
   run_bowl_stack_native_preflight
   require_states "${BOWL_STACK_STATE_PATH}"
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
-    --pretrained_checkpoint "${CHECKPOINT}" \
+    "${POLICY_ARGS[@]}" \
     --task_suite_name libero_spatial \
     --task_ids 2 \
     --initial_states_path "${BOWL_STACK_STATE_PATH}" \
@@ -419,7 +439,7 @@ run_bowl_stack_baseline() {
   run_bowl_stack_native_preflight
   require_states "${BOWL_STACK_EB_STATE_PATH}"
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
-    --pretrained_checkpoint "${CHECKPOINT}" \
+    "${POLICY_ARGS[@]}" \
     --task_suite_name libero_spatial \
     --task_ids 2 \
     --initial_states_path "${BOWL_STACK_EB_STATE_PATH}" \
@@ -440,7 +460,7 @@ run_bowl_stack_ec() {
   run_bowl_stack_native_preflight
   require_states "${BOWL_STACK_EC_STATE_PATH}"
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
-    --pretrained_checkpoint "${CHECKPOINT}" \
+    "${POLICY_ARGS[@]}" \
     --task_suite_name libero_spatial \
     --task_ids 2 \
     --initial_states_path "${BOWL_STACK_EC_STATE_PATH}" \
@@ -616,7 +636,7 @@ prepare_bowl_stack_smoke_outputs() {
 
 run_native_baseline() {
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
-    --pretrained_checkpoint "${CHECKPOINT}" \
+    "${POLICY_ARGS[@]}" \
     --task_suite_name libero_spatial \
     --task_ids 2 \
     --initial_states_path DEFAULT \
@@ -632,7 +652,7 @@ run_condition() {
   local note="$3"
   require_states "${state_path}"
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
-    --pretrained_checkpoint "${CHECKPOINT}" \
+    "${POLICY_ARGS[@]}" \
     --task_suite_name libero_spatial \
     --task_ids 2 \
     --initial_states_path "${state_path}" \
@@ -708,6 +728,10 @@ case "${MODE}" in
       --er_state "${BOWL_STACK_STATE_PATH}" \
       --ec_state "${BOWL_STACK_EC_STATE_PATH}" \
       --episodes "${SMOKE_TRIALS}" \
+      --model "${MODEL_NAME}" \
+      --eb_note "${BOWL_STACK_EB_NOTE}" \
+      --er_note "${BOWL_STACK_ER_NOTE}" \
+      --ec_note "${BOWL_STACK_EC_NOTE}" \
       --output_manifest "${LOG_DIR}/l1c1_repaired_bundle_smoke.json" \
       --output_report "${LOG_DIR}/l1c1_repaired_bundle_smoke.md"
     python experiments/robot/libero/tasks/index_review_videos.py \

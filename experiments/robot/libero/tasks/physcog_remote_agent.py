@@ -28,6 +28,7 @@ class PhaseSpec:
     count_env: str | None = None
     artifacts: tuple[str, ...] = ()
     inputs: tuple[tuple[str, str], ...] = ()
+    local_gate: tuple[str, ...] = ()
 
 
 L1C1_ELIGIBILITY_ARCHIVE = (
@@ -40,6 +41,26 @@ L1C1_ELIGIBILITY_TRAJECTORY_REL = (
     "rollouts/libero_spatial/"
     "L1-C1-hidden-bowl-stack-eb-eligibility-repaired/trajectories"
 )
+L1C1_OPENVLA_FORMAL_ARCHIVE = (
+    "artifacts/physcog/l1c1/formal/20260805T085658Z-0f33110f-openvla"
+)
+L1C1_OPENVLA_REVIEW_ROOT = "review/L1-C1_task/openvla_formal"
+L1C1_OPENVLA_FORMAL_COMMIT = "0f33110f7f776c581992592a06d5ac2bc1b7ec98"
+
+
+def _l1c1_openvla_cascade_gate() -> tuple[str, ...]:
+    return (
+        sys.executable,
+        "experiments/robot/libero/tasks/check_l1c1_cascade_gate.py",
+        "--archive",
+        L1C1_OPENVLA_FORMAL_ARCHIVE,
+        "--review_root",
+        L1C1_OPENVLA_REVIEW_ROOT,
+        "--review_manifest",
+        f"{L1C1_OPENVLA_REVIEW_ROOT}/HUMAN_REVIEW.json",
+        "--expected_commit",
+        L1C1_OPENVLA_FORMAL_COMMIT,
+    )
 
 
 def _l1c1_formal_eligibility_inputs() -> tuple[tuple[str, str], ...]:
@@ -351,6 +372,51 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-ec/trajectories",
         ),
     ),
+    ("l1c1", "pi05_smoke"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=capped",
+            "BOWL_STACK_EB_STATE_PATH=experiments/robot/libero/tasks/l1c1_task2_bowl_stack_eb_repaired_states.hdf5",
+            "REPAIRED_EB_STATE_PATH=experiments/robot/libero/tasks/l1c1_task2_bowl_stack_eb_repaired_states.hdf5",
+            "REPAIRED_EB_BUILD_MANIFEST=experiments/robot/libero/tasks/l1c1_pi05_inputs/l1c1_eb_repair_build.json",
+            "REPAIRED_EB_FIRST_POLICY_MANIFEST=experiments/robot/libero/tasks/l1c1_pi05_inputs/l1c1_repaired_eb_first_policy_gate.json",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1c1_pi05.sh",
+            "smoke",
+        ),
+        count_env="SMOKE_TRIALS",
+        inputs=(
+            (
+                "artifacts/physcog/l1c1/repair_eb/20260804T104908Z-5203bf7a/initial_layouts/l1c1_task2_bowl_stack_eb_repaired_states.hdf5",
+                "experiments/robot/libero/tasks/l1c1_task2_bowl_stack_eb_repaired_states.hdf5",
+            ),
+            (
+                "artifacts/physcog/l1c1/formal/20260727T091817Z-d6ec632a/initial_layouts/l1c1_task2_bowl_stack_candidate_states.hdf5",
+                "experiments/robot/libero/tasks/l1c1_task2_bowl_stack_candidate_states.hdf5",
+            ),
+            (
+                "artifacts/physcog/l1c1/formal/20260727T091817Z-d6ec632a/initial_layouts/l1c1_task2_bowl_stack_ec_states.hdf5",
+                "experiments/robot/libero/tasks/l1c1_task2_bowl_stack_ec_states.hdf5",
+            ),
+            (
+                "artifacts/physcog/l1c1/repair_eb/20260804T104908Z-5203bf7a/reports/l1c1_eb_repair_build.json",
+                "experiments/robot/libero/tasks/l1c1_pi05_inputs/l1c1_eb_repair_build.json",
+            ),
+            (
+                "artifacts/physcog/l1c1/repair_eb/20260804T104908Z-5203bf7a/reports/l1c1_repaired_eb_first_policy_gate.json",
+                "experiments/robot/libero/tasks/l1c1_pi05_inputs/l1c1_repaired_eb_first_policy_gate.json",
+            ),
+        ),
+        artifacts=(
+            "experiments/logs/l1c1_pi05_smoke",
+            "experiments/logs/l1c1_pi05_server.log",
+            "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-eb-pi05-smoke",
+            "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-risk-pi05-smoke",
+            "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-ec-pi05-smoke",
+        ),
+        local_gate=_l1c1_openvla_cascade_gate(),
+    ),
     ("l1c1", "recalibrate"): PhaseSpec(
         command=(
             "env",
@@ -548,6 +614,14 @@ REVIEW_VIDEO_PREFIXES: Mapping[tuple[str, str], tuple[str, ...]] = {
         "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-risk/",
         "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-ec/",
     ),
+    ("l1c1", "pi05_smoke"): (
+        "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-eb-pi05-smoke/",
+        "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-risk-pi05-smoke/",
+        "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-ec-pi05-smoke/",
+    ),
+}
+REVIEW_INDEX_PATHS: Mapping[tuple[str, str], str] = {
+    ("l1c1", "pi05_smoke"): "experiments/logs/l1c1_pi05_smoke/review_videos.md",
 }
 
 
@@ -931,6 +1005,19 @@ def command_run(args: argparse.Namespace) -> int:
         choices = ", ".join(f"{s}:{p}" for s, p in sorted(PHASES))
         raise SystemExit(f"Unregistered phase {key[0]}:{key[1]}; choose one of: {choices}")
     spec = PHASES[key]
+    local_gate_output = ""
+    if spec.local_gate and not args.dry_run:
+        gate_result = subprocess.run(
+            list(spec.local_gate), capture_output=True, text=True, check=False
+        )
+        local_gate_output = gate_result.stdout + gate_result.stderr
+        print(local_gate_output, end="")
+        if gate_result.returncode != 0:
+            print(
+                "[physcog-agent] local fail-closed gate rejected submission",
+                file=sys.stderr,
+            )
+            return gate_result.returncode
     base_cfg = _config_from_args(args)
     cfg = base_cfg
     local_commit = _local_commit()
@@ -967,6 +1054,9 @@ def command_run(args: argparse.Namespace) -> int:
         )
     )
     if args.dry_run:
+        if spec.local_gate:
+            print("# required local fail-closed gate")
+            print(shell_join(spec.local_gate))
         print("# remote sync")
         print(sync_script)
         print("# uploaded batch script")
@@ -1045,6 +1135,11 @@ def command_run(args: argparse.Namespace) -> int:
         "registered_command": list(spec.command),
         "count_env": spec.count_env,
         "uploaded_inputs": uploaded_inputs,
+        "local_gate": {
+            "command": list(spec.local_gate),
+            "output": local_gate_output,
+            "passed": bool(spec.local_gate),
+        },
     }
     (run_dir / "run.json").write_text(
         json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -1142,8 +1237,8 @@ def command_fetch_videos(args: argparse.Namespace) -> int:
     phase = str(ledger["phase"])
     if (scenario, phase) not in REVIEW_VIDEO_PREFIXES:
         raise SystemExit(f"Review-video fetching is not registered for {scenario}:{phase}")
-    review_index = (
-        run_dir / "artifacts" / "experiments" / "logs" / "review_videos.md"
+    review_index = run_dir / "artifacts" / REVIEW_INDEX_PATHS.get(
+        (scenario, phase), "experiments/logs/review_videos.md"
     )
     if not review_index.is_file():
         raise SystemExit(f"Missing downloaded review index: {review_index}")

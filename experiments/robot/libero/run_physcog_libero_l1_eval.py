@@ -56,6 +56,7 @@ from libero.libero import benchmark
 sys.path.append("../..")
 from experiments.robot.libero.libero_utils import get_libero_wrist_image
 from experiments.robot.openvla_utils import configure_checkpoint_compat
+from experiments.robot.pi05_utils import normalize_model_family
 from experiments.robot.libero.physcog_oracles import SafetyStatus, make_safety_oracle
 from experiments.robot.libero.physcog_trajectory import (
     TrajectoryRecorder,
@@ -192,7 +193,14 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
 
 
 def validate_physcog_config(cfg: PhysCogGenerateConfig) -> None:
-    assert cfg.pretrained_checkpoint is not None, "pretrained_checkpoint must not be None!"
+    cfg.model_family = normalize_model_family(cfg.model_family)
+    assert cfg.model_family in {"openvla", "pi05"}, f"Unsupported model family: {cfg.model_family}"
+    if cfg.model_family == "openvla":
+        assert cfg.pretrained_checkpoint is not None, "pretrained_checkpoint must not be None!"
+    else:
+        assert cfg.pi05_replan_steps > 0, "pi05_replan_steps must be positive"
+        assert cfg.pi05_connect_timeout_s > 0, "pi05_connect_timeout_s must be positive"
+        cfg.num_open_loop_steps = cfg.pi05_replan_steps
     if "image_aug" in str(cfg.pretrained_checkpoint):
         assert cfg.center_crop, "Expecting center_crop=True because model was trained with image augmentations!"
     assert not (cfg.load_in_8bit and cfg.load_in_4bit), "Cannot use both 8-bit and 4-bit quantization!"
@@ -205,19 +213,20 @@ def validate_physcog_config(cfg: PhysCogGenerateConfig) -> None:
 
 
 def initialize_model(cfg: PhysCogGenerateConfig):
-    configure_checkpoint_compat(cfg)
+    if cfg.model_family == "openvla":
+        configure_checkpoint_compat(cfg)
     model = get_model(cfg)
 
     proprio_projector = None
-    if cfg.use_proprio:
+    if cfg.model_family == "openvla" and cfg.use_proprio:
         proprio_projector = get_proprio_projector(cfg, model.llm_dim, proprio_dim=8)
 
     action_head = None
-    if cfg.use_l1_regression or cfg.use_diffusion:
+    if cfg.model_family == "openvla" and (cfg.use_l1_regression or cfg.use_diffusion):
         action_head = get_action_head(cfg, model.llm_dim)
 
     noisy_action_projector = None
-    if cfg.use_diffusion:
+    if cfg.model_family == "openvla" and cfg.use_diffusion:
         noisy_action_projector = get_noisy_action_projector(cfg, model.llm_dim)
 
     processor = None
@@ -245,6 +254,8 @@ def run_episode_with_safety(
     # first-policy-frame validator. The observation returned by the final
     # controller no-op below is the exact first policy observation.
     obs = restore_formal_observation(env, initial_state)
+    if cfg.model_family == "pi05":
+        model.reset()
 
     l3c = None
     if cfg.l3c_condition != "off":
@@ -357,7 +368,7 @@ def run_episode_with_safety(
     safety = SafetyStatus()
     oracle_ready = False
 
-    if cfg.num_open_loop_steps != NUM_ACTIONS_CHUNK:
+    if cfg.model_family == "openvla" and cfg.num_open_loop_steps != NUM_ACTIONS_CHUNK:
         log_message(
             f"WARNING: cfg.num_open_loop_steps ({cfg.num_open_loop_steps}) does not match "
             f"NUM_ACTIONS_CHUNK ({NUM_ACTIONS_CHUNK}).",
@@ -415,7 +426,7 @@ def run_episode_with_safety(
                     env._update_observables(force=True)
                     obs = env._get_observations()
 
-            observation, img = prepare_observation(obs, resize_size)
+            observation, img = prepare_observation(obs, resize_size, cfg.model_family)
             replay_images.append(img)
             if cfg.save_wrist_video:
                 wrist_images.append(get_libero_wrist_image(obs))
@@ -441,7 +452,7 @@ def run_episode_with_safety(
                 # inference call can still be in-flight when env.step() tries
                 # to read_pixels from the same device, corrupting the EGL
                 # framebuffer and causing SIGABRT.
-                if torch.cuda.is_available():
+                if cfg.model_family == "openvla" and torch.cuda.is_available():
                     torch.cuda.synchronize()
 
             raw_action = action_queue.popleft()
@@ -856,6 +867,7 @@ def run_task_with_safety(
                 task_description=f"safety={not violated} {policy_task_description}",
                 log_file=log_file,
                 rollout_dir=rollout_dir,
+                model_family=cfg.model_family,
             )
             if cfg.save_wrist_video and diagnostics.get("wrist_images"):
                 save_rollout_video(
@@ -865,6 +877,7 @@ def run_task_with_safety(
                     task_description=f"WRIST safety={not violated} {policy_task_description}",
                     log_file=log_file,
                     rollout_dir=rollout_dir,
+                    model_family=cfg.model_family,
                 )
             if violated:
                 task_violation_videos += 1
@@ -1177,13 +1190,13 @@ def _run_bddl_task_with_safety(
             save_rollout_video(
                 replay_images, totals["episodes"], success=safe_success,
                 task_description=f"safety={not violated} {task_description}",
-                log_file=log_file, rollout_dir=rollout_dir,
+                log_file=log_file, rollout_dir=rollout_dir, model_family=cfg.model_family,
             )
             if cfg.save_wrist_video and diagnostics.get("wrist_images"):
                 save_rollout_video(
                     diagnostics["wrist_images"], totals["episodes"], success=safe_success,
                     task_description=f"WRIST safety={not violated} {task_description}",
-                    log_file=log_file, rollout_dir=rollout_dir,
+                    log_file=log_file, rollout_dir=rollout_dir, model_family=cfg.model_family,
                 )
             if violated:
                 task_violation_videos += 1

@@ -121,11 +121,15 @@ def summarize_smoke(
     er_state: Path,
     ec_state: Path,
     episodes: int,
+    model: str = "OpenVLA-OFT",
+    eb_note: str = "L1-C1-hidden-bowl-stack-eb-smoke-repaired",
+    er_note: str = "L1-C1-hidden-bowl-stack-risk-smoke-frozen",
+    ec_note: str = "L1-C1-hidden-bowl-stack-ec-smoke-frozen",
 ) -> dict[str, Any]:
     conditions = {
-        "eb": (eb_rollout_dir, "L1-C1-hidden-bowl-stack-eb-smoke-repaired"),
-        "er": (er_rollout_dir, "L1-C1-hidden-bowl-stack-risk-smoke-frozen"),
-        "ec": (ec_rollout_dir, "L1-C1-hidden-bowl-stack-ec-smoke-frozen"),
+        "eb": (eb_rollout_dir, eb_note),
+        "er": (er_rollout_dir, er_note),
+        "ec": (ec_rollout_dir, ec_note),
     }
     summaries: dict[str, Any] = {}
     failures: list[str] = []
@@ -141,7 +145,7 @@ def summarize_smoke(
     return {
         "schema_version": 1,
         "scenario": SCENARIO,
-        "model": "OpenVLA-OFT",
+        "model": model,
         "task_suite_name": "libero_spatial",
         "task_id": 2,
         "task_prompt": TASK_PROMPT,
@@ -190,6 +194,16 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--er_state", type=Path, required=True)
     parser.add_argument("--ec_state", type=Path, required=True)
     parser.add_argument("--episodes", type=int, required=True)
+    parser.add_argument("--model", default="OpenVLA-OFT")
+    parser.add_argument(
+        "--eb_note", default="L1-C1-hidden-bowl-stack-eb-smoke-repaired"
+    )
+    parser.add_argument(
+        "--er_note", default="L1-C1-hidden-bowl-stack-risk-smoke-frozen"
+    )
+    parser.add_argument(
+        "--ec_note", default="L1-C1-hidden-bowl-stack-ec-smoke-frozen"
+    )
     parser.add_argument("--output_manifest", type=Path, required=True)
     parser.add_argument("--output_report", type=Path, required=True)
     return parser.parse_args()
@@ -205,6 +219,10 @@ def main() -> int:
         er_state=args.er_state,
         ec_state=args.ec_state,
         episodes=args.episodes,
+        model=args.model,
+        eb_note=args.eb_note,
+        er_note=args.er_note,
+        ec_note=args.ec_note,
     )
     args.output_manifest.parent.mkdir(parents=True, exist_ok=True)
     args.output_manifest.write_text(
