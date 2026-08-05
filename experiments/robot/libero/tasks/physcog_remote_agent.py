@@ -174,6 +174,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "SAVE_VIDEO_MODE=all",
             "BOWL_STACK_EB_STATE_PATH=experiments/robot/libero/tasks/l1c1_task2_bowl_stack_eb_repaired_states.hdf5",
             "REPAIRED_EB_STATE_PATH=experiments/robot/libero/tasks/l1c1_task2_bowl_stack_eb_repaired_states.hdf5",
+            "REPAIRED_EB_BUILD_MANIFEST=experiments/robot/libero/tasks/l1c1_smoke_inputs/l1c1_eb_repair_build.json",
+            "REPAIRED_EB_FIRST_POLICY_MANIFEST=experiments/robot/libero/tasks/l1c1_smoke_inputs/l1c1_repaired_eb_first_policy_gate.json",
             "BOWL_STACK_EB_NOTE=L1-C1-hidden-bowl-stack-eb-smoke-repaired",
             "BOWL_STACK_ER_NOTE=L1-C1-hidden-bowl-stack-risk-smoke-frozen",
             "BOWL_STACK_EC_NOTE=L1-C1-hidden-bowl-stack-ec-smoke-frozen",
@@ -197,11 +199,11 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             ),
             (
                 "artifacts/physcog/l1c1/repair_eb/20260804T104908Z-5203bf7a/reports/l1c1_eb_repair_build.json",
-                "experiments/logs/l1c1_eb_repair_build.json",
+                "experiments/robot/libero/tasks/l1c1_smoke_inputs/l1c1_eb_repair_build.json",
             ),
             (
                 "artifacts/physcog/l1c1/repair_eb/20260804T104908Z-5203bf7a/reports/l1c1_repaired_eb_first_policy_gate.json",
-                "experiments/logs/l1c1_repaired_eb_first_policy_gate.json",
+                "experiments/robot/libero/tasks/l1c1_smoke_inputs/l1c1_repaired_eb_first_policy_gate.json",
             ),
         ),
         artifacts=(
@@ -218,6 +220,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "SAVE_VIDEO_MODE=all",
             "BOWL_STACK_EB_STATE_PATH=experiments/robot/libero/tasks/l1c1_task2_bowl_stack_eb_repaired_states.hdf5",
             "REPAIRED_EB_STATE_PATH=experiments/robot/libero/tasks/l1c1_task2_bowl_stack_eb_repaired_states.hdf5",
+            "REPAIRED_EB_BUILD_MANIFEST=experiments/robot/libero/tasks/l1c1_formal_inputs/l1c1_eb_repair_build.json",
+            "REPAIRED_EB_FIRST_POLICY_MANIFEST=experiments/robot/libero/tasks/l1c1_formal_inputs/l1c1_repaired_eb_first_policy_gate.json",
             "bash",
             "experiments/robot/libero/tasks/run_l1c1_task2.sh",
             "bowl_stack_eval",
@@ -238,11 +242,11 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             ),
             (
                 "artifacts/physcog/l1c1/repair_eb/20260804T104908Z-5203bf7a/reports/l1c1_eb_repair_build.json",
-                "experiments/logs/l1c1_eb_repair_build.json",
+                "experiments/robot/libero/tasks/l1c1_formal_inputs/l1c1_eb_repair_build.json",
             ),
             (
                 "artifacts/physcog/l1c1/repair_eb/20260804T104908Z-5203bf7a/reports/l1c1_repaired_eb_first_policy_gate.json",
-                "experiments/logs/l1c1_repaired_eb_first_policy_gate.json",
+                "experiments/robot/libero/tasks/l1c1_formal_inputs/l1c1_repaired_eb_first_policy_gate.json",
             ),
             (
                 "review/L1-C1_task/repaired_eb_gate/HUMAN_REVIEW.json",

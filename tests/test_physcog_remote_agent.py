@@ -92,6 +92,7 @@ def test_l1c1_registry_exposes_gated_formal_pipeline_and_calibration_tools():
     assert "SAVE_VIDEO_MODE=all" in smoke.command
     assert "bowl_stack_smoke" in smoke.command
     assert len(smoke.inputs) == 5
+    assert all(not target.startswith("experiments/logs/") for _, target in smoke.inputs)
     assert any("smoke-repaired" in artifact for artifact in smoke.artifacts)
     formal = PHASES[("l1c1", "formal")]
     assert formal.count_env == "NUM_TRIALS"
@@ -99,6 +100,7 @@ def test_l1c1_registry_exposes_gated_formal_pipeline_and_calibration_tools():
     assert "SAVE_VIDEO_MODE=all" in formal.command
     assert any("bowl_stack_eb_repaired_states.hdf5" in item for item in formal.command)
     assert len(formal.inputs) == 7
+    assert all(not target.startswith("experiments/logs/") for _, target in formal.inputs)
     assert any(
         target.endswith("l1c1_task2_bowl_stack_eb_repaired_states.hdf5")
         for _, target in formal.inputs
