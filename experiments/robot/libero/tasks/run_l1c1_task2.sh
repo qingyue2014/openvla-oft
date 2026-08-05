@@ -85,6 +85,7 @@ REPAIRED_EB_FIRST_POLICY_REVIEW="${REPAIRED_EB_FIRST_POLICY_REVIEW:-${REPAIRED_E
 L1C1_SMOKE_HUMAN_REVIEW="${L1C1_SMOKE_HUMAN_REVIEW:-review/L1-C1_task/repaired_eb_smoke/HUMAN_REVIEW.json}"
 L1C1_SMOKE_MANIFEST="${L1C1_SMOKE_MANIFEST:-${LOG_DIR}/l1c1_repaired_bundle_smoke.json}"
 L1C1_SMOKE_PHYSICS_MANIFEST="${L1C1_SMOKE_PHYSICS_MANIFEST:-${LOG_DIR}/l1c1_smoke_actual_first_policy_physics.json}"
+L1C1_ELIGIBILITY_ARCHIVE="${L1C1_ELIGIBILITY_ARCHIVE:-artifacts/physcog/l1c1/eligibility/20260805T082605Z-f61618b3}"
 if [[ -n "${PHYSCOG_SHARED_REPO:-}" ]]; then
   DEFAULT_BOWL_STACK_SOURCE_INDICES="${PHYSCOG_SHARED_REPO}/experiments/robot/libero/tasks/l1c1_task2_bowl_stack_source_indices.json"
   DEFAULT_BOWL_STACK_EB_TRAJECTORY_DIR="${PHYSCOG_SHARED_REPO}/rollouts/libero_spatial/L1-C1-hidden-bowl-stack-eb/trajectories"
@@ -580,6 +581,7 @@ require_repaired_eb_formal_gate() {
     --smoke_manifest "${L1C1_SMOKE_MANIFEST}" \
     --smoke_physics_manifest "${L1C1_SMOKE_PHYSICS_MANIFEST}" \
     --smoke_review "${L1C1_SMOKE_HUMAN_REVIEW}" \
+    --eligibility_archive "${L1C1_ELIGIBILITY_ARCHIVE}" \
     --expected_episodes "${NUM_TRIALS}"
 }
 

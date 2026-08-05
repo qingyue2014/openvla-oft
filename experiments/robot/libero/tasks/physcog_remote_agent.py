@@ -30,6 +30,38 @@ class PhaseSpec:
     inputs: tuple[tuple[str, str], ...] = ()
 
 
+L1C1_ELIGIBILITY_ARCHIVE = (
+    "artifacts/physcog/l1c1/eligibility/20260805T082605Z-f61618b3"
+)
+L1C1_FORMAL_ELIGIBILITY_ARCHIVE = (
+    "experiments/robot/libero/tasks/l1c1_formal_inputs/l1c1_eligibility_archive"
+)
+L1C1_ELIGIBILITY_TRAJECTORY_REL = (
+    "rollouts/libero_spatial/"
+    "L1-C1-hidden-bowl-stack-eb-eligibility-repaired/trajectories"
+)
+
+
+def _l1c1_formal_eligibility_inputs() -> tuple[tuple[str, str], ...]:
+    relative_files = [
+        "SHA256SUMS",
+        "reports/l1c1_repaired_eb_eligibility.json",
+        "reports/l1c1_repaired_eb_action_replay.csv",
+        f"{L1C1_ELIGIBILITY_TRAJECTORY_REL}/index.jsonl",
+    ]
+    relative_files.extend(
+        f"{L1C1_ELIGIBILITY_TRAJECTORY_REL}/task2_ep{episode:03d}.npz"
+        for episode in range(50)
+    )
+    return tuple(
+        (
+            f"{L1C1_ELIGIBILITY_ARCHIVE}/{relative}",
+            f"{L1C1_FORMAL_ELIGIBILITY_ARCHIVE}/{relative}",
+        )
+        for relative in relative_files
+    )
+
+
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l1c1", "repair_eb"): PhaseSpec(
         command=(
@@ -266,6 +298,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "REPAIRED_EB_FIRST_POLICY_MANIFEST=experiments/robot/libero/tasks/l1c1_formal_inputs/l1c1_repaired_eb_first_policy_gate.json",
             "L1C1_SMOKE_MANIFEST=experiments/robot/libero/tasks/l1c1_formal_inputs/l1c1_repaired_bundle_smoke.json",
             "L1C1_SMOKE_PHYSICS_MANIFEST=experiments/robot/libero/tasks/l1c1_formal_inputs/l1c1_smoke_actual_first_policy_physics.json",
+            f"L1C1_ELIGIBILITY_ARCHIVE={L1C1_FORMAL_ELIGIBILITY_ARCHIVE}",
+            f"BOWL_STACK_EB_TRAJECTORY_DIR={L1C1_FORMAL_ELIGIBILITY_ARCHIVE}/{L1C1_ELIGIBILITY_TRAJECTORY_REL}",
             "bash",
             "experiments/robot/libero/tasks/run_l1c1_task2.sh",
             "bowl_stack_eval",
@@ -308,6 +342,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
                 "review/L1-C1_task/repaired_eb_smoke/HUMAN_REVIEW.json",
                 "review/L1-C1_task/repaired_eb_smoke/HUMAN_REVIEW.json",
             ),
+            *_l1c1_formal_eligibility_inputs(),
         ),
         artifacts=(
             "experiments/logs",

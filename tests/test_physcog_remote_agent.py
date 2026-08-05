@@ -108,7 +108,7 @@ def test_l1c1_registry_exposes_gated_formal_pipeline_and_calibration_tools():
     assert "RENDER_GPU_DEVICE_ID=1" in formal.command
     assert "SAVE_VIDEO_MODE=all" in formal.command
     assert any("bowl_stack_eb_repaired_states.hdf5" in item for item in formal.command)
-    assert len(formal.inputs) == 9
+    assert len(formal.inputs) == 63
     assert all(not target.startswith("experiments/logs/") for _, target in formal.inputs)
     assert any(
         target.endswith("l1c1_task2_bowl_stack_eb_repaired_states.hdf5")
@@ -118,6 +118,10 @@ def test_l1c1_registry_exposes_gated_formal_pipeline_and_calibration_tools():
         target.endswith("repaired_eb_smoke/HUMAN_REVIEW.json")
         for _, target in formal.inputs
     )
+    assert any("L1C1_ELIGIBILITY_ARCHIVE=" in item for item in formal.command)
+    assert any("BOWL_STACK_EB_TRAJECTORY_DIR=" in item for item in formal.command)
+    assert sum(source.endswith(".npz") for source, _ in formal.inputs) == 50
+    assert any(source.endswith("SHA256SUMS") for source, _ in formal.inputs)
     assert "bowl_stack_eval" in formal.command
     phase = PHASES[("l1c1", "recalibrate")]
     assert phase.count_env == "NUM_TRIALS"
