@@ -66,13 +66,11 @@ def _require_human_approval(
     return review
 
 
-def validate_formal_gate(
+def validate_static_gate(
     *,
     eb_state: Path,
     repair_manifest_path: Path,
     first_policy_manifest_path: Path,
-    first_policy_review_path: Path,
-    smoke_review_path: Path,
     expected_episodes: int,
 ) -> str:
     if not eb_state.is_file():
@@ -103,6 +101,24 @@ def validate_formal_gate(
     eb_record = first_policy.get("state_files", {}).get("eb", {})
     if eb_record.get("sha256") != state_sha256:
         raise ValueError("repaired Eb hash does not match first-policy manifest")
+    return state_sha256
+
+
+def validate_formal_gate(
+    *,
+    eb_state: Path,
+    repair_manifest_path: Path,
+    first_policy_manifest_path: Path,
+    first_policy_review_path: Path,
+    smoke_review_path: Path,
+    expected_episodes: int,
+) -> str:
+    state_sha256 = validate_static_gate(
+        eb_state=eb_state,
+        repair_manifest_path=repair_manifest_path,
+        first_policy_manifest_path=first_policy_manifest_path,
+        expected_episodes=expected_episodes,
+    )
 
     frame_review = _require_human_approval(
         first_policy_review_path,
@@ -126,11 +142,12 @@ def validate_formal_gate(
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--stage", choices=("smoke", "formal"), default="formal")
     parser.add_argument("--eb_state", type=Path, required=True)
     parser.add_argument("--repair_manifest", type=Path, required=True)
     parser.add_argument("--first_policy_manifest", type=Path, required=True)
-    parser.add_argument("--first_policy_review", type=Path, required=True)
-    parser.add_argument("--smoke_review", type=Path, required=True)
+    parser.add_argument("--first_policy_review", type=Path)
+    parser.add_argument("--smoke_review", type=Path)
     parser.add_argument("--expected_episodes", type=int, default=50)
     return parser.parse_args()
 
@@ -138,18 +155,31 @@ def _parse_args() -> argparse.Namespace:
 def main() -> int:
     args = _parse_args()
     try:
-        state_sha256 = validate_formal_gate(
-            eb_state=args.eb_state,
-            repair_manifest_path=args.repair_manifest,
-            first_policy_manifest_path=args.first_policy_manifest,
-            first_policy_review_path=args.first_policy_review,
-            smoke_review_path=args.smoke_review,
-            expected_episodes=args.expected_episodes,
-        )
+        common = {
+            "eb_state": args.eb_state,
+            "repair_manifest_path": args.repair_manifest,
+            "first_policy_manifest_path": args.first_policy_manifest,
+            "expected_episodes": args.expected_episodes,
+        }
+        if args.stage == "smoke":
+            state_sha256 = validate_static_gate(**common)
+        else:
+            if args.first_policy_review is None or args.smoke_review is None:
+                raise ValueError("formal stage requires both human-review artifacts")
+            state_sha256 = validate_formal_gate(
+                **common,
+                first_policy_review_path=args.first_policy_review,
+                smoke_review_path=args.smoke_review,
+            )
     except ValueError as exc:
         print(f"FAIL_L1C1_FORMAL_GATE: {exc}")
         return 2
-    print(f"PASS_L1C1_FORMAL_GATE eb_sha256={state_sha256}")
+    verdict = (
+        "PASS_L1C1_REPAIRED_BUNDLE_STATIC_GATE"
+        if args.stage == "smoke"
+        else "PASS_L1C1_FORMAL_GATE"
+    )
+    print(f"{verdict} eb_sha256={state_sha256}")
     return 0
 
 

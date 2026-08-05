@@ -63,7 +63,7 @@ def test_l3a1_registry_exposes_only_gated_pipeline_phases():
 
 def test_l1c1_registry_exposes_gated_formal_pipeline_and_calibration_tools():
     assert set(phase for scenario, phase in PHASES if scenario == "l1c1") == {
-        "init", "preview", "validate_layout", "first_policy_gate", "repair_eb", "safe_reference", "formal",
+        "init", "preview", "validate_layout", "first_policy_gate", "repair_eb", "safe_reference", "smoke", "formal",
         "recalibrate", "recalibrate15", "direction_sweep",
         "angle0", "angle45", "angle90", "angle135",
         "angle225", "angle270", "angle315",
@@ -87,6 +87,12 @@ def test_l1c1_registry_exposes_gated_formal_pipeline_and_calibration_tools():
     assert "RENDER_GPU_DEVICE_ID=1" in safe_reference.command
     assert "bowl_stack_safe_reference" in safe_reference.command
     assert "experiments/logs/l1c1_safe_reference_videos" in safe_reference.artifacts
+    smoke = PHASES[("l1c1", "smoke")]
+    assert smoke.count_env == "SMOKE_TRIALS"
+    assert "SAVE_VIDEO_MODE=all" in smoke.command
+    assert "bowl_stack_smoke" in smoke.command
+    assert len(smoke.inputs) == 5
+    assert any("smoke-repaired" in artifact for artifact in smoke.artifacts)
     formal = PHASES[("l1c1", "formal")]
     assert formal.count_env == "NUM_TRIALS"
     assert "RENDER_GPU_DEVICE_ID=1" in formal.command
@@ -128,6 +134,16 @@ def test_l1c1_preview_and_formal_reuse_the_generated_state_bundle():
     assert "require_repaired_eb_formal_gate" in formal_body
     assert "run_bowl_stack_validation" in formal_body
     assert "prepare_bowl_stack_formal_outputs" in formal_body
+
+
+def test_l1c1_smoke_reuses_frozen_repaired_bundle():
+    runner = Path("experiments/robot/libero/tasks/run_l1c1_task2.sh").read_text()
+    smoke_body = runner.split("  bowl_stack_smoke)\n", 1)[1].split("\n    ;;", 1)[0]
+    assert "generate_bowl_stack_candidate" not in smoke_body
+    assert "require_repaired_eb_static_gate" in smoke_body
+    assert "run_bowl_stack_native_preflight" in smoke_body
+    assert "require_bowl_stack_bundle" in smoke_body
+    assert "PASS_L1C1_REPAIRED_BUNDLE_SMOKE" in smoke_body
 
 
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():

@@ -7,6 +7,7 @@ from experiments.robot.libero.tasks.check_l1c1_formal_gate import (
     FIRST_POLICY_VERDICT,
     REPAIR_VERDICT,
     validate_formal_gate,
+    validate_static_gate,
 )
 
 
@@ -77,6 +78,16 @@ def test_formal_gate_binds_repaired_state_and_both_human_reviews(tmp_path):
         first_policy_manifest_path=first_policy,
         first_policy_review_path=frame_review,
         smoke_review_path=smoke_review,
+        expected_episodes=50,
+    ) == state_sha
+
+
+def test_static_gate_allows_smoke_without_pretending_human_review_is_complete(tmp_path):
+    state, repair, first_policy, _, _, state_sha = _passing_bundle(tmp_path)
+    assert validate_static_gate(
+        eb_state=state,
+        repair_manifest_path=repair,
+        first_policy_manifest_path=first_policy,
         expected_episodes=50,
     ) == state_sha
 

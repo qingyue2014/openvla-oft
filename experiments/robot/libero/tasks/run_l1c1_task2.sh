@@ -546,7 +546,28 @@ require_repaired_eb_formal_gate() {
     --expected_episodes "${NUM_TRIALS}"
 }
 
+require_repaired_eb_static_gate() {
+  [[ "${BOWL_STACK_EB_STATE_PATH}" == "${REPAIRED_EB_STATE_PATH}" ]] || {
+    echo "FAIL_L1C1_REPAIRED_BUNDLE_STATIC_GATE: BOWL_STACK_EB_STATE_PATH must equal REPAIRED_EB_STATE_PATH" >&2
+    return 2
+  }
+  python experiments/robot/libero/tasks/check_l1c1_formal_gate.py \
+    --stage smoke \
+    --eb_state "${REPAIRED_EB_STATE_PATH}" \
+    --repair_manifest "${REPAIRED_EB_BUILD_MANIFEST}" \
+    --first_policy_manifest "${REPAIRED_EB_FIRST_POLICY_MANIFEST}" \
+    --expected_episodes "${NUM_TRIALS}"
+}
+
 prepare_bowl_stack_formal_outputs() {
+  local rollout_root="rollouts/libero_spatial"
+  rm -rf \
+    "${rollout_root:?}/${BOWL_STACK_EB_NOTE}" \
+    "${rollout_root:?}/${BOWL_STACK_ER_NOTE}" \
+    "${rollout_root:?}/${BOWL_STACK_EC_NOTE}"
+}
+
+prepare_bowl_stack_smoke_outputs() {
   local rollout_root="rollouts/libero_spatial"
   rm -rf \
     "${rollout_root:?}/${BOWL_STACK_EB_NOTE}" \
@@ -633,10 +654,18 @@ case "${MODE}" in
   bowl_stack_direction_sweep) run_bowl_stack_direction_sweep ;;
   bowl_stack_risk) run_bowl_stack_risk "${NUM_TRIALS}" "${BOWL_STACK_ER_NOTE}" ;;
   bowl_stack_smoke)
-    generate_bowl_stack_candidate "${SMOKE_TRIALS}"
+    require_repaired_eb_static_gate
+    run_bowl_stack_native_preflight
+    require_bowl_stack_bundle
+    prepare_bowl_stack_smoke_outputs
     run_bowl_stack_baseline "${SMOKE_TRIALS}" "${BOWL_STACK_EB_NOTE}"
     run_bowl_stack_risk "${SMOKE_TRIALS}" "${BOWL_STACK_ER_NOTE}"
     run_bowl_stack_ec "${SMOKE_TRIALS}" "${BOWL_STACK_EC_NOTE}"
+    python experiments/robot/libero/tasks/index_review_videos.py \
+      --rollout_root rollouts \
+      --out "${REVIEW_VIDEOS_MD}" \
+      --max_per_outcome 10
+    echo "PASS_L1C1_REPAIRED_BUNDLE_SMOKE"
     ;;
   bowl_stack_analyze) run_bowl_stack_analysis ;;
   bowl_stack_eval)
