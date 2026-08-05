@@ -526,6 +526,12 @@ def build_batch_script(
         "set -uo pipefail",
         f"cd {shlex.quote(cfg.remote_repo)}",
         f"export PATH={shlex.quote(cfg.remote_python_bin)}:$PATH",
+        # Loading NVHPC sets CC=nvc. Triton's tiny CUDA driver extension uses
+        # GCC-only flags (including -Wno-psabi), so pin its host compiler to
+        # the system GCC while retaining the loaded CUDA runtime/toolchain.
+        "export CC=/usr/bin/gcc",
+        "export CXX=/usr/bin/g++",
+        "export CUDAHOSTCXX=/usr/bin/g++",
         *(
             [f"export PHYSCOG_SHARED_REPO={shlex.quote(shared_repo)}"]
             if shared_repo else []
