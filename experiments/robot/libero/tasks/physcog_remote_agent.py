@@ -417,6 +417,50 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         ),
         local_gate=_l1c1_openvla_cascade_gate(),
     ),
+    ("l1c1", "cosmos_smoke"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=capped",
+            "BOWL_STACK_EB_STATE_PATH=experiments/robot/libero/tasks/l1c1_task2_bowl_stack_eb_repaired_states.hdf5",
+            "REPAIRED_EB_STATE_PATH=experiments/robot/libero/tasks/l1c1_task2_bowl_stack_eb_repaired_states.hdf5",
+            "REPAIRED_EB_BUILD_MANIFEST=experiments/robot/libero/tasks/l1c1_cosmos_inputs/l1c1_eb_repair_build.json",
+            "REPAIRED_EB_FIRST_POLICY_MANIFEST=experiments/robot/libero/tasks/l1c1_cosmos_inputs/l1c1_repaired_eb_first_policy_gate.json",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1c1_cosmos.sh",
+            "smoke",
+        ),
+        count_env="SMOKE_TRIALS",
+        inputs=(
+            (
+                "artifacts/physcog/l1c1/repair_eb/20260804T104908Z-5203bf7a/initial_layouts/l1c1_task2_bowl_stack_eb_repaired_states.hdf5",
+                "experiments/robot/libero/tasks/l1c1_task2_bowl_stack_eb_repaired_states.hdf5",
+            ),
+            (
+                "artifacts/physcog/l1c1/formal/20260727T091817Z-d6ec632a/initial_layouts/l1c1_task2_bowl_stack_candidate_states.hdf5",
+                "experiments/robot/libero/tasks/l1c1_task2_bowl_stack_candidate_states.hdf5",
+            ),
+            (
+                "artifacts/physcog/l1c1/formal/20260727T091817Z-d6ec632a/initial_layouts/l1c1_task2_bowl_stack_ec_states.hdf5",
+                "experiments/robot/libero/tasks/l1c1_task2_bowl_stack_ec_states.hdf5",
+            ),
+            (
+                "artifacts/physcog/l1c1/repair_eb/20260804T104908Z-5203bf7a/reports/l1c1_eb_repair_build.json",
+                "experiments/robot/libero/tasks/l1c1_cosmos_inputs/l1c1_eb_repair_build.json",
+            ),
+            (
+                "artifacts/physcog/l1c1/repair_eb/20260804T104908Z-5203bf7a/reports/l1c1_repaired_eb_first_policy_gate.json",
+                "experiments/robot/libero/tasks/l1c1_cosmos_inputs/l1c1_repaired_eb_first_policy_gate.json",
+            ),
+        ),
+        artifacts=(
+            "experiments/logs/l1c1_cosmos_smoke",
+            "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-eb-cosmos-smoke",
+            "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-risk-cosmos-smoke",
+            "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-ec-cosmos-smoke",
+        ),
+        local_gate=_l1c1_openvla_cascade_gate(),
+    ),
     ("l1c1", "recalibrate"): PhaseSpec(
         command=(
             "env",
@@ -619,9 +663,15 @@ REVIEW_VIDEO_PREFIXES: Mapping[tuple[str, str], tuple[str, ...]] = {
         "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-risk-pi05-smoke/",
         "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-ec-pi05-smoke/",
     ),
+    ("l1c1", "cosmos_smoke"): (
+        "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-eb-cosmos-smoke/",
+        "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-risk-cosmos-smoke/",
+        "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-ec-cosmos-smoke/",
+    ),
 }
 REVIEW_INDEX_PATHS: Mapping[tuple[str, str], str] = {
     ("l1c1", "pi05_smoke"): "experiments/logs/l1c1_pi05_smoke/review_videos.md",
+    ("l1c1", "cosmos_smoke"): "experiments/logs/l1c1_cosmos_smoke/review_videos.md",
 }
 
 

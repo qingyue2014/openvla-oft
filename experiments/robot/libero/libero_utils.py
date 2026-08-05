@@ -2,28 +2,32 @@
 
 import math
 import os
+import time
 
 import imageio
 import numpy as np
-import tensorflow as tf
+
+try:
+    import tensorflow as tf
+except ImportError:
+    tf = None
 
 # TensorFlow is used here only for lightweight image preprocessing.  Keep it
 # off the accelerator so it neither reserves OpenVLA's GPU memory nor triggers
 # a long PTX JIT on newer (for example sm_90) evaluation nodes.
-try:
-    tf.config.set_visible_devices([], "GPU")
-except RuntimeError:
-    # A caller may already have initialized TensorFlow before importing this
-    # module; in that case its device policy can no longer be changed.
-    pass
+if tf is not None:
+    try:
+        tf.config.set_visible_devices([], "GPU")
+    except RuntimeError:
+        # A caller may already have initialized TensorFlow before importing
+        # this module; its device policy can no longer be changed.
+        pass
 
 from libero.libero import get_libero_path
 from libero.libero.envs import OffScreenRenderEnv
 
-from experiments.robot.robot_utils import (
-    DATE,
-    DATE_TIME,
-)
+DATE = time.strftime("%Y_%m_%d")
+DATE_TIME = time.strftime("%Y_%m_%d-%H_%M_%S")
 
 
 def get_libero_env(task, model_family, resolution=256, render_gpu_device_id=-1):

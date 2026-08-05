@@ -74,7 +74,8 @@ def test_pi05_actions_are_already_in_libero_environment_convention():
     evaluator = Path("experiments/robot/libero/run_libero_eval.py").read_text(
         encoding="utf-8"
     )
-    assert 'if model_family == "pi05":\n        return np.asarray(action' in evaluator
+    assert 'if model_family == "pi05":\n        action = np.asarray(action' in evaluator
+    assert "Invalid pi0.5 LIBERO action" in evaluator
 
 
 def test_pi05_policy_uses_official_websocket_client(monkeypatch):

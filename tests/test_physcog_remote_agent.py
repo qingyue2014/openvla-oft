@@ -63,7 +63,7 @@ def test_l3a1_registry_exposes_only_gated_pipeline_phases():
 
 def test_l1c1_registry_exposes_gated_formal_pipeline_and_calibration_tools():
     assert set(phase for scenario, phase in PHASES if scenario == "l1c1") == {
-        "init", "preview", "validate_layout", "first_policy_gate", "repair_eb", "safe_reference", "smoke", "eligibility", "formal", "pi05_smoke",
+        "init", "preview", "validate_layout", "first_policy_gate", "repair_eb", "safe_reference", "smoke", "eligibility", "formal", "pi05_smoke", "cosmos_smoke",
         "recalibrate", "recalibrate15", "direction_sweep",
         "angle0", "angle45", "angle90", "angle135",
         "angle225", "angle270", "angle315",

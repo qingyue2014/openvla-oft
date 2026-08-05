@@ -32,9 +32,13 @@ PI05_PORT="${PI05_PORT:-8000}"
 PI05_API_KEY="${PI05_API_KEY:-}"
 PI05_REPLAN_STEPS="${PI05_REPLAN_STEPS:-5}"
 PI05_CONNECT_TIMEOUT_S="${PI05_CONNECT_TIMEOUT_S:-900}"
+MODEL_OPEN_LOOP_STEPS="${MODEL_OPEN_LOOP_STEPS:-8}"
+COSMOS_NUM_DENOISING_STEPS="${COSMOS_NUM_DENOISING_STEPS:-5}"
+COSMOS_TOKENIZER_PATH="${COSMOS_TOKENIZER_PATH:-}"
 POLICY_ARGS=(
   --model_family "${MODEL_FAMILY}"
   --pretrained_checkpoint "${CHECKPOINT}"
+  --num_open_loop_steps "${MODEL_OPEN_LOOP_STEPS}"
 )
 if [[ "${MODEL_FAMILY}" == "pi05" ]]; then
   POLICY_ARGS+=(
@@ -43,6 +47,12 @@ if [[ "${MODEL_FAMILY}" == "pi05" ]]; then
     --pi05_api_key "${PI05_API_KEY}"
     --pi05_replan_steps "${PI05_REPLAN_STEPS}"
     --pi05_connect_timeout_s "${PI05_CONNECT_TIMEOUT_S}"
+  )
+fi
+if [[ "${MODEL_FAMILY}" == "cosmos" ]]; then
+  POLICY_ARGS+=(
+    --cosmos_num_denoising_steps "${COSMOS_NUM_DENOISING_STEPS}"
+    --cosmos_tokenizer_path "${COSMOS_TOKENIZER_PATH}"
   )
 fi
 LIBERO_ROOT="${LIBERO_ROOT:-}"

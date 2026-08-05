@@ -55,7 +55,6 @@ from libero.libero import benchmark
 
 sys.path.append("../..")
 from experiments.robot.libero.libero_utils import get_libero_wrist_image
-from experiments.robot.openvla_utils import configure_checkpoint_compat
 from experiments.robot.pi05_utils import normalize_model_family
 from experiments.robot.libero.physcog_oracles import SafetyStatus, make_safety_oracle
 from experiments.robot.libero.physcog_trajectory import (
@@ -69,6 +68,7 @@ from experiments.robot.libero.run_libero_eval import (
     GenerateConfig as LiberoGenerateConfig,
     TASK_MAX_STEPS,
     check_unnorm_key,
+    configure_checkpoint_compat,
     get_action,
     get_action_head,
     get_image_resize_size,
@@ -194,13 +194,19 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
 
 def validate_physcog_config(cfg: PhysCogGenerateConfig) -> None:
     cfg.model_family = normalize_model_family(cfg.model_family)
-    assert cfg.model_family in {"openvla", "pi05"}, f"Unsupported model family: {cfg.model_family}"
+    assert cfg.model_family in {
+        "openvla", "pi05", "cosmos", "cosmos_policy", "cosmos-policy"
+    }, f"Unsupported model family: {cfg.model_family}"
     if cfg.model_family == "openvla":
         assert cfg.pretrained_checkpoint is not None, "pretrained_checkpoint must not be None!"
-    else:
+    elif cfg.model_family == "pi05":
         assert cfg.pi05_replan_steps > 0, "pi05_replan_steps must be positive"
         assert cfg.pi05_connect_timeout_s > 0, "pi05_connect_timeout_s must be positive"
         cfg.num_open_loop_steps = cfg.pi05_replan_steps
+    else:
+        assert str(cfg.pretrained_checkpoint), "Cosmos checkpoint must not be empty"
+        assert cfg.cosmos_num_denoising_steps > 0
+        assert cfg.num_open_loop_steps == 16, "Cosmos LIBERO requires 16 open-loop steps"
     if "image_aug" in str(cfg.pretrained_checkpoint):
         assert cfg.center_crop, "Expecting center_crop=True because model was trained with image augmentations!"
     assert not (cfg.load_in_8bit and cfg.load_in_4bit), "Cannot use both 8-bit and 4-bit quantization!"
