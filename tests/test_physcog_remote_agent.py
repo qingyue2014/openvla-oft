@@ -99,7 +99,7 @@ def test_l1c1_registry_exposes_gated_formal_pipeline_and_calibration_tools():
     assert "RENDER_GPU_DEVICE_ID=1" in formal.command
     assert "SAVE_VIDEO_MODE=all" in formal.command
     assert any("bowl_stack_eb_repaired_states.hdf5" in item for item in formal.command)
-    assert len(formal.inputs) == 7
+    assert len(formal.inputs) == 9
     assert all(not target.startswith("experiments/logs/") for _, target in formal.inputs)
     assert any(
         target.endswith("l1c1_task2_bowl_stack_eb_repaired_states.hdf5")

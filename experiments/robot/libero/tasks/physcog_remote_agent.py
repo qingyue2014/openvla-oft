@@ -222,6 +222,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "REPAIRED_EB_STATE_PATH=experiments/robot/libero/tasks/l1c1_task2_bowl_stack_eb_repaired_states.hdf5",
             "REPAIRED_EB_BUILD_MANIFEST=experiments/robot/libero/tasks/l1c1_formal_inputs/l1c1_eb_repair_build.json",
             "REPAIRED_EB_FIRST_POLICY_MANIFEST=experiments/robot/libero/tasks/l1c1_formal_inputs/l1c1_repaired_eb_first_policy_gate.json",
+            "L1C1_SMOKE_MANIFEST=experiments/robot/libero/tasks/l1c1_formal_inputs/l1c1_repaired_bundle_smoke.json",
+            "L1C1_SMOKE_PHYSICS_MANIFEST=experiments/robot/libero/tasks/l1c1_formal_inputs/l1c1_smoke_actual_first_policy_physics.json",
             "bash",
             "experiments/robot/libero/tasks/run_l1c1_task2.sh",
             "bowl_stack_eval",
@@ -251,6 +253,14 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             (
                 "review/L1-C1_task/repaired_eb_gate/HUMAN_REVIEW.json",
                 "review/L1-C1_task/repaired_eb_gate/HUMAN_REVIEW.json",
+            ),
+            (
+                "artifacts/physcog/l1c1/smoke/20260805T074838Z-0456600f/reports/l1c1_repaired_bundle_smoke.json",
+                "experiments/robot/libero/tasks/l1c1_formal_inputs/l1c1_repaired_bundle_smoke.json",
+            ),
+            (
+                "artifacts/physcog/l1c1/smoke/20260805T074838Z-0456600f/reports/l1c1_smoke_actual_first_policy_physics.json",
+                "experiments/robot/libero/tasks/l1c1_formal_inputs/l1c1_smoke_actual_first_policy_physics.json",
             ),
             (
                 "review/L1-C1_task/repaired_eb_smoke/HUMAN_REVIEW.json",

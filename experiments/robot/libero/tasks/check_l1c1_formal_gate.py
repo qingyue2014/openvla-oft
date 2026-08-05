@@ -18,6 +18,9 @@ from typing import Any
 
 REPAIR_VERDICT = "PASS_L1C1_EB_REPAIR_BUILD"
 FIRST_POLICY_VERDICT = "PASS_L1C1_EXACT_FIRST_POLICY_GATE"
+SMOKE_VERDICT = "PASS_L1C1_REPAIRED_BUNDLE_SMOKE"
+SMOKE_PHYSICS_VERDICT = "PASS_L1C1_SMOKE_ACTUAL_FIRST_POLICY_PHYSICAL_REPLAY"
+SMOKE_EPISODES_PER_CONDITION = 5
 
 
 def _sha256(path: Path) -> str:
@@ -110,6 +113,8 @@ def validate_formal_gate(
     repair_manifest_path: Path,
     first_policy_manifest_path: Path,
     first_policy_review_path: Path,
+    smoke_manifest_path: Path,
+    smoke_physics_manifest_path: Path,
     smoke_review_path: Path,
     expected_episodes: int,
 ) -> str:
@@ -132,11 +137,68 @@ def validate_formal_gate(
     ):
         raise ValueError("first-frame review is not bound to this physical manifest")
 
-    _require_human_approval(
+    first_policy = _read_json(first_policy_manifest_path)
+    smoke = _read_json(smoke_manifest_path)
+    if smoke.get("verdict") != SMOKE_VERDICT or smoke.get("failures") != []:
+        raise ValueError("repaired-bundle smoke completeness gate did not pass cleanly")
+    if smoke.get("model") != "OpenVLA-OFT":
+        raise ValueError("smoke manifest is not an OpenVLA-OFT run")
+    if smoke.get("episode_count_per_condition") != SMOKE_EPISODES_PER_CONDITION:
+        raise ValueError("smoke episode count is not the preregistered 5 per condition")
+
+    expected_review_names: list[str] = []
+    for condition in ("eb", "er", "ec"):
+        expected_state_hash = first_policy.get("state_files", {}).get(condition, {}).get(
+            "sha256"
+        )
+        smoke_state_hash = smoke.get("state_files", {}).get(condition, {}).get("sha256")
+        if not expected_state_hash or smoke_state_hash != expected_state_hash:
+            raise ValueError(f"{condition} smoke state hash does not match first-policy gate")
+        row = smoke.get("conditions", {}).get(condition, {})
+        if row.get("episode_count") != SMOKE_EPISODES_PER_CONDITION:
+            raise ValueError(f"{condition} smoke trajectory episode count mismatch")
+        if row.get("video_count") != SMOKE_EPISODES_PER_CONDITION:
+            raise ValueError(f"{condition} smoke video count mismatch")
+        if row.get("trajectory_count") != SMOKE_EPISODES_PER_CONDITION:
+            raise ValueError(f"{condition} smoke trajectory count mismatch")
+        if row.get("model_collapses") != 0:
+            raise ValueError(f"{condition} smoke contains model collapse")
+        videos = row.get("videos")
+        if not isinstance(videos, list) or len(videos) != SMOKE_EPISODES_PER_CONDITION:
+            raise ValueError(f"{condition} smoke video inventory is incomplete")
+        expected_review_names.extend(
+            f"{condition}_{Path(str(video)).name}" for video in videos
+        )
+
+    smoke_physics = _read_json(smoke_physics_manifest_path)
+    if (
+        smoke_physics.get("verdict") != SMOKE_PHYSICS_VERDICT
+        or smoke_physics.get("failures") != []
+    ):
+        raise ValueError("actual smoke first-policy physical replay did not pass cleanly")
+
+    smoke_review = _require_human_approval(
         smoke_review_path,
         expected_scope="all repaired-bundle smoke videos",
         require_smoke_videos=True,
     )
+    if smoke_review.get("smoke_verdict") != SMOKE_VERDICT:
+        raise ValueError("smoke review names the wrong completeness verdict")
+    if smoke_review.get("smoke_manifest_sha256") != _sha256(smoke_manifest_path):
+        raise ValueError("smoke review is not bound to this smoke manifest")
+    if smoke_review.get("actual_first_policy_physics_verdict") != SMOKE_PHYSICS_VERDICT:
+        raise ValueError("smoke review names the wrong physical replay verdict")
+    if smoke_review.get("actual_first_policy_physics_manifest_sha256") != _sha256(
+        smoke_physics_manifest_path
+    ):
+        raise ValueError("smoke review is not bound to this physical replay manifest")
+    candidates = smoke_review.get("candidate_videos")
+    reviewed = smoke_review.get("reviewed_videos")
+    if not isinstance(candidates, list) or reviewed != candidates:
+        raise ValueError("every candidate smoke video must be explicitly reviewed")
+    reviewed_names = [Path(str(video)).name for video in reviewed]
+    if sorted(reviewed_names) != sorted(expected_review_names):
+        raise ValueError("human-reviewed videos do not match the smoke manifest inventory")
     return state_sha256
 
 
@@ -147,6 +209,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--repair_manifest", type=Path, required=True)
     parser.add_argument("--first_policy_manifest", type=Path, required=True)
     parser.add_argument("--first_policy_review", type=Path)
+    parser.add_argument("--smoke_manifest", type=Path)
+    parser.add_argument("--smoke_physics_manifest", type=Path)
     parser.add_argument("--smoke_review", type=Path)
     parser.add_argument("--expected_episodes", type=int, default=50)
     return parser.parse_args()
@@ -164,11 +228,21 @@ def main() -> int:
         if args.stage == "smoke":
             state_sha256 = validate_static_gate(**common)
         else:
-            if args.first_policy_review is None or args.smoke_review is None:
-                raise ValueError("formal stage requires both human-review artifacts")
+            if any(
+                value is None
+                for value in (
+                    args.first_policy_review,
+                    args.smoke_manifest,
+                    args.smoke_physics_manifest,
+                    args.smoke_review,
+                )
+            ):
+                raise ValueError("formal stage requires all smoke and human-review artifacts")
             state_sha256 = validate_formal_gate(
                 **common,
                 first_policy_review_path=args.first_policy_review,
+                smoke_manifest_path=args.smoke_manifest,
+                smoke_physics_manifest_path=args.smoke_physics_manifest,
                 smoke_review_path=args.smoke_review,
             )
     except ValueError as exc:

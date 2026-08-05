@@ -6,6 +6,8 @@ import pytest
 from experiments.robot.libero.tasks.check_l1c1_formal_gate import (
     FIRST_POLICY_VERDICT,
     REPAIR_VERDICT,
+    SMOKE_PHYSICS_VERDICT,
+    SMOKE_VERDICT,
     validate_formal_gate,
     validate_static_gate,
 )
@@ -36,7 +38,11 @@ def _passing_bundle(tmp_path):
             "episode_count": 50,
             "condition_counts": {"eb": 50, "er": 50, "ec": 50},
             "cross_condition_state_failures": [],
-            "state_files": {"eb": {"sha256": state_sha}},
+            "state_files": {
+                "eb": {"sha256": state_sha},
+                "er": {"sha256": "er-state-sha"},
+                "ec": {"sha256": "ec-state-sha"},
+            },
         },
     )
     first_policy_sha = hashlib.sha256(first_policy.read_bytes()).hexdigest()
@@ -53,6 +59,42 @@ def _passing_bundle(tmp_path):
             "physical_gate_manifest_sha256": first_policy_sha,
         },
     )
+    smoke_manifest = tmp_path / "smoke.json"
+    smoke_conditions = {}
+    candidate_videos = []
+    for condition in ("eb", "er", "ec"):
+        videos = [f"rollouts/{condition}/episode={idx}.mp4" for idx in range(5)]
+        smoke_conditions[condition] = {
+            "episode_count": 5,
+            "video_count": 5,
+            "trajectory_count": 5,
+            "model_collapses": 0,
+            "videos": videos,
+        }
+        candidate_videos.extend(
+            f"review/L1-C1_task/repaired_eb_smoke/{condition}/{condition}_{path.split('/')[-1]}"
+            for path in videos
+        )
+    _write_json(
+        smoke_manifest,
+        {
+            "verdict": SMOKE_VERDICT,
+            "model": "OpenVLA-OFT",
+            "episode_count_per_condition": 5,
+            "failures": [],
+            "state_files": {
+                "eb": {"sha256": state_sha},
+                "er": {"sha256": "er-state-sha"},
+                "ec": {"sha256": "ec-state-sha"},
+            },
+            "conditions": smoke_conditions,
+        },
+    )
+    smoke_physics = tmp_path / "smoke_physics.json"
+    _write_json(
+        smoke_physics,
+        {"verdict": SMOKE_PHYSICS_VERDICT, "failures": []},
+    )
     smoke_review = tmp_path / "smoke_review.json"
     _write_json(
         smoke_review,
@@ -62,14 +104,32 @@ def _passing_bundle(tmp_path):
             "approved": True,
             "reviewer": "reviewer",
             "reviewed_at": "2026-08-04T13:00:00+08:00",
-            "reviewed_videos": ["review/L1-C1_task/repaired_eb_smoke/eb_pass.mp4"],
+            "smoke_verdict": SMOKE_VERDICT,
+            "smoke_manifest_sha256": hashlib.sha256(
+                smoke_manifest.read_bytes()
+            ).hexdigest(),
+            "actual_first_policy_physics_verdict": SMOKE_PHYSICS_VERDICT,
+            "actual_first_policy_physics_manifest_sha256": hashlib.sha256(
+                smoke_physics.read_bytes()
+            ).hexdigest(),
+            "candidate_videos": candidate_videos,
+            "reviewed_videos": candidate_videos,
         },
     )
-    return state, repair, first_policy, frame_review, smoke_review, state_sha
+    return (
+        state,
+        repair,
+        first_policy,
+        frame_review,
+        smoke_manifest,
+        smoke_physics,
+        smoke_review,
+        state_sha,
+    )
 
 
 def test_formal_gate_binds_repaired_state_and_both_human_reviews(tmp_path):
-    state, repair, first_policy, frame_review, smoke_review, state_sha = (
+    state, repair, first_policy, frame_review, smoke, smoke_physics, smoke_review, state_sha = (
         _passing_bundle(tmp_path)
     )
     assert validate_formal_gate(
@@ -77,13 +137,15 @@ def test_formal_gate_binds_repaired_state_and_both_human_reviews(tmp_path):
         repair_manifest_path=repair,
         first_policy_manifest_path=first_policy,
         first_policy_review_path=frame_review,
+        smoke_manifest_path=smoke,
+        smoke_physics_manifest_path=smoke_physics,
         smoke_review_path=smoke_review,
         expected_episodes=50,
     ) == state_sha
 
 
 def test_static_gate_allows_smoke_without_pretending_human_review_is_complete(tmp_path):
-    state, repair, first_policy, _, _, state_sha = _passing_bundle(tmp_path)
+    state, repair, first_policy, _, _, _, _, state_sha = _passing_bundle(tmp_path)
     assert validate_static_gate(
         eb_state=state,
         repair_manifest_path=repair,
@@ -96,8 +158,8 @@ def test_static_gate_allows_smoke_without_pretending_human_review_is_complete(tm
 def test_formal_gate_fails_closed_without_explicit_human_approval(
     tmp_path, blocked_review
 ):
-    state, repair, first_policy, frame_review, smoke_review, _ = _passing_bundle(
-        tmp_path
+    state, repair, first_policy, frame_review, smoke, smoke_physics, smoke_review, _ = (
+        _passing_bundle(tmp_path)
     )
     path = frame_review if blocked_review == "frame" else smoke_review
     review = json.loads(path.read_text(encoding="utf-8"))
@@ -109,14 +171,16 @@ def test_formal_gate_fails_closed_without_explicit_human_approval(
             repair_manifest_path=repair,
             first_policy_manifest_path=first_policy,
             first_policy_review_path=frame_review,
+            smoke_manifest_path=smoke,
+            smoke_physics_manifest_path=smoke_physics,
             smoke_review_path=smoke_review,
             expected_episodes=50,
         )
 
 
 def test_formal_gate_rejects_state_hash_drift(tmp_path):
-    state, repair, first_policy, frame_review, smoke_review, _ = _passing_bundle(
-        tmp_path
+    state, repair, first_policy, frame_review, smoke, smoke_physics, smoke_review, _ = (
+        _passing_bundle(tmp_path)
     )
     state.write_bytes(b"different-state")
     with pytest.raises(ValueError, match="construction manifest"):
@@ -125,6 +189,8 @@ def test_formal_gate_rejects_state_hash_drift(tmp_path):
             repair_manifest_path=repair,
             first_policy_manifest_path=first_policy,
             first_policy_review_path=frame_review,
+            smoke_manifest_path=smoke,
+            smoke_physics_manifest_path=smoke_physics,
             smoke_review_path=smoke_review,
             expected_episodes=50,
         )

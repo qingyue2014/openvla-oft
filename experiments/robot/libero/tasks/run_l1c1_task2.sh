@@ -83,6 +83,8 @@ REPAIRED_EB_REVIEW_DIR="${REPAIRED_EB_REVIEW_DIR:-review/L1-C1_task/repaired_eb_
 REPAIRED_EB_FIRST_POLICY_MANIFEST="${REPAIRED_EB_FIRST_POLICY_MANIFEST:-${LOG_DIR}/l1c1_repaired_eb_first_policy_gate.json}"
 REPAIRED_EB_FIRST_POLICY_REVIEW="${REPAIRED_EB_FIRST_POLICY_REVIEW:-${REPAIRED_EB_REVIEW_DIR}/HUMAN_REVIEW.json}"
 L1C1_SMOKE_HUMAN_REVIEW="${L1C1_SMOKE_HUMAN_REVIEW:-review/L1-C1_task/repaired_eb_smoke/HUMAN_REVIEW.json}"
+L1C1_SMOKE_MANIFEST="${L1C1_SMOKE_MANIFEST:-${LOG_DIR}/l1c1_repaired_bundle_smoke.json}"
+L1C1_SMOKE_PHYSICS_MANIFEST="${L1C1_SMOKE_PHYSICS_MANIFEST:-${LOG_DIR}/l1c1_smoke_actual_first_policy_physics.json}"
 if [[ -n "${PHYSCOG_SHARED_REPO:-}" ]]; then
   DEFAULT_BOWL_STACK_SOURCE_INDICES="${PHYSCOG_SHARED_REPO}/experiments/robot/libero/tasks/l1c1_task2_bowl_stack_source_indices.json"
   DEFAULT_BOWL_STACK_EB_TRAJECTORY_DIR="${PHYSCOG_SHARED_REPO}/rollouts/libero_spatial/L1-C1-hidden-bowl-stack-eb/trajectories"
@@ -542,6 +544,8 @@ require_repaired_eb_formal_gate() {
     --repair_manifest "${REPAIRED_EB_BUILD_MANIFEST}" \
     --first_policy_manifest "${REPAIRED_EB_FIRST_POLICY_MANIFEST}" \
     --first_policy_review "${REPAIRED_EB_FIRST_POLICY_REVIEW}" \
+    --smoke_manifest "${L1C1_SMOKE_MANIFEST}" \
+    --smoke_physics_manifest "${L1C1_SMOKE_PHYSICS_MANIFEST}" \
     --smoke_review "${L1C1_SMOKE_HUMAN_REVIEW}" \
     --expected_episodes "${NUM_TRIALS}"
 }
