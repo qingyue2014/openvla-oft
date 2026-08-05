@@ -143,7 +143,7 @@ def test_l1c1_smoke_reuses_frozen_repaired_bundle():
     assert "require_repaired_eb_static_gate" in smoke_body
     assert "run_bowl_stack_native_preflight" in smoke_body
     assert "require_bowl_stack_bundle" in smoke_body
-    assert "PASS_L1C1_REPAIRED_BUNDLE_SMOKE" in smoke_body
+    assert "summarize_l1c1_smoke.py" in smoke_body
 
 
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():

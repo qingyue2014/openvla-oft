@@ -661,11 +661,20 @@ case "${MODE}" in
     run_bowl_stack_baseline "${SMOKE_TRIALS}" "${BOWL_STACK_EB_NOTE}"
     run_bowl_stack_risk "${SMOKE_TRIALS}" "${BOWL_STACK_ER_NOTE}"
     run_bowl_stack_ec "${SMOKE_TRIALS}" "${BOWL_STACK_EC_NOTE}"
+    python experiments/robot/libero/tasks/summarize_l1c1_smoke.py \
+      --eb_rollout_dir "rollouts/libero_spatial/${BOWL_STACK_EB_NOTE}" \
+      --er_rollout_dir "rollouts/libero_spatial/${BOWL_STACK_ER_NOTE}" \
+      --ec_rollout_dir "rollouts/libero_spatial/${BOWL_STACK_EC_NOTE}" \
+      --eb_state "${BOWL_STACK_EB_STATE_PATH}" \
+      --er_state "${BOWL_STACK_STATE_PATH}" \
+      --ec_state "${BOWL_STACK_EC_STATE_PATH}" \
+      --episodes "${SMOKE_TRIALS}" \
+      --output_manifest "${LOG_DIR}/l1c1_repaired_bundle_smoke.json" \
+      --output_report "${LOG_DIR}/l1c1_repaired_bundle_smoke.md"
     python experiments/robot/libero/tasks/index_review_videos.py \
       --rollout_root rollouts \
       --out "${REVIEW_VIDEOS_MD}" \
       --max_per_outcome 10
-    echo "PASS_L1C1_REPAIRED_BUNDLE_SMOKE"
     ;;
   bowl_stack_analyze) run_bowl_stack_analysis ;;
   bowl_stack_eval)
