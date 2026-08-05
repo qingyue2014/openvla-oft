@@ -1,0 +1,12 @@
+{
+  "scenario": "L1-C1",
+  "approved": true,
+  "reviewer": "Qingyue Wang (explicit user approval)",
+  "reviewed_at": "2026-08-05T16:55:48+08:00",
+  "scope": "all exact first-policy agent/wrist frames",
+  "required_next_gate": "OpenVLA-OFT formal submission",
+  "physical_gate_verdict": "PASS_L1C1_EXACT_FIRST_POLICY_GATE",
+  "physical_gate_manifest": "experiments/logs/l1c1_repaired_eb_first_policy_gate.json",
+  "physical_gate_manifest_sha256": "869dfbca6c21eef376542b85534862600808652992f73bf8301ef15629d7e179",
+  "notes": "User explicitly approved the repaired Eb/Er/Ec exact first-policy frames and all 15 OpenVLA-OFT smoke videos in the Codex conversation."
+}
