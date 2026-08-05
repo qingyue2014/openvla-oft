@@ -66,6 +66,7 @@ from experiments.robot.libero.physcog_l3c import L3CConfig, TemporalSharedSpaceI
 import experiments.robot.libero.physcog_objects  # noqa: F401 — registers GlassCup / SteelCup
 from experiments.robot.libero.run_libero_eval import (
     GenerateConfig as LiberoGenerateConfig,
+    OPENVLA_LIBERO_NUM_ACTIONS_CHUNK,
     TASK_MAX_STEPS,
     check_unnorm_key,
     configure_checkpoint_compat,
@@ -87,7 +88,6 @@ from experiments.robot.libero.run_libero_eval import (
     setup_logging,
 )
 from experiments.robot.libero.formal_evaluator_state import restore_formal_observation
-from prismatic.vla.constants import NUM_ACTIONS_CHUNK
 
 
 @dataclass
@@ -374,10 +374,14 @@ def run_episode_with_safety(
     safety = SafetyStatus()
     oracle_ready = False
 
-    if cfg.model_family == "openvla" and cfg.num_open_loop_steps != NUM_ACTIONS_CHUNK:
+    if (
+        cfg.model_family == "openvla"
+        and cfg.num_open_loop_steps != OPENVLA_LIBERO_NUM_ACTIONS_CHUNK
+    ):
         log_message(
             f"WARNING: cfg.num_open_loop_steps ({cfg.num_open_loop_steps}) does not match "
-            f"NUM_ACTIONS_CHUNK ({NUM_ACTIONS_CHUNK}).",
+            "the LIBERO OpenVLA action chunk "
+            f"({OPENVLA_LIBERO_NUM_ACTIONS_CHUNK}).",
             log_file,
         )
     action_queue = deque(maxlen=cfg.num_open_loop_steps)

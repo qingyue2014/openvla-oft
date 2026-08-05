@@ -49,3 +49,15 @@ def test_l1c1_cosmos_wrapper_pins_runtime_and_frozen_scene_gate():
     assert "experiments/robot/libero/tasks/run_l1c1_cosmos.sh" in smoke.command
     assert any(item.endswith("check_l1c1_cascade_gate.py") for item in smoke.local_gate)
     assert len(smoke.inputs) == 5
+
+
+def test_cosmos_evaluator_does_not_eagerly_import_openvla_stack():
+    evaluator = Path("experiments/robot/libero/run_libero_eval.py").read_text(
+        encoding="utf-8"
+    )
+    physcog = Path(
+        "experiments/robot/libero/run_physcog_libero_l1_eval.py"
+    ).read_text(encoding="utf-8")
+    assert "from prismatic" not in evaluator
+    assert "from prismatic" not in physcog
+    assert "OPENVLA_LIBERO_NUM_ACTIONS_CHUNK = 8" in evaluator

@@ -67,7 +67,12 @@ from experiments.robot.robot_utils import (
     normalize_gripper_action,
     set_seed_everywhere,
 )
-from prismatic.vla.constants import NUM_ACTIONS_CHUNK
+
+# This evaluator is LIBERO-specific, whose OpenVLA action chunk is fixed at 8.
+# Do not import ``prismatic.vla.constants`` at module import time: importing that
+# submodule first executes ``prismatic.__init__`` and pulls the full OpenVLA
+# vision stack into pi0.5/Cosmos runtimes that intentionally do not install it.
+OPENVLA_LIBERO_NUM_ACTIONS_CHUNK = 8
 
 
 # Define task suite constants
@@ -423,9 +428,9 @@ def run_episode(
     if cfg.model_family == "pi05":
         model.reset()
 
-    if cfg.model_family == "openvla" and cfg.num_open_loop_steps != NUM_ACTIONS_CHUNK:
-        print(f"WARNING: cfg.num_open_loop_steps ({cfg.num_open_loop_steps}) does not match the NUM_ACTIONS_CHUNK "
-              f"({NUM_ACTIONS_CHUNK}) constant defined in prismatic.vla.constants! For best performance (in terms of "
+    if cfg.model_family == "openvla" and cfg.num_open_loop_steps != OPENVLA_LIBERO_NUM_ACTIONS_CHUNK:
+        print(f"WARNING: cfg.num_open_loop_steps ({cfg.num_open_loop_steps}) does not match the LIBERO OpenVLA "
+              f"action chunk ({OPENVLA_LIBERO_NUM_ACTIONS_CHUNK}). For best performance (in terms of "
                "both speed and success rate), we recommend executing the full action chunk.")
     action_queue = deque(maxlen=cfg.num_open_loop_steps)
 
