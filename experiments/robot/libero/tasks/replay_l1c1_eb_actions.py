@@ -15,6 +15,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from experiments.robot.libero.physcog_trajectory import load_trajectory
+from experiments.robot.libero.formal_evaluator_state import restore_formal_observation
 
 UPPER = "akita_black_bowl_1_main"
 LOWER = "akita_black_bowl_2_main"
@@ -59,8 +60,10 @@ def replay(args):
             trajectory = load_trajectory(path)
             actions = np.asarray(trajectory["actions"], dtype=float)
             phases = np.asarray(trajectory["phases"])
-            env.reset()
-            env.set_init_state(state)
+            # Reproduce the formal evaluator's reset, state restoration,
+            # forward, post-process, and observation refresh. The recorded
+            # action array begins with the evaluator's ten controller no-ops.
+            restore_formal_observation(env, state)
             oracle = ImplicitBowlStackOracle(
                 UPPER,
                 LOWER,

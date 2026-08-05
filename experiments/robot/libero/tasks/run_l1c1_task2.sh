@@ -107,6 +107,11 @@ BOWL_STACK_EC_NOTE="${BOWL_STACK_EC_NOTE:-L1-C1-hidden-bowl-stack-ec}"
 LOWER_BOWL_BODY="${LOWER_BOWL_BODY:-akita_black_bowl_2_main}"
 PLATE_BODY="${PLATE_BODY:-plate_1_main}"
 MAX_UPPER_DROP="${MAX_UPPER_DROP:-0.030}"
+ELIGIBILITY_EB_NOTE="${ELIGIBILITY_EB_NOTE:-L1-C1-hidden-bowl-stack-eb-eligibility-repaired}"
+ELIGIBILITY_REPLAY_CSV="${ELIGIBILITY_REPLAY_CSV:-${LOG_DIR}/l1c1_repaired_eb_action_replay.csv}"
+ELIGIBILITY_REPLAY_REPORT="${ELIGIBILITY_REPLAY_REPORT:-${LOG_DIR}/l1c1_repaired_eb_action_replay.md}"
+ELIGIBILITY_MANIFEST="${ELIGIBILITY_MANIFEST:-${LOG_DIR}/l1c1_repaired_eb_eligibility.json}"
+ELIGIBILITY_REPORT="${ELIGIBILITY_REPORT:-${LOG_DIR}/l1c1_repaired_eb_eligibility.md}"
 
 if [[ -z "${LIBERO_ROOT}" ]]; then
   if [[ -d "_deps/LIBERO/libero" ]]; then
@@ -469,6 +474,34 @@ run_bowl_stack_er_replay() {
     --fail_on_invalid
 }
 
+run_bowl_stack_eligibility() {
+  require_repaired_eb_static_gate
+  run_bowl_stack_native_preflight
+  require_bowl_stack_bundle
+  local eligibility_rollout_dir="rollouts/libero_spatial/${ELIGIBILITY_EB_NOTE}"
+  rm -rf "${eligibility_rollout_dir}"
+  run_bowl_stack_baseline "${NUM_TRIALS}" "${ELIGIBILITY_EB_NOTE}"
+  python experiments/robot/libero/tasks/replay_l1c1_eb_actions.py \
+    --eb "${eligibility_rollout_dir}/trajectories" \
+    --risk_states "${BOWL_STACK_STATE_PATH}" \
+    --max_upper_lower_offset "${MAX_UPPER_LOWER_OFFSET}" \
+    --max_upper_drop "${MAX_UPPER_DROP}" \
+    --max_bowl_tilt_deg "${MAX_BOWL_TILT_DEG}" \
+    --max_lower_plate_offset "${MAX_LOWER_PLATE_OFFSET}" \
+    --max_plate_tilt_deg "${MAX_PLATE_TILT_DEG}" \
+    --out_csv "${ELIGIBILITY_REPLAY_CSV}" \
+    --out_report "${ELIGIBILITY_REPLAY_REPORT}" \
+    --fail_on_invalid
+  python experiments/robot/libero/tasks/summarize_l1c1_eligibility.py \
+    --eb_trajectory_dir "${eligibility_rollout_dir}/trajectories" \
+    --replay_csv "${ELIGIBILITY_REPLAY_CSV}" \
+    --eb_state "${BOWL_STACK_EB_STATE_PATH}" \
+    --er_state "${BOWL_STACK_STATE_PATH}" \
+    --expected_episodes "${NUM_TRIALS}" \
+    --output_manifest "${ELIGIBILITY_MANIFEST}" \
+    --output_report "${ELIGIBILITY_REPORT}"
+}
+
 write_bowl_stack_analysis() {
   python experiments/robot/libero/tasks/analyze_l1c1_bowl_stack.py \
     --eb "rollouts/libero_spatial/${BOWL_STACK_EB_NOTE}/trajectories" \
@@ -680,6 +713,7 @@ case "${MODE}" in
       --out "${REVIEW_VIDEOS_MD}" \
       --max_per_outcome 10
     ;;
+  bowl_stack_eligibility) run_bowl_stack_eligibility ;;
   bowl_stack_analyze) run_bowl_stack_analysis ;;
   bowl_stack_eval)
     require_repaired_eb_formal_gate
@@ -703,7 +737,7 @@ case "${MODE}" in
   record) record_results ;;
   *)
     echo "Unknown mode: ${MODE}" >&2
-    echo "Expected check|debug|preview|sweep|calibrate|calibrate_candidate|bowl_stack_check|bowl_stack_preview|bowl_stack_validate|bowl_stack_first_policy_gate|bowl_stack_repair_eb|bowl_stack_calibrate|bowl_stack_native_preflight|bowl_stack_safe_reference|bowl_stack_replay|bowl_stack_recalibrate|bowl_stack_direction_sweep|bowl_stack_risk|bowl_stack_smoke|bowl_stack_analyze|bowl_stack_eval|baseline|control|risk|smoke|eval|all|record" >&2
+    echo "Expected check|debug|preview|sweep|calibrate|calibrate_candidate|bowl_stack_check|bowl_stack_preview|bowl_stack_validate|bowl_stack_first_policy_gate|bowl_stack_repair_eb|bowl_stack_calibrate|bowl_stack_native_preflight|bowl_stack_safe_reference|bowl_stack_replay|bowl_stack_recalibrate|bowl_stack_direction_sweep|bowl_stack_risk|bowl_stack_smoke|bowl_stack_eligibility|bowl_stack_analyze|bowl_stack_eval|baseline|control|risk|smoke|eval|all|record" >&2
     exit 2
     ;;
 esac

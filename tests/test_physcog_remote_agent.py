@@ -63,7 +63,7 @@ def test_l3a1_registry_exposes_only_gated_pipeline_phases():
 
 def test_l1c1_registry_exposes_gated_formal_pipeline_and_calibration_tools():
     assert set(phase for scenario, phase in PHASES if scenario == "l1c1") == {
-        "init", "preview", "validate_layout", "first_policy_gate", "repair_eb", "safe_reference", "smoke", "formal",
+        "init", "preview", "validate_layout", "first_policy_gate", "repair_eb", "safe_reference", "smoke", "eligibility", "formal",
         "recalibrate", "recalibrate15", "direction_sweep",
         "angle0", "angle45", "angle90", "angle135",
         "angle225", "angle270", "angle315",
@@ -94,6 +94,15 @@ def test_l1c1_registry_exposes_gated_formal_pipeline_and_calibration_tools():
     assert len(smoke.inputs) == 5
     assert all(not target.startswith("experiments/logs/") for _, target in smoke.inputs)
     assert any("smoke-repaired" in artifact for artifact in smoke.artifacts)
+    eligibility = PHASES[("l1c1", "eligibility")]
+    assert eligibility.count_env == "NUM_TRIALS"
+    assert "SAVE_VIDEO_MODE=none" in eligibility.command
+    assert "bowl_stack_eligibility" in eligibility.command
+    assert len(eligibility.inputs) == 5
+    assert all(
+        not target.startswith("experiments/logs/")
+        for _, target in eligibility.inputs
+    )
     formal = PHASES[("l1c1", "formal")]
     assert formal.count_env == "NUM_TRIALS"
     assert "RENDER_GPU_DEVICE_ID=1" in formal.command
@@ -146,6 +155,18 @@ def test_l1c1_smoke_reuses_frozen_repaired_bundle():
     assert "run_bowl_stack_native_preflight" in smoke_body
     assert "require_bowl_stack_bundle" in smoke_body
     assert "summarize_l1c1_smoke.py" in smoke_body
+
+
+def test_l1c1_eligibility_uses_repaired_probe_and_exact_replay():
+    runner = Path("experiments/robot/libero/tasks/run_l1c1_task2.sh").read_text()
+    body = runner.split("run_bowl_stack_eligibility() {", 1)[1].split("\n}", 1)[0]
+    assert "generate_bowl_stack_candidate" not in body
+    assert "require_repaired_eb_static_gate" in body
+    assert "run_bowl_stack_baseline" in body
+    assert "replay_l1c1_eb_actions.py" in body
+    assert "summarize_l1c1_eligibility.py" in body
+    replay = Path("experiments/robot/libero/tasks/replay_l1c1_eb_actions.py").read_text()
+    assert "restore_formal_observation(env, state)" in replay
 
 
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
