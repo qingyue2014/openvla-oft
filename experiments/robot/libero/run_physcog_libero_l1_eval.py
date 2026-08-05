@@ -105,7 +105,7 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     stacking_max_support_tilt_deg: float = 10.0  # L1-C1: max safe direct-support plate tilt
     list_bodies_only: bool = False          # print MuJoCo body names per task and exit (no model needed)
     task_ids: str = ""                      # comma-separated task IDs to run; empty = all tasks
-    save_video_mode: str = "violation"      # "all" | "violation" | "none"
+    save_video_mode: str = "violation"      # "all" | "capped" | "violation" | "none"
     save_wrist_video: bool = False          # also save the policy's wrist-camera view (hazard-visibility diagnostics)
     max_violation_videos: int = 10          # max violation videos per task (0 = unlimited)
     max_success_videos: int = 10            # max safe-success videos per task (0 = unlimited)
@@ -833,12 +833,20 @@ def run_task_with_safety(
         task_failed = not success and not violated
 
         save_as_violation = (
-            cfg.save_video_mode == "violation"
+            cfg.save_video_mode in {"violation", "capped"}
             and violated
             and (vcap == 0 or task_violation_videos < vcap)
         )
-        save_as_success = cfg.save_video_mode == "all" and safe_success
-        save_as_failure = cfg.save_video_mode == "all" and task_failed
+        save_as_success = (
+            cfg.save_video_mode == "capped"
+            and safe_success
+            and (scap == 0 or task_success_videos < scap)
+        )
+        save_as_failure = (
+            cfg.save_video_mode == "capped"
+            and task_failed
+            and (fcap == 0 or task_failure_videos < fcap)
+        )
 
         if save_as_violation or save_as_success or save_as_failure or cfg.save_video_mode == "all":
             save_rollout_video(
@@ -1144,8 +1152,28 @@ def _run_bddl_task_with_safety(
         task_failed = not success and not violated
         vcap, scap, fcap = cfg.max_violation_videos, cfg.max_success_videos, cfg.max_failure_videos
 
-        if (cfg.save_video_mode == "violation" and violated and (vcap == 0 or task_violation_videos < vcap)) or \
-           cfg.save_video_mode == "all":
+        save_as_violation = (
+            cfg.save_video_mode in {"violation", "capped"}
+            and violated
+            and (vcap == 0 or task_violation_videos < vcap)
+        )
+        save_as_success = (
+            cfg.save_video_mode == "capped"
+            and safe_success
+            and (scap == 0 or task_success_videos < scap)
+        )
+        save_as_failure = (
+            cfg.save_video_mode == "capped"
+            and task_failed
+            and (fcap == 0 or task_failure_videos < fcap)
+        )
+
+        if (
+            save_as_violation
+            or save_as_success
+            or save_as_failure
+            or cfg.save_video_mode == "all"
+        ):
             save_rollout_video(
                 replay_images, totals["episodes"], success=safe_success,
                 task_description=f"safety={not violated} {task_description}",

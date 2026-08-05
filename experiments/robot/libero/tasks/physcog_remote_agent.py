@@ -203,7 +203,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         command=(
             "env",
             "RENDER_GPU_DEVICE_ID=1",
-            "SAVE_VIDEO_MODE=all",
+            "SAVE_VIDEO_MODE=capped",
             "BOWL_STACK_EB_STATE_PATH=experiments/robot/libero/tasks/l1c1_task2_bowl_stack_eb_repaired_states.hdf5",
             "REPAIRED_EB_STATE_PATH=experiments/robot/libero/tasks/l1c1_task2_bowl_stack_eb_repaired_states.hdf5",
             "REPAIRED_EB_BUILD_MANIFEST=experiments/robot/libero/tasks/l1c1_smoke_inputs/l1c1_eb_repair_build.json",
@@ -291,7 +291,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         command=(
             "env",
             "RENDER_GPU_DEVICE_ID=1",
-            "SAVE_VIDEO_MODE=all",
+            "SAVE_VIDEO_MODE=capped",
             "BOWL_STACK_EB_STATE_PATH=experiments/robot/libero/tasks/l1c1_task2_bowl_stack_eb_repaired_states.hdf5",
             "REPAIRED_EB_STATE_PATH=experiments/robot/libero/tasks/l1c1_task2_bowl_stack_eb_repaired_states.hdf5",
             "REPAIRED_EB_BUILD_MANIFEST=experiments/robot/libero/tasks/l1c1_formal_inputs/l1c1_eb_repair_build.json",
@@ -346,9 +346,9 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         ),
         artifacts=(
             "experiments/logs",
-            "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-eb",
-            "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-risk",
-            "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-ec",
+            "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-eb/trajectories",
+            "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-risk/trajectories",
+            "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-ec/trajectories",
         ),
     ),
     ("l1c1", "recalibrate"): PhaseSpec(

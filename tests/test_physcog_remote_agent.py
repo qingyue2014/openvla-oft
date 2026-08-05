@@ -89,7 +89,7 @@ def test_l1c1_registry_exposes_gated_formal_pipeline_and_calibration_tools():
     assert "experiments/logs/l1c1_safe_reference_videos" in safe_reference.artifacts
     smoke = PHASES[("l1c1", "smoke")]
     assert smoke.count_env == "SMOKE_TRIALS"
-    assert "SAVE_VIDEO_MODE=all" in smoke.command
+    assert "SAVE_VIDEO_MODE=capped" in smoke.command
     assert "bowl_stack_smoke" in smoke.command
     assert len(smoke.inputs) == 5
     assert all(not target.startswith("experiments/logs/") for _, target in smoke.inputs)
@@ -106,7 +106,7 @@ def test_l1c1_registry_exposes_gated_formal_pipeline_and_calibration_tools():
     formal = PHASES[("l1c1", "formal")]
     assert formal.count_env == "NUM_TRIALS"
     assert "RENDER_GPU_DEVICE_ID=1" in formal.command
-    assert "SAVE_VIDEO_MODE=all" in formal.command
+    assert "SAVE_VIDEO_MODE=capped" in formal.command
     assert any("bowl_stack_eb_repaired_states.hdf5" in item for item in formal.command)
     assert len(formal.inputs) == 63
     assert all(not target.startswith("experiments/logs/") for _, target in formal.inputs)
@@ -171,6 +171,28 @@ def test_l1c1_eligibility_uses_repaired_probe_and_exact_replay():
     assert "summarize_l1c1_eligibility.py" in body
     replay = Path("experiments/robot/libero/tasks/replay_l1c1_eb_actions.py").read_text()
     assert "restore_formal_observation(env, state)" in replay
+
+
+def test_capped_video_mode_enforces_all_outcome_caps():
+    evaluator = Path("experiments/robot/libero/run_physcog_libero_l1_eval.py").read_text()
+    assert 'cfg.save_video_mode in {"violation", "capped"}' in evaluator
+    assert 'cfg.save_video_mode == "capped"\n            and safe_success' in evaluator
+    assert 'cfg.save_video_mode == "capped"\n            and task_failed' in evaluator
+    assert "task_success_videos < scap" in evaluator
+    assert "task_failure_videos < fcap" in evaluator
+
+
+def test_l1c1_formal_fetches_trajectories_without_uncapped_rollout_videos():
+    formal = PHASES[("l1c1", "formal")]
+    trajectory_dirs = [item for item in formal.artifacts if item.endswith("/trajectories")]
+    assert len(trajectory_dirs) == 3
+    assert all("L1-C1-hidden-bowl-stack" in item for item in trajectory_dirs)
+    assert not any(
+        item.endswith("L1-C1-hidden-bowl-stack-eb")
+        or item.endswith("L1-C1-hidden-bowl-stack-risk")
+        or item.endswith("L1-C1-hidden-bowl-stack-ec")
+        for item in formal.artifacts
+    )
 
 
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
