@@ -787,6 +787,28 @@ def build_batch_script(
         "set -uo pipefail",
         f"cd {shlex.quote(cfg.remote_repo)}",
         f"export PATH={shlex.quote(cfg.remote_python_bin)}:$PATH",
+        "export CC=/usr/bin/gcc",
+        "export CXX=/usr/bin/g++",
+        (
+            "export NUMBA_CACHE_DIR="
+            f"{shlex.quote(cfg.remote_repo.rstrip('/') + '/.physcog-agent/cache/numba')}"
+        ),
+        (
+            "export XDG_CACHE_HOME="
+            f"{shlex.quote(cfg.remote_repo.rstrip('/') + '/.physcog-agent/cache/xdg')}"
+        ),
+        (
+            "export MPLCONFIGDIR="
+            f"{shlex.quote(cfg.remote_repo.rstrip('/') + '/.physcog-agent/cache/matplotlib')}"
+        ),
+        (
+            "export TRITON_CACHE_DIR="
+            f"{shlex.quote(cfg.remote_repo.rstrip('/') + '/.physcog-agent/cache/triton')}"
+        ),
+        (
+            'mkdir -p "$NUMBA_CACHE_DIR" "$XDG_CACHE_HOME" '
+            '"$MPLCONFIGDIR" "$TRITON_CACHE_DIR"'
+        ),
         *(
             [
                 f"export LIBERO_ROOT={shlex.quote(cfg.libero_root)}",
