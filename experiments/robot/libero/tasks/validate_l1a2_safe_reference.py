@@ -1316,6 +1316,10 @@ def _run_episode(
     require_support_contact = bool(
         getattr(args, "require_support_contact_before_release", False)
     )
+    confirm_support_after_release = bool(
+        require_support_contact
+        or getattr(args, "confirm_support_after_release", False)
+    )
     if require_support_contact:
         # Concave bowl / rimmed-plate AABBs are too coarse for the final
         # release height. Stage above the support, then descend to real contact.
@@ -1689,7 +1693,7 @@ def _run_episode(
         obs, step, failure = _hold(
             env, obs, oracle, recorder, open_sign, args.release_steps, step
         )
-    if failure is None and require_support_contact:
+    if failure is None and confirm_support_after_release:
         (
             obs,
             step,
@@ -2194,6 +2198,7 @@ def main():
     parser.add_argument("--release_clearance", type=float, default=0.002)
     parser.add_argument("--contact_hold_steps", type=int, default=5)
     parser.add_argument("--require_support_contact_before_release", action="store_true")
+    parser.add_argument("--confirm_support_after_release", action="store_true")
     parser.add_argument("--support_contact_max_descent", type=float, default=0.12)
     parser.add_argument("--support_contact_max_steps", type=int, default=160)
     parser.add_argument("--place_descent_max_command", type=float, default=0.04)

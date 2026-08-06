@@ -278,6 +278,15 @@ safe_reference() {
   if [[ "${TASK4_SAFE_REF_REQUIRE_SUPPORT_CONTACT:-false}" == "true" ]]; then
     extra_args+=(--require_support_contact_before_release)
   fi
+  if [[ "${TASK4_SAFE_REF_CONFIRM_SUPPORT_AFTER_RELEASE:-false}" == "true" ]]; then
+    extra_args+=(--confirm_support_after_release)
+  fi
+  if [[ -n "${TASK4_SAFE_REF_MAX_POST_RELEASE_DISPLACEMENT:-}" ]]; then
+    extra_args+=(
+      --max_post_release_displacement
+      "${TASK4_SAFE_REF_MAX_POST_RELEASE_DISPLACEMENT}"
+    )
+  fi
   python "${TASKS_DIR}/validate_l1b_safe_reference.py" \
     --family "${FAMILY}" \
     --state_path "$(state_for er)" \

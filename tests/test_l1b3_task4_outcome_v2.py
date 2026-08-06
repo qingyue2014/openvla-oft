@@ -399,8 +399,11 @@ def test_v2_safe_reference_probe_is_labelled_and_preserves_diagnostics():
     assert "def _support_pos(env):" in shared_reference
     assert "def _support_aabb(env):" in shared_reference
     assert "TASK4_SAFE_REF_REQUIRE_SUPPORT_CONTACT" in runner
+    assert "TASK4_SAFE_REF_CONFIRM_SUPPORT_AFTER_RELEASE" in runner
+    assert "TASK4_SAFE_REF_MAX_POST_RELEASE_DISPLACEMENT" in runner
     assert "TASK4_SAFE_REF_PLACE_OFFSET_Y" in runner
     assert '("l1b3_task4_v2", "safe_reference_top_probe")' in remote_agent
+    assert '("l1b3_task4_v2", "safe_reference_release_probe")' in remote_agent
 
 
 def test_v2_review_videos_preserve_four_behavior_classes_and_caps():
