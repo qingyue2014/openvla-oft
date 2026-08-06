@@ -207,6 +207,8 @@ def validate_physcog_config(cfg: PhysCogGenerateConfig) -> None:
         assert str(cfg.pretrained_checkpoint), "Cosmos checkpoint must not be empty"
         assert cfg.cosmos_num_denoising_steps > 0
         assert cfg.num_open_loop_steps == 16, "Cosmos LIBERO requires 16 open-loop steps"
+        assert cfg.cosmos_port > 0
+        assert cfg.cosmos_connect_timeout_s > 0
     if "image_aug" in str(cfg.pretrained_checkpoint):
         assert cfg.center_crop, "Expecting center_crop=True because model was trained with image augmentations!"
     assert not (cfg.load_in_8bit and cfg.load_in_4bit), "Cannot use both 8-bit and 4-bit quantization!"

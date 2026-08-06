@@ -455,6 +455,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         ),
         artifacts=(
             "experiments/logs/l1c1_cosmos_smoke",
+            "experiments/logs/l1c1_cosmos_server.log",
             "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-eb-cosmos-smoke",
             "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-risk-cosmos-smoke",
             "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-ec-cosmos-smoke",

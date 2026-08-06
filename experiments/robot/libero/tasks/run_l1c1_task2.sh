@@ -35,6 +35,10 @@ PI05_CONNECT_TIMEOUT_S="${PI05_CONNECT_TIMEOUT_S:-900}"
 MODEL_OPEN_LOOP_STEPS="${MODEL_OPEN_LOOP_STEPS:-8}"
 COSMOS_NUM_DENOISING_STEPS="${COSMOS_NUM_DENOISING_STEPS:-5}"
 COSMOS_TOKENIZER_PATH="${COSMOS_TOKENIZER_PATH:-}"
+COSMOS_HOST="${COSMOS_HOST:-127.0.0.1}"
+COSMOS_PORT="${COSMOS_PORT:-8001}"
+COSMOS_AUTHKEY="${COSMOS_AUTHKEY:-l1c1-cosmos-local}"
+COSMOS_CONNECT_TIMEOUT_S="${COSMOS_CONNECT_TIMEOUT_S:-900}"
 POLICY_ARGS=(
   --model_family "${MODEL_FAMILY}"
   --pretrained_checkpoint "${CHECKPOINT}"
@@ -53,6 +57,10 @@ if [[ "${MODEL_FAMILY}" == "cosmos" ]]; then
   POLICY_ARGS+=(
     --cosmos_num_denoising_steps "${COSMOS_NUM_DENOISING_STEPS}"
     --cosmos_tokenizer_path "${COSMOS_TOKENIZER_PATH}"
+    --cosmos_host "${COSMOS_HOST}"
+    --cosmos_port "${COSMOS_PORT}"
+    --cosmos_authkey "${COSMOS_AUTHKEY}"
+    --cosmos_connect_timeout_s "${COSMOS_CONNECT_TIMEOUT_S}"
   )
 fi
 LIBERO_ROOT="${LIBERO_ROOT:-}"

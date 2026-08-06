@@ -7,8 +7,10 @@ OpenVLA and pi0.5 evaluation environments do not need the Cosmos runtime.
 from __future__ import annotations
 
 from contextlib import contextmanager
+from multiprocessing.connection import Client
 from pathlib import Path
 from typing import Any, Mapping
+import time
 
 import numpy as np
 
@@ -25,6 +27,7 @@ COSMOS_TOKENIZER_REPO_ID = "nvidia/Cosmos-Predict2-2B-Video2World"
 COSMOS_DEFAULT_TOKENIZER = Path(
     "/project/trllmout/models/Cosmos-Predict2-2B-Video2World/tokenizer/tokenizer.pth"
 )
+COSMOS_SERVER_PROTOCOL = 1
 
 
 def is_cosmos_model_family(model_family: str) -> bool:
@@ -245,5 +248,74 @@ class CosmosPolicy:
         """Cosmos Policy is stateless across action-chunk queries."""
 
 
-def get_cosmos_policy(cfg: Any) -> CosmosPolicy:
-    return CosmosPolicy(cfg)
+class CosmosPolicyClient:
+    """Small localhost client keeping Cosmos out of the simulator runtime."""
+
+    def __init__(self, cfg: Any):
+        self.address = (
+            str(getattr(cfg, "cosmos_host", "127.0.0.1")),
+            int(getattr(cfg, "cosmos_port", 8001)),
+        )
+        self.authkey = str(
+            getattr(cfg, "cosmos_authkey", "l1c1-cosmos-local")
+        ).encode()
+        timeout_s = float(getattr(cfg, "cosmos_connect_timeout_s", 900.0))
+        deadline = time.monotonic() + timeout_s
+        last_error: OSError | None = None
+        while time.monotonic() < deadline:
+            try:
+                self.connection = Client(self.address, authkey=self.authkey)
+                break
+            except OSError as exc:
+                last_error = exc
+                time.sleep(min(1.0, max(0.0, deadline - time.monotonic())))
+        else:
+            raise TimeoutError(
+                f"Timed out after {timeout_s:g}s waiting for Cosmos Policy "
+                f"server at {self.address[0]}:{self.address[1]}"
+            ) from last_error
+
+        metadata = self._request({"op": "metadata"})
+        if metadata.get("protocol") != COSMOS_SERVER_PROTOCOL:
+            raise RuntimeError(f"Cosmos server protocol mismatch: {metadata}")
+        print(
+            "Connected to Cosmos Policy server at "
+            f"{self.address[0]}:{self.address[1]}; metadata={metadata}"
+        )
+
+    def _request(self, request: Mapping[str, Any]) -> Mapping[str, Any]:
+        self.connection.send(dict(request))
+        response = self.connection.recv()
+        if not isinstance(response, Mapping):
+            raise RuntimeError("Cosmos server returned a non-mapping response")
+        if not response.get("ok"):
+            raise RuntimeError(
+                "Cosmos server request failed: "
+                f"{response.get('error', 'unknown error')}"
+            )
+        result = response.get("result")
+        if not isinstance(result, Mapping):
+            raise RuntimeError("Cosmos server response has no result mapping")
+        return result
+
+    def infer(self, observation: Mapping[str, Any], task_label: str) -> np.ndarray:
+        result = self._request(
+            {
+                "op": "infer",
+                "observation": dict(observation),
+                "task_label": str(task_label),
+            }
+        )
+        if "actions" not in result:
+            raise RuntimeError("Cosmos server inference response has no actions")
+        return validate_cosmos_actions(result["actions"])
+
+    def reset(self) -> None:
+        self._request({"op": "reset"})
+
+    def close(self) -> None:
+        self.connection.close()
+
+
+def get_cosmos_policy(cfg: Any) -> CosmosPolicyClient:
+    return CosmosPolicyClient(cfg)

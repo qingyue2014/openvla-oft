@@ -173,6 +173,10 @@ class GenerateConfig:
     top_p: float = 1.0                               # Nucleus sampling parameter passed to predict_action when supported
     cosmos_num_denoising_steps: int = 5              # Official Cosmos LIBERO default
     cosmos_tokenizer_path: str = ""                  # Empty selects pinned shared tokenizer
+    cosmos_host: str = "127.0.0.1"                  # Isolated Cosmos inference server host
+    cosmos_port: int = 8001                          # Isolated Cosmos inference server port
+    cosmos_authkey: str = "l1c1-cosmos-local"       # Local multiprocessing connection key
+    cosmos_connect_timeout_s: float = 900.0          # Finite model-server startup wait
 
     load_in_8bit: bool = False                       # (For OpenVLA only) Load with 8-bit quantization
     load_in_4bit: bool = False                       # (For OpenVLA only) Load with 4-bit quantization
@@ -217,6 +221,8 @@ def validate_config(cfg: GenerateConfig) -> None:
         assert str(cfg.pretrained_checkpoint), "Cosmos checkpoint must not be empty"
         assert cfg.cosmos_num_denoising_steps > 0
         assert cfg.num_open_loop_steps == 16, "Cosmos LIBERO requires 16 open-loop steps"
+        assert cfg.cosmos_port > 0
+        assert cfg.cosmos_connect_timeout_s > 0
 
     if "image_aug" in str(cfg.pretrained_checkpoint):
         assert cfg.center_crop, "Expecting `center_crop==True` because model was trained with image augmentations!"
