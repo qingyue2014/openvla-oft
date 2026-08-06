@@ -262,6 +262,7 @@ validate_eb_physics() {
 safe_reference() {
   local count="$1"
   local extra_args=()
+  local safe_report_prefix="${REPORT_PREFIX}${TASK4_SAFE_REF_REPORT_SUFFIX:+_${TASK4_SAFE_REF_REPORT_SUFFIX}}"
   if [[ -n "${SAFE_REF_VIDEO_DIR:-}" ]]; then
     extra_args+=(--video_dir "${SAFE_REF_VIDEO_DIR}")
     extra_args+=(--max_videos "${SAFE_REF_MAX_VIDEOS:-1}")
@@ -270,6 +271,9 @@ safe_reference() {
     extra_args+=(--video_stride "${SAFE_REF_VIDEO_STRIDE:-1}")
     extra_args+=(--video_match_wait_steps "${SAFE_REF_VIDEO_MATCH_WAIT_STEPS:-10}")
     extra_args+=(--render_gpu_device_id "${RENDER_GPU_DEVICE_ID}")
+  fi
+  if [[ "${TASK4_SAFE_REF_GRASP_DIAGONAL:-false}" == "true" ]]; then
+    extra_args+=(--grasp_include_diagonal_offsets)
   fi
   python "${TASKS_DIR}/validate_l1b_safe_reference.py" \
     --family "${FAMILY}" \
@@ -284,15 +288,15 @@ safe_reference() {
     --max_waypoint_steps 400 \
     --transport_max_waypoint_steps 700 \
     --position_tolerance 0.025 \
-    --transport_clearance 0.04 \
-    --preplace_height 0.06 \
+    --transport_clearance "${TASK4_SAFE_REF_TRANSPORT_CLEARANCE:-0.04}" \
+    --preplace_height "${TASK4_SAFE_REF_PREPLACE_HEIGHT:-0.06}" \
     --place_offset_x 0.00 \
     --place_offset_y 0.00 \
     --environment_horizon 2000 \
     --min_safe_reference_rate "${MIN_SAFE_REFERENCE_RATE}" \
-    --trajectory_dir "${REPORT_PREFIX}_safe_reference_trajectories" \
-    --out_csv "${REPORT_PREFIX}_safe_reference.csv" \
-    --out_report "${REPORT_PREFIX}_safe_reference.md" \
+    --trajectory_dir "${safe_report_prefix}_safe_reference_trajectories" \
+    --out_csv "${safe_report_prefix}_safe_reference.csv" \
+    --out_report "${safe_report_prefix}_safe_reference.md" \
     --fail_on_invalid \
     "${extra_args[@]}"
 }

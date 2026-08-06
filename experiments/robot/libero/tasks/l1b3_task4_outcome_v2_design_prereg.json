@@ -62,7 +62,8 @@
       "507994": "native-relative [-0.080, 0.000] produced 0/12 task successes",
       "508004": "safe-EB v3 smoke passed calibration and static gates but was invalidated because initial-gate v1 applied the 0.025 m/s stabilization limit to the pre-controller serialized-restore sample; all records were stable from controller no-op step 1 onward",
       "508043": "safe-EB v3 smoke produced 12/50 safe successes and selected 5/5 zero-penetration EB trajectories, but static validation invalidated ep002/ER because the calibrator had replayed serialized state without first restoring that pair's fixed-fixture layout seed; wine_bottle_1_main intersected wooden_cabinet_1_base in the correct native layout",
-      "508060": "fixture-reset-v2 calibration and exact initial-state gates passed, but the dynamic safe-reference gate failed 0/5 because its per-attempt reset restored serialized qpos/qvel without reconstructing the pair-specific fixed wooden-cabinet layout; invalidated before causal replay or ER/EC policy evaluation"
+      "508060": "fixture-reset-v2 calibration and exact initial-state gates passed, but the dynamic safe-reference gate failed 0/5 because its per-attempt reset restored serialized qpos/qvel without reconstructing the pair-specific fixed wooden-cabinet layout; invalidated before causal replay or ER/EC policy evaluation",
+      "508091": "isolated fixture-aware safe-reference replay still failed 0/5 and showed the legacy 0.04 m transport-clearance controller equilibrating 0.17-0.23 m short of the cabinet while carrying near z=1.03 m; tuning provenance only"
     },
     "accepted_tuning_job": {
       "507997": "native-relative [-0.020, 0.000] produced 1/12 safe successes and 1/12 harmful outcomes; the safe-success trajectory had zero protected contact penetration"

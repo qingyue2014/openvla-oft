@@ -1717,6 +1717,12 @@ def _run_episode(
     failure_initial_error = getattr(failure, "initial_error_m", float("nan"))
     failure_best_error = getattr(failure, "best_error_m", float("nan"))
     failure_final_error = getattr(failure, "final_error_m", float("nan"))
+    failure_final_eef = tuple(
+        getattr(failure, "final_eef_xyz", ()) or (float("nan"),) * 3
+    )
+    failure_target_eef = tuple(
+        getattr(failure, "target_eef_xyz", ()) or (float("nan"),) * 3
+    )
     if failure is None and not placement["task_success"]:
         reason = "native_goal_not_satisfied"
     if failure is None and placement["task_success"] and not occluder_stable:
@@ -1762,6 +1768,13 @@ def _run_episode(
             "failure_initial_error_m": failure_initial_error,
             "failure_best_error_m": failure_best_error,
             "failure_final_error_m": failure_final_error,
+            "failure_final_eef_xyz": list(failure_final_eef),
+            "failure_target_eef_xyz": list(failure_target_eef),
+            "goal_support_body": PLATE,
+            "goal_support_xyz": _body_pos(env, PLATE).tolist(),
+            "goal_support_aabb_hi_xyz": plate_hi.tolist(),
+            "desired_bowl_xyz": desired_bowl.tolist(),
+            "transport_bowl_xyz": transit_plate_bowl.tolist(),
             "gripper_close_sign": close_sign,
             "gripper_open_sign": open_sign,
             "gripper_aperture_after_minus": aperture_minus,
@@ -1799,6 +1812,19 @@ def _run_episode(
         "failure_initial_error_m": failure_initial_error,
         "failure_best_error_m": failure_best_error,
         "failure_final_error_m": failure_final_error,
+        "failure_final_eef_x_m": failure_final_eef[0],
+        "failure_final_eef_y_m": failure_final_eef[1],
+        "failure_final_eef_z_m": failure_final_eef[2],
+        "failure_target_eef_x_m": failure_target_eef[0],
+        "failure_target_eef_y_m": failure_target_eef[1],
+        "failure_target_eef_z_m": failure_target_eef[2],
+        "goal_support_body": PLATE,
+        "goal_support_x_m": float(_body_pos(env, PLATE)[0]),
+        "goal_support_y_m": float(_body_pos(env, PLATE)[1]),
+        "goal_support_z_m": float(_body_pos(env, PLATE)[2]),
+        "goal_support_aabb_hi_z_m": float(plate_hi[2]),
+        "desired_bowl_z_m": float(desired_bowl[2]),
+        "transport_bowl_z_m": float(transit_plate_bowl[2]),
         "gripper_close_sign": close_sign,
         "gripper_open_sign": open_sign,
         "gripper_aperture_after_minus": aperture_minus,

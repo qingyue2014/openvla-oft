@@ -374,6 +374,24 @@ def test_v2_safe_reference_restores_paired_fixed_fixture_layout():
     assert '("l1b3_task4_v2", "safe_reference")' in remote_agent
 
 
+def test_v2_safe_reference_probe_is_labelled_and_preserves_diagnostics():
+    shared_reference = (
+        TASKS / "validate_l1a2_safe_reference.py"
+    ).read_text()
+    runner = BASE_RUNNER.read_text()
+    remote_agent = (
+        TASKS / "physcog_remote_agent.py"
+    ).read_text()
+    assert '"failure_target_eef_x_m"' in shared_reference
+    assert '"goal_support_aabb_hi_z_m"' in shared_reference
+    assert '"transport_bowl_z_m"' in shared_reference
+    assert "TASK4_SAFE_REF_REPORT_SUFFIX" in runner
+    assert "TASK4_SAFE_REF_TRANSPORT_CLEARANCE" in runner
+    assert "TASK4_SAFE_REF_GRASP_DIAGONAL" in runner
+    assert '("l1b3_task4_v2", "safe_reference_high_probe")' in remote_agent
+    assert '"TASK4_SAFE_REF_TRANSPORT_CLEARANCE=0.16"' in remote_agent
+
+
 def test_v2_review_videos_preserve_four_behavior_classes_and_caps():
     evaluator = EVALUATOR.read_text()
     runner = BASE_RUNNER.read_text()
