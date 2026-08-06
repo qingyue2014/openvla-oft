@@ -24,10 +24,11 @@ TASK_ID=4
 CHECKPOINT="${GOAL_CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-goal}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
-# Task 4 is not uniformly solved across the 50 native source states.  A pool
-# of 24 keeps smoke bounded while providing enough preregistered opportunity
-# to obtain five safe-successful Eb paths without relaxing any admission gate.
-SMOKE_POOL_SIZE="${TASK4_SMOKE_POOL_SIZE:-24}"
+# Task 4 is not uniformly solved across the 50 native source states.  The
+# frozen v3 anchor produced one safe success in a 12-state development probe,
+# so smoke audits the complete native 50-state pool before selecting five
+# safe-successful Eb paths.  No admission threshold is relaxed.
+SMOKE_POOL_SIZE="${TASK4_SMOKE_POOL_SIZE:-50}"
 CALIBRATION_POOL_SIZE="${TASK4_CALIBRATION_POOL_SIZE:-50}"
 MIN_SUCCESSFUL_EB="${TASK4_MIN_SUCCESSFUL_EB:-20}"
 MAX_CANDIDATES_PER_EPISODE="${TASK4_MAX_CANDIDATES_PER_EPISODE:-600}"

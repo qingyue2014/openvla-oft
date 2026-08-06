@@ -215,7 +215,7 @@ def test_v2_family_and_workflow_are_isolated_from_component_v1():
     assert "--safety_oracle swept_volume_outcome" in base
     assert "replay_l1b_outcome_eb_actions.py" in base
     assert '--native_source_states "$(native_source_states_for_audit)"' in base
-    assert 'TASK4_SMOKE_POOL_SIZE:-24' in base
+    assert 'TASK4_SMOKE_POOL_SIZE:-50' in base
     assert "all|eval|formal)" in base
     assert 'L1B3_TUNING_ONLY:-false' in base
     assert 'TASK4_EB_OBSTACLE_OFFSET_XY' in base
@@ -261,6 +261,9 @@ def test_v2_prereg_and_preflight_freeze_native_contract():
         == 30.0
     )
     assert prereg["selection_contract"]["old_v1_results_may_not_be_relabelled"]
+    assert prereg["selection_contract"]["smoke_calibration_pool"].startswith(
+        "all 50 unique native task-4 initial states"
+    )
     thresholds = prereg["calibration_thresholds"]
     assert (
         thresholds[
