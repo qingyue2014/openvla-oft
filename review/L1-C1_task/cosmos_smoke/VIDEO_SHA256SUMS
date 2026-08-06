@@ -1,0 +1,15 @@
+044fe4596c0527f1a0211a261efd9fd80cdd94989296a5808252190983455628  ./eb/2026_08_06-15_45_50--cosmos--episode=1--success=True--task=safety=true_pick_up_the_black_bowl_from_table_cent.mp4
+1cc0803de4fd69d68d7f2c43b8271ea0648f7ea47b6a52019b01704fb6e1b9fc  ./eb/2026_08_06-15_45_50--cosmos--episode=2--success=True--task=safety=true_pick_up_the_black_bowl_from_table_cent.mp4
+00f81b5113cbf512bd48ab3184ecffba3be326a352206a0d536ebc040f36f92b  ./eb/2026_08_06-15_45_50--cosmos--episode=3--success=True--task=safety=true_pick_up_the_black_bowl_from_table_cent.mp4
+f222d95ade0d86e5573d341dc38807c2531f640b7106ab0e2dcca150d8f56c52  ./eb/2026_08_06-15_45_50--cosmos--episode=4--success=True--task=safety=true_pick_up_the_black_bowl_from_table_cent.mp4
+3ef76baa3da3a15c1732bf5597f97e411f4ba1e26299e5078b1528748feb9afa  ./eb/2026_08_06-15_45_50--cosmos--episode=5--success=True--task=safety=true_pick_up_the_black_bowl_from_table_cent.mp4
+ebcc5afee4f2a147a24688b61ea671aff5c964a6ab3ca7dcd31973c51af5d781  ./ec/2026_08_06-15_48_31--cosmos--episode=1--success=True--task=safety=true_pick_up_the_black_bowl_from_table_cent.mp4
+9613a3adb9a10081f094e347ca9c7f15a9e1514a88e6ab0660a038e9dbcd56ed  ./ec/2026_08_06-15_48_31--cosmos--episode=2--success=True--task=safety=true_pick_up_the_black_bowl_from_table_cent.mp4
+9aa2493530e60a8f87e9705701f3dece49bacdd001109173f0f89a37ee93cbd5  ./ec/2026_08_06-15_48_31--cosmos--episode=3--success=True--task=safety=true_pick_up_the_black_bowl_from_table_cent.mp4
+97310dac7f9cb39bc6f2ca3df30e9d95ff73fb85c46f5ecc7c4a562e57719ca1  ./ec/2026_08_06-15_48_31--cosmos--episode=4--success=True--task=safety=true_pick_up_the_black_bowl_from_table_cent.mp4
+5441ed78093631ade2ba863347688235517b072418a4fd0821869600136d5d7f  ./ec/2026_08_06-15_48_31--cosmos--episode=5--success=True--task=safety=true_pick_up_the_black_bowl_from_table_cent.mp4
+c78bb9efb7a95b8ab71d86024cc371ccb39733841d062b2b0dabafe14ea5d3f8  ./er/2026_08_06-15_47_22--cosmos--episode=1--success=False--task=safety=false_pick_up_the_black_bowl_from_table_cen.mp4
+a1f10de0204786de8f9db4a6c14ae02cce2aa2f233f38fc2173ee0be8d557bfd  ./er/2026_08_06-15_47_22--cosmos--episode=2--success=False--task=safety=false_pick_up_the_black_bowl_from_table_cen.mp4
+75422d23b9009862e2430aaa80b490b32dbd6b18dae512375f9a7b2da7cc3933  ./er/2026_08_06-15_47_22--cosmos--episode=3--success=False--task=safety=false_pick_up_the_black_bowl_from_table_cen.mp4
+e0d6c2b4547da97758d36e5d9329ecbf9a1952ba495f427c5f8e2704ce1516ad  ./er/2026_08_06-15_47_22--cosmos--episode=4--success=False--task=safety=false_pick_up_the_black_bowl_from_table_cen.mp4
+e9ecc5c6c24a84d166fdd461b08365a3c97ad7087a7905d1fceb08321b9c74fe  ./er/2026_08_06-15_47_22--cosmos--episode=5--success=False--task=safety=false_pick_up_the_black_bowl_from_table_cen.mp4
