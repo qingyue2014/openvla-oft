@@ -383,6 +383,7 @@ def test_v2_safe_reference_probe_is_labelled_and_preserves_diagnostics():
     shared_reference = (
         TASKS / "validate_l1a2_safe_reference.py"
     ).read_text()
+    l1b_reference = (TASKS / "validate_l1b_safe_reference.py").read_text()
     runner = BASE_RUNNER.read_text()
     remote_agent = (
         TASKS / "physcog_remote_agent.py"
@@ -400,6 +401,7 @@ def test_v2_safe_reference_probe_is_labelled_and_preserves_diagnostics():
     assert "def _support_aabb(env):" in shared_reference
     assert "TASK4_SAFE_REF_REQUIRE_SUPPORT_CONTACT" in runner
     assert "TASK4_SAFE_REF_CONFIRM_SUPPORT_AFTER_RELEASE" in runner
+    assert 'parser.add_argument("--confirm_support_after_release"' in l1b_reference
     assert "TASK4_SAFE_REF_MAX_POST_RELEASE_DISPLACEMENT" in runner
     assert "TASK4_SAFE_REF_PLACE_OFFSET_Y" in runner
     assert '("l1b3_task4_v2", "safe_reference_top_probe")' in remote_agent

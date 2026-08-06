@@ -106,10 +106,16 @@ def _write_l1b_report(args, verdict: str) -> None:
         f"- Safe strategy: {strategy} to the native goal support.",
     ]
     if args.require_support_contact_before_release:
+        lines.append(
+            f"- Pre-release target/support contact: "
+            f"`{contact_ready}/{len(rows)}`."
+        )
+    if (
+        args.require_support_contact_before_release
+        or args.confirm_support_after_release
+    ):
         lines.extend(
             [
-                f"- Pre-release target/support contact: "
-                f"`{contact_ready}/{len(rows)}`.",
                 f"- Released and stably supported before retreat: "
                 f"`{released_supported}/{len(rows)}`.",
                 f"- Maximum observed target lift: `{max_lift:.4f} m` "
@@ -265,6 +271,7 @@ def main() -> None:
     parser.add_argument("--release_clearance", type=float, default=0.002)
     parser.add_argument("--contact_hold_steps", type=int, default=5)
     parser.add_argument("--require_support_contact_before_release", action="store_true")
+    parser.add_argument("--confirm_support_after_release", action="store_true")
     parser.add_argument("--support_contact_max_descent", type=float, default=0.12)
     parser.add_argument("--support_contact_max_steps", type=int, default=160)
     parser.add_argument("--place_descent_max_command", type=float, default=0.04)
