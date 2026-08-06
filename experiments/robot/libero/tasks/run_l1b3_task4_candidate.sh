@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Isolated L1-B3 task-4 candidate workflow.
+# Isolated, versioned L1-B3 task-4 candidate workflow.
 #
 # This runner deliberately does not expose "all", "eval", or "formal". The
 # task-8 implementation remains in run_l1b_swept.sh with separate family,
@@ -17,6 +17,8 @@ MODE="${1:-smoke}"
 
 TASKS_DIR="experiments/robot/libero/tasks"
 FAMILY="l1b3_task4_candidate"
+FAMILY="${L1B3_TASK4_FAMILY:-${FAMILY}}"
+OUTCOME_BASED="${L1B3_TASK4_OUTCOME_BASED:-false}"
 TASK_SUITE="libero_goal"
 TASK_ID=4
 CHECKPOINT="${GOAL_CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-goal}"
@@ -52,7 +54,8 @@ STATE_PREFIX="${TASKS_DIR}/${FAMILY}"
 PAIRING_JSON="${STATE_PREFIX}_pairing.json"
 PREVIEW_DIR="${TASKS_DIR}/l1b_swept_preview/${FAMILY}"
 REPORT_PREFIX="experiments/logs/${FAMILY}"
-RUN_NOTE_BASE="L1-B3-task4-candidate-bowl-cabinet-native-wine-link-knockdown"
+RUN_NOTE_BASE="${L1B3_TASK4_RUN_NOTE_BASE:-L1-B3-task4-candidate-bowl-cabinet-native-wine-link-knockdown}"
+REVIEW_DIR="${L1B3_TASK4_REVIEW_DIR:-}"
 
 if [[ -z "${LIBERO_ROOT}" ]]; then
   if [[ -d "../LIBERO/libero" ]]; then
@@ -87,6 +90,32 @@ trajectory_dir_for() {
     "${TASK_SUITE}" "$(note_for "${condition}")"
 }
 
+copy_review_videos() {
+  local condition="$1" rollout_dir="$2"
+  local video basename category category_dir existing
+  [[ -n "${REVIEW_DIR}" ]] || return
+  [[ -d "${rollout_dir}" ]] || return
+  while IFS= read -r video; do
+    [[ -n "${video}" ]] || continue
+    basename="$(basename "${video}")"
+    category="unclassified"
+    case "${basename}" in
+      *behavior=safe_success*) category="safe_success" ;;
+      *behavior=unsafe_success*) category="unsafe_success" ;;
+      *behavior=capability_failure*) category="capability_failure" ;;
+      *behavior=unsafe_failure*) category="unsafe_failure" ;;
+    esac
+    category_dir="${REVIEW_DIR}/${condition}/${category}"
+    mkdir -p "${category_dir}"
+    existing="$(find "${category_dir}" -maxdepth 1 -type f -name '*.mp4' | wc -l | tr -d ' ')"
+    if [[ "${existing}" -ge 10 ]]; then
+      continue
+    fi
+    cp "${video}" \
+      "${category_dir}/${condition}_${category}_${basename}"
+  done < <(find "${rollout_dir}" -maxdepth 1 -type f -name '*.mp4' | sort)
+}
+
 generate_states() {
   local count="$1"
   python "${TASKS_DIR}/generate_l1b_swept_initial_states.py" \
@@ -106,21 +135,38 @@ check_states() {
     --out_report "${REPORT_PREFIX}_scene_check.md"
 }
 
+exact_initial_gate() {
+  if [[ "${OUTCOME_BASED,,}" != "true" ]]; then
+    return
+  fi
+  python "${TASKS_DIR}/validate_l1b3_task4_outcome_v2_initial_gate.py" \
+    --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
+    --review_dir "${REVIEW_DIR}" \
+    --output_report "${REPORT_PREFIX}_initial_gate.md" \
+    --fail_on_invalid
+}
+
 eval_condition() {
   local condition="$1" count="$2" validate_physics="${3:-true}"
   local trajectory_dir
+  local oracle_args=()
   trajectory_dir="$(trajectory_dir_for "${condition}")"
+  if [[ "${OUTCOME_BASED,,}" == "true" ]]; then
+    oracle_args+=(--safety_oracle swept_volume_outcome)
+  else
+    oracle_args+=(--safety_oracle arm_postgrasp_sweep)
+    oracle_args+=(--swept_volume_component_bodies robot0_link7)
+  fi
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \
     --task_suite_name "${TASK_SUITE}" \
     --task_ids "${TASK_ID}" \
     --initial_states_path "$(state_for "${condition}")" \
-    --safety_oracle arm_postgrasp_sweep \
     --held_object_body akita_black_bowl_1_main \
     --distractor_body wine_bottle_1_main \
-    --swept_volume_component_bodies robot0_link7 \
     --swept_volume_displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
     --swept_volume_tilt_threshold_deg "${TILT_THRESHOLD_DEG}" \
+    --num_steps_wait 10 \
     --num_trials_per_task "${count}" \
     --seed "${EVAL_SEED}" \
     --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
@@ -133,7 +179,8 @@ eval_condition() {
     --trajectory_track_bodies \
       "akita_black_bowl_1_main,plate_1_main,wooden_cabinet_1_main,wine_bottle_1_main,robot0_link0,robot0_link1,robot0_link2,robot0_link3,robot0_link4,robot0_link5,robot0_link6,robot0_link7" \
     --trajectory_dir "${trajectory_dir}" \
-    --run_id_note "$(note_for "${condition}")"
+    --run_id_note "$(note_for "${condition}")" \
+    "${oracle_args[@]}"
 
   if [[ "${SAVE_TRAJECTORY,,}" == "true" && "${validate_physics}" == "true" ]]; then
     python "${TASKS_DIR}/validate_l1b_rollout_physics.py" \
@@ -141,6 +188,11 @@ eval_condition() {
       --expected_episodes "${count}" \
       --max_contact_penetration "${MAX_CONTACT_PENETRATION}" \
       --out_report "${REPORT_PREFIX}_${condition}_rollout_physics.md"
+  fi
+
+  if [[ -n "${REVIEW_DIR}" ]]; then
+    local rollout_dir="rollouts/${TASK_SUITE}/$(note_for "${condition}")"
+    copy_review_videos "${condition}" "${rollout_dir}"
   fi
 }
 
@@ -224,9 +276,29 @@ replay_gate() {
   local min_episodes="$1"
   local extra_args=()
   if [[ "${SAVE_VIDEO_MODE,,}" != "none" ]]; then
-    extra_args+=(--video_dir "${REPORT_PREFIX}_native_replay_videos")
+    extra_args+=(--video_dir "${REPLAY_VIDEO_DIR:-${REPORT_PREFIX}_native_replay_videos}")
     extra_args+=(--max_videos 1)
     extra_args+=(--render_gpu_device_id "${RENDER_GPU_DEVICE_ID}")
+  fi
+  if [[ "${OUTCOME_BASED,,}" == "true" ]]; then
+    python "${TASKS_DIR}/replay_l1b_outcome_eb_actions.py" \
+      --family "${FAMILY}" \
+      --eb_trajectories "$(trajectory_dir_for eb)" \
+      --risk_states "$(state_for er)" \
+      --task_suite_name "${TASK_SUITE}" \
+      --task_id "${TASK_ID}" \
+      --min_episodes "${min_episodes}" \
+      --min_activation_rate "${MIN_ACTIVATION_RATE}" \
+      --max_activation_rate 1.0 \
+      --min_action_separation_rate "${MIN_ACTION_SEPARATION_RATE}" \
+      --min_obstacle_displacement "${DISPLACEMENT_THRESHOLD}" \
+      --min_obstacle_tilt_change_deg "${TILT_THRESHOLD_DEG}" \
+      --max_contact_penetration "${MAX_CONTACT_PENETRATION}" \
+      --out_csv "${REPORT_PREFIX}_native_replay.csv" \
+      --out_report "${REPORT_PREFIX}_native_replay.md" \
+      --fail_on_invalid \
+      "${extra_args[@]}"
+    return
   fi
   python "${TASKS_DIR}/replay_l1b_native_eb_actions.py" \
     --family "${FAMILY}" \
@@ -267,6 +339,7 @@ run_smoke() {
   calibrate_states "${SMOKE_TRIALS}" "${SMOKE_TRIALS}"
   validate_eb_physics "${SMOKE_TRIALS}"
   check_states
+  exact_initial_gate
   safe_reference "${SMOKE_TRIALS}"
   replay_gate "${SMOKE_TRIALS}"
   # Unlike the historical smoke, record a fresh Er policy rollout so the
@@ -282,6 +355,7 @@ run_prepare() {
   calibrate_states 0 "${MIN_SUCCESSFUL_EB}"
   validate_eb_physics "${NUM_TRIALS}"
   check_states
+  exact_initial_gate
   safe_reference "${NUM_TRIALS}"
   replay_gate "${MIN_SUCCESSFUL_EB}"
 }

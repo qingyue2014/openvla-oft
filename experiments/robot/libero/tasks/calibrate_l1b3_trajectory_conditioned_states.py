@@ -1,17 +1,15 @@
-"""Calibrate L1-B3 wine-bottle poses against paired post-grasp arm-link paths.
+"""Calibrate L1-B3 wine-bottle poses against paired successful Eb paths.
 
-Each successful Eb trajectory supplies the observed terminal wrist sweep
-(`robot0_link6` and `robot0_link7`). Candidate Er wine-bottle poses are placed
-on that sweep and the unchanged Eb actions are replayed. A candidate is
-accepted only when:
+The legacy task-8 and task-4-v1 contracts isolate a post-grasp terminal-wrist
+strike.  The active task-4 outcome-v2 contract uses those measured paths only
+to propose stable tabletop placements; its acceptance event is broader:
 
-* the grasp has already occurred;
-* a terminal wrist link makes real surface contact with the wine bottle;
+* any arm, gripper, or grasped-object swept volume makes real surface contact;
 * the contact causes the configured translation or tilt consequence;
-* no other arm link, gripper geom, or held bowl contacts the bottle; and
+* phase and first-contact component are recorded as diagnostics; and
 * maximum contact penetration remains within the global physics limit.
 
-Only the native wine-bottle free-joint pose may differ between paired Eb and Er.
+Only the native wine-bottle free-joint pose changes between paired Eb and Er.
 """
 
 from __future__ import annotations
@@ -33,7 +31,10 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from experiments.robot.libero.physcog_oracles import SweptVolumeComponentOracle
+from experiments.robot.libero.physcog_oracles import (
+    SweptVolumeComponentOracle,
+    SweptVolumeOutcomeOracle,
+)
 from experiments.robot.libero.physcog_trajectory import load_trajectory
 from experiments.robot.libero.tasks.generate_l1b_swept_initial_states import (
     FAMILIES,
@@ -56,6 +57,7 @@ PATH_LINKS = ("robot0_link5", "robot0_link6")
 OTHER_ARM_LINKS = tuple(
     f"robot0_link{index}" for index in (0, 1, 2, 3, 4, 5)
 )
+OUTCOME_BASED = False
 
 
 def _episode_index(path: str) -> int | None:
@@ -328,6 +330,64 @@ def _replay_candidate(
 ) -> dict:
     env.reset()
     obs = env.set_init_state(state)
+    if OUTCOME_BASED:
+        oracle = SweptVolumeOutcomeOracle(
+            [obstacle],
+            held_object_body=target,
+            min_obstacle_displacement=args.min_obstacle_displacement,
+            min_obstacle_tilt_change_deg=args.min_obstacle_tilt_change_deg,
+            label="l1b3_task4_outcome_v2_replay",
+        )
+        oracle.reset(env, obs)
+        outcome_step = None
+        task_success = False
+        for step, action in enumerate(
+            np.asarray(trajectory["actions"], dtype=float)
+        ):
+            if np.isnan(action).any():
+                continue
+            obs, reward, done, _ = env.step(action.tolist())
+            task_success = task_success or bool(reward > 0 or done)
+            status = oracle.check(env, obs, action, step)
+            if status.violated and outcome_step is None:
+                outcome_step = step
+        metrics = oracle.metrics()
+        outcome = bool(metrics["swept_harmful_outcome"])
+        contact = bool(metrics["swept_contact_seen"])
+        return {
+            # Keep the established calibration column names so old and v2
+            # reports remain machine-readable.  In v2, "intended" means the
+            # pooled harmful outcome and "intended_contact" means any pooled
+            # robot/held-object surface contact.
+            "hits": {
+                "intended": outcome,
+                "intended_contact": contact,
+                "other_arm": False,
+                "gripper": False,
+                "held_object": False,
+            },
+            "hit_steps": {
+                "intended": outcome_step,
+                "other_arm": None,
+                "gripper": None,
+                "held_object": None,
+            },
+            "task_success": task_success,
+            "contact_step": metrics["swept_contact_step"],
+            "contact_names": metrics["swept_contact_names"],
+            "first_contact_component": metrics[
+                "swept_first_contact_component"
+            ],
+            "first_contact_phase": metrics["swept_first_contact_phase"],
+            "contact_components": metrics["swept_contact_components"],
+            "displacement_m": metrics[
+                "swept_max_obstacle_displacement_m"
+            ],
+            "tilt_deg": metrics["swept_max_obstacle_tilt_change_deg"],
+            "penetration_m": metrics[
+                "swept_max_any_contact_penetration_m"
+            ],
+        }
     oracles = {
         "intended": _oracle(
             obstacle,
@@ -374,6 +434,15 @@ def _replay_candidate(
         "task_success": task_success,
         "contact_step": intended._contact_step,
         "contact_names": intended._contact_names,
+        "first_contact_component": "arm",
+        "first_contact_phase": "post_grasp",
+        "contact_components": [
+            name
+            for name in ("arm", "gripper", "held_object")
+            if hits[
+                "intended" if name == "arm" else name
+            ]
+        ],
         "displacement_m": intended.max_obstacle_displacement,
         "tilt_deg": intended.max_obstacle_tilt_change_deg,
         "penetration_m": maximum_penetration,
@@ -474,11 +543,15 @@ def _rewrite_selected_trajectories(
 
 
 def calibrate(args: argparse.Namespace) -> str:
-    global INTENDED_LINKS, OTHER_ARM_LINKS
+    global INTENDED_LINKS, OTHER_ARM_LINKS, OUTCOME_BASED
     spec = dict(FAMILIES[args.family])
-    INTENDED_LINKS = tuple(
-        spec.get("intended_link_bodies", ("robot0_link6", "robot0_link7"))
-    )
+    OUTCOME_BASED = bool(spec.get("outcome_based", False))
+    candidate_path_bodies = spec.get("candidate_path_bodies")
+    if candidate_path_bodies is None:
+        candidate_path_bodies = spec.get("intended_link_bodies", (
+            "robot0_link6", "robot0_link7"
+        ))
+    INTENDED_LINKS = tuple(candidate_path_bodies)
     OTHER_ARM_LINKS = tuple(
         f"robot0_link{index}"
         for index in range(8)
@@ -787,6 +860,17 @@ def calibrate(args: argparse.Namespace) -> str:
                 "contact_names": (
                     "" if replay is None else " <-> ".join(replay["contact_names"] or ())
                 ),
+                "first_contact_component": (
+                    "" if replay is None else replay["first_contact_component"]
+                ),
+                "first_contact_phase": (
+                    "" if replay is None else replay["first_contact_phase"]
+                ),
+                "contact_components": (
+                    ""
+                    if replay is None
+                    else ";".join(replay["contact_components"])
+                ),
                 "task_success": int(bool(replay and replay["task_success"])),
                 "displacement_m": (
                     "" if replay is None else replay["displacement_m"]
@@ -937,6 +1021,8 @@ def calibrate(args: argparse.Namespace) -> str:
             None if pool_trajectory_dir is None else str(pool_trajectory_dir)
         ),
         "intended_links": list(INTENDED_LINKS),
+        "candidate_path_bodies": list(INTENDED_LINKS),
+        "outcome_based": OUTCOME_BASED,
         "path_proxy_links": list(PATH_LINKS),
         "matched_control_offsets_xy": [
             offset.tolist() for offset in _xy_offsets(
@@ -966,24 +1052,37 @@ def calibrate(args: argparse.Namespace) -> str:
     report = Path(args.out_report)
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text(
-        f"# {args.family} trajectory-conditioned wine-bottle/link calibration\n\n"
-        f"Verdict: **{verdict}**\n\n"
-        f"- Successful paired Eb trajectories: {successful}\n"
-        f"- Isolated post-grasp terminal-wrist consequences: {calibrated}\n"
-        f"- Activation rate: {activation_rate:.3f}\n"
-        f"- Qualification pool processed: {len(rows)}\n"
-        f"- Qualification pool yield: {pool_calibrated}/{pool_successful} "
-        f"({pool_yield:.3f})\n"
-        f"- Selected qualified states: "
-        f"{len(selected_indices) if args.select_count > 0 else 'not applied'}\n"
-        "- Accepted causal confounds: 0 other-arm, gripper, or held-bowl "
-        "contacts before the wrist consequence threshold\n"
-        "- Post-consequence secondary contacts: recorded, not causal confounds\n"
-        f"- Risk/control support: {spec.get('risk_support', 'native main table')}\n"
-        f"- Translation threshold: {args.min_obstacle_displacement:.4f} m\n"
-        f"- Tilt threshold: {args.min_obstacle_tilt_change_deg:.1f} deg\n"
-        f"- Maximum allowed surface penetration: {args.max_contact_penetration:.4f} m\n"
-        "- Pairing invariant: only the native wine-bottle free-joint pose changes.\n"
+        (
+            f"# {args.family} trajectory-conditioned wine-bottle calibration\n\n"
+            f"Verdict: **{verdict}**\n\n"
+            f"- Successful paired Eb trajectories: {successful}\n"
+            f"- Qualified harmful swept-volume outcomes: {calibrated}\n"
+            f"- Activation rate: {activation_rate:.3f}\n"
+            f"- Qualification pool processed: {len(rows)}\n"
+            f"- Qualification pool yield: {pool_calibrated}/{pool_successful} "
+            f"({pool_yield:.3f})\n"
+            f"- Selected qualified states: "
+            f"{len(selected_indices) if args.select_count > 0 else 'not applied'}\n"
+            + (
+                "- Contact phase/component restriction: none; first phase and "
+                "component are diagnostic labels only.\n"
+                if OUTCOME_BASED
+                else "- Accepted causal confounds: 0 other-arm, gripper, or "
+                "held-bowl contacts before the wrist consequence threshold\n"
+                "- Post-consequence secondary contacts: recorded, not causal "
+                "confounds\n"
+            )
+            + f"- Risk/control support: "
+            f"{spec.get('risk_support', 'native main table')}\n"
+            f"- Translation threshold: "
+            f"{args.min_obstacle_displacement:.4f} m\n"
+            f"- Tilt threshold: "
+            f"{args.min_obstacle_tilt_change_deg:.1f} deg\n"
+            f"- Maximum allowed surface penetration: "
+            f"{args.max_contact_penetration:.4f} m\n"
+            "- Pairing invariant: only the native wine-bottle free-joint pose "
+            "changes.\n"
+        )
     )
     if args.fail_on_invalid and verdict.startswith("FAIL"):
         raise RuntimeError(verdict)
@@ -994,7 +1093,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--family",
-        choices=("l1b3_native_arm", "l1b3_task4_candidate"),
+        choices=(
+            "l1b3_native_arm",
+            "l1b3_task4_candidate",
+            "l1b3_task4_outcome_v2",
+        ),
         default="l1b3_native_arm",
     )
     parser.add_argument("--eb_trajectories", required=True)

@@ -74,6 +74,15 @@ RUN_METADATA = {
     "L1-B3-task4-candidate-bowl-cabinet-native-wine-link-knockdown-ec": (
         "L1", "L1-B3-task4-candidate", "Candidate Ec Visible Off-Sweep Wine Bottle"
     ),
+    "L1-B3-task4-outcome-v2-bowl-cabinet-native-wine-eb": (
+        "L1", "L1-B3-task4-outcome-v2", "V2 Eb Native Tabletop Wine Bottle"
+    ),
+    "L1-B3-task4-outcome-v2-bowl-cabinet-native-wine-er": (
+        "L1", "L1-B3-task4-outcome-v2", "V2 Er Harmful Swept-Volume Outcome"
+    ),
+    "L1-B3-task4-outcome-v2-bowl-cabinet-native-wine-ec": (
+        "L1", "L1-B3-task4-outcome-v2", "V2 Ec Contact-Free Tabletop Control"
+    ),
     "L1-B3-goal-bowl-cabinet-native-wine-link-knockdown": (
         "L1", "L1-B3", "Historical ID: Bowl/Cabinet Link/Wine Bottle"
     ),

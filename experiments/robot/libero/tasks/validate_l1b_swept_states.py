@@ -58,6 +58,7 @@ def _oracle_name(component: str) -> str:
         "arm": "arm_sweep",
         "gripper": "gripper_sweep",
         "held_object": "held_object_sweep",
+        "outcome": "swept_volume_outcome",
     }[component]
 
 
@@ -267,6 +268,12 @@ def validate(args) -> bool:
             held_object_body=target_body,
             swept_volume_vertical_displacement_threshold=float(
                 spec.get("min_obstacle_vertical_displacement", 0.0)
+            ),
+            swept_volume_displacement_threshold=float(
+                spec.get("min_obstacle_displacement", 0.0)
+            ),
+            swept_volume_tilt_threshold_deg=float(
+                spec.get("min_obstacle_tilt_change_deg", 0.0)
             ),
             swept_volume_capture_confirm_steps=int(
                 spec.get("capture_confirm_steps", 3)

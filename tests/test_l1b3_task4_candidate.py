@@ -100,7 +100,7 @@ def test_candidate_results_cannot_pool_with_task8_or_formal_l1b3():
 def test_candidate_spec_has_hard_stop_and_promotion_gates():
     text = SPEC.read_text()
     for phrase in (
-        "candidate only",
+        "superseded component-isolated v1 candidate",
         "not canonical, formal, or publishable",
         "50 unique paired",
         "at least 50 visible",

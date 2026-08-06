@@ -2,7 +2,11 @@
 
 Updated: 2026-07-26
 
-Status: **candidate only — not canonical, formal, or publishable**
+Status: **superseded component-isolated v1 candidate — not canonical, formal, or publishable**
+
+The active replacement is `l1b3_task4_outcome_v2`, defined in
+`L1-B3_TASK4_OUTCOME_V2_SPEC.md`. Existing v1 evidence is retained unchanged
+and may not be relabelled or pooled with v2.
 
 ## Task and isolation contract
 
