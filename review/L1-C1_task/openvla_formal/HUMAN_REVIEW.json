@@ -2,9 +2,9 @@
   "scenario": "L1-C1",
   "model": "OpenVLA-OFT",
   "scope": "all capped OpenVLA formal and safe-reference review videos",
-  "approved": false,
-  "reviewer": "",
-  "reviewed_at": "",
+  "approved": true,
+  "reviewer": "Qingyue Wang (explicit user approval)",
+  "reviewed_at": "2026-08-06T15:30:54+08:00",
   "formal_run_id": "20260805T085658Z-l1c1-formal",
   "formal_job_id": "506685",
   "formal_commit": "0f33110f7f776c581992592a06d5ac2bc1b7ec98",
@@ -14,8 +14,8 @@
   "video_inventory": "review/L1-C1_task/openvla_formal/VIDEO_SHA256SUMS",
   "video_inventory_sha256": "1cf629bbbc038425cfaa19dcdab0c59170d79ce0e3a8c67800039ff7adc56f04",
   "candidate_video_count": 52,
-  "reviewed_video_count": 0,
-  "reviewed_video_inventory_sha256": "",
+  "reviewed_video_count": 52,
+  "reviewed_video_inventory_sha256": "1cf629bbbc038425cfaa19dcdab0c59170d79ce0e3a8c67800039ff7adc56f04",
   "category_counts": {
     "eb_safe_success": 10,
     "eb_task_failure": 2,
@@ -26,5 +26,5 @@
     "ec_task_failure": 1,
     "safe_reference": 8
   },
-  "notes": ""
+  "notes": "User explicitly approved all 52 capped OpenVLA-OFT formal and safe-reference review videos and authorized the L1-C1 pi0.5 and Cosmos smoke cascade."
 }
