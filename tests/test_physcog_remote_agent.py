@@ -194,10 +194,12 @@ def test_l1b3_task4_registry_exposes_candidate_phases_without_formal():
         assert any(artifact.endswith(suffix) for artifact in full.artifacts)
 
 
-def test_l1b3_task4_v2_negative_y_anchor_probes_are_tuning_only():
+def test_l1b3_task4_v2_anchor_probes_are_tuning_only():
     for phase, offset in (
         ("eb_probe_ym08", "TASK4_EB_OBSTACLE_OFFSET_XY=0.000,-0.080"),
         ("eb_probe_ym12", "TASK4_EB_OBSTACLE_OFFSET_XY=0.000,-0.120"),
+        ("eb_probe_xm08", "TASK4_EB_OBSTACLE_OFFSET_XY=-0.080,0.000"),
+        ("eb_probe_xm12", "TASK4_EB_OBSTACLE_OFFSET_XY=-0.120,0.000"),
     ):
         spec = PHASES[("l1b3_task4_v2", phase)]
         assert "L1B3_TUNING_ONLY=true" in spec.command
