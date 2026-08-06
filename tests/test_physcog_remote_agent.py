@@ -200,6 +200,8 @@ def test_l1b3_task4_v2_anchor_probes_are_tuning_only():
         ("eb_probe_ym12", "TASK4_EB_OBSTACLE_OFFSET_XY=0.000,-0.120"),
         ("eb_probe_xm08", "TASK4_EB_OBSTACLE_OFFSET_XY=-0.080,0.000"),
         ("eb_probe_xm12", "TASK4_EB_OBSTACLE_OFFSET_XY=-0.120,0.000"),
+        ("eb_probe_xm02", "TASK4_EB_OBSTACLE_OFFSET_XY=-0.020,0.000"),
+        ("eb_probe_xm04", "TASK4_EB_OBSTACLE_OFFSET_XY=-0.040,0.000"),
     ):
         spec = PHASES[("l1b3_task4_v2", phase)]
         assert "L1B3_TUNING_ONLY=true" in spec.command
