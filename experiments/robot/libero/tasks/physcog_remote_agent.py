@@ -833,6 +833,30 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1b3_task4_outcome_v2_safe_reference_high_probe_videos",
         ),
     ),
+    ("l1b3_task4_v2", "safe_reference_top_probe"): PhaseSpec(
+        command=(
+            "env",
+            "PHYSCG_EXECUTION_HOST=superpod",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAFE_REF_MAX_VIDEOS=1",
+            "TASK4_SAFE_REF_REPORT_SUFFIX=top_probe",
+            "TASK4_SAFE_REF_TRANSPORT_CLEARANCE=0.04",
+            "TASK4_SAFE_REF_GRASP_DIAGONAL=true",
+            "TASK4_SAFE_REF_REQUIRE_SUPPORT_CONTACT=true",
+            "TASK4_SAFE_REF_PLACE_OFFSET_Y=0.03",
+            "SAFE_REF_VIDEO_DIR=experiments/logs/l1b3_task4_outcome_v2_safe_reference_top_probe_videos",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1b3_task4_outcome_v2.sh",
+            "safe_reference",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1b3_task4_outcome_v2_top_probe_safe_reference.md",
+            "experiments/logs/l1b3_task4_outcome_v2_top_probe_safe_reference.csv",
+            "experiments/logs/l1b3_task4_outcome_v2_top_probe_safe_reference_trajectories",
+            "experiments/logs/l1b3_task4_outcome_v2_safe_reference_top_probe_videos",
+        ),
+    ),
     ("l1b3_task4_v2", "prepare"): PhaseSpec(
         command=(
             "env",

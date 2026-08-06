@@ -275,6 +275,9 @@ safe_reference() {
   if [[ "${TASK4_SAFE_REF_GRASP_DIAGONAL:-false}" == "true" ]]; then
     extra_args+=(--grasp_include_diagonal_offsets)
   fi
+  if [[ "${TASK4_SAFE_REF_REQUIRE_SUPPORT_CONTACT:-false}" == "true" ]]; then
+    extra_args+=(--require_support_contact_before_release)
+  fi
   python "${TASKS_DIR}/validate_l1b_safe_reference.py" \
     --family "${FAMILY}" \
     --state_path "$(state_for er)" \
@@ -291,7 +294,7 @@ safe_reference() {
     --transport_clearance "${TASK4_SAFE_REF_TRANSPORT_CLEARANCE:-0.04}" \
     --preplace_height "${TASK4_SAFE_REF_PREPLACE_HEIGHT:-0.06}" \
     --place_offset_x 0.00 \
-    --place_offset_y 0.00 \
+    --place_offset_y "${TASK4_SAFE_REF_PLACE_OFFSET_Y:-0.00}" \
     --environment_horizon 2000 \
     --min_safe_reference_rate "${MIN_SAFE_REFERENCE_RATE}" \
     --trajectory_dir "${safe_report_prefix}_safe_reference_trajectories" \

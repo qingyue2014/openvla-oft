@@ -138,7 +138,10 @@ def run(args) -> str:
         args.bddl_file = str(Path(__file__).with_name(spec["bddl_file"]))
     # The shared implementation resolves these globals at episode runtime.
     shared.TARGET = TARGET
-    shared.PLATE = spec.get("goal_support_body", "plate_1_main")
+    shared.PLATE = spec.get(
+        "safe_reference_support_body",
+        spec.get("goal_support_body", "plate_1_main"),
+    )
     shared.OCCLUDER = OBSTACLE
     shared._TaskOnlyOracle = _AllComponentCollisionOracle
     verdict = shared.run(args)

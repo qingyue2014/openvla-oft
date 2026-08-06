@@ -242,6 +242,10 @@ FAMILIES = {
         "obstacle_body": WINE_BOTTLE_BODY,
         "target_body": TARGET_BODY,
         "goal_support_body": "wooden_cabinet_1_main",
+        # The native goal predicate names this child body explicitly. Keep
+        # the fixture root for inventory/pairing audits, but use the actual
+        # supporting surface for safe-reference placement and contact checks.
+        "safe_reference_support_body": "wooden_cabinet_1_top_side",
         "bddl_file": None,
         "native_assets_only": True,
         "preserve_native_layout": True,
