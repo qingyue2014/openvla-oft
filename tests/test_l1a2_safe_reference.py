@@ -14,6 +14,27 @@ class _NativeSuccessEnv:
         return self._success
 
 
+def test_native_placement_site_world_bounds_are_used(monkeypatch):
+    rotation = np.array(
+        [[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]
+    )
+    model = SimpleNamespace(
+        site_name2id=lambda name: 0 if name == "cabinet_top_side" else -1,
+        site_size=np.array([[0.10, 0.20, 0.01]]),
+    )
+    data = SimpleNamespace(
+        site_xpos=np.array([[1.0, 2.0, 3.0]]),
+        site_xmat=np.array([rotation.reshape(-1)]),
+    )
+    env = SimpleNamespace(sim=SimpleNamespace(model=model, data=data))
+    monkeypatch.setattr(reference, "PLACEMENT_SITE", "cabinet_top_side")
+
+    np.testing.assert_allclose(reference._support_pos(env), [1.0, 2.0, 3.0])
+    low, high = reference._support_aabb(env)
+    np.testing.assert_allclose(low, [0.8, 1.9, 2.99])
+    np.testing.assert_allclose(high, [1.2, 2.1, 3.01])
+
+
 def test_native_goal_is_authoritative_over_asset_aabb_gap(monkeypatch):
     positions = {
         reference.TARGET: np.array([0.0, 0.0, 0.9]),

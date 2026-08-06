@@ -142,6 +142,7 @@ def run(args) -> str:
         "safe_reference_support_body",
         spec.get("goal_support_body", "plate_1_main"),
     )
+    shared.PLACEMENT_SITE = spec.get("safe_reference_placement_site", "")
     shared.OCCLUDER = OBSTACLE
     shared._TaskOnlyOracle = _AllComponentCollisionOracle
     verdict = shared.run(args)

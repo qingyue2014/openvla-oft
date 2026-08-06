@@ -32,6 +32,7 @@ from experiments.robot.libero.physcog_trajectory import TrajectoryRecorder
 
 TARGET = "akita_black_bowl_1_main"
 PLATE = "plate_1_main"
+PLACEMENT_SITE = ""
 OCCLUDER = "cookies_1_main"
 
 
@@ -227,6 +228,31 @@ def _quat_error_axis_angle(current, target):
 
 def _body_pos(env, name):
     return np.asarray(env.sim.data.body_xpos[env.sim.model.body_name2id(name)], dtype=float).copy()
+
+
+def _support_pos(env):
+    """Return the native placement-region center, or the support-body origin."""
+    if PLACEMENT_SITE:
+        site_id = env.sim.model.site_name2id(PLACEMENT_SITE)
+        return np.asarray(env.sim.data.site_xpos[site_id], dtype=float).copy()
+    return _body_pos(env, PLATE)
+
+
+def _support_aabb(env):
+    """Return the world AABB of the placement site or fallback support body."""
+    if not PLACEMENT_SITE:
+        from experiments.robot.libero.tasks.generate_l1a2_initial_states import (
+            _world_aabb,
+        )
+
+        return _world_aabb(env, PLATE)
+    site_id = env.sim.model.site_name2id(PLACEMENT_SITE)
+    center = np.asarray(env.sim.data.site_xpos[site_id], dtype=float)
+    rotation = np.asarray(env.sim.data.site_xmat[site_id], dtype=float).reshape(3, 3)
+    half_extent = np.abs(rotation) @ np.asarray(
+        env.sim.model.site_size[site_id], dtype=float
+    )
+    return center - half_extent, center + half_extent
 
 
 def _eef_local_body_offset(env, obs, body):
@@ -622,8 +648,8 @@ def _bowl_on_plate(env, args) -> dict:
     from experiments.robot.libero.tasks.generate_l1a2_initial_states import _world_aabb
 
     bowl_pos = _body_pos(env, TARGET)
-    plate_pos = _body_pos(env, PLATE)
-    plate_lo, plate_hi = _world_aabb(env, PLATE)
+    plate_pos = _support_pos(env)
+    plate_lo, plate_hi = _support_aabb(env)
     bowl_lo, _ = _world_aabb(env, TARGET)
     xy_offset = float(np.linalg.norm(bowl_pos[:2] - plate_pos[:2]))
     bottom_gap = float(bowl_lo[2] - plate_hi[2])
@@ -945,7 +971,7 @@ def _run_episode(
             or preorientation_via_y is not None
         ):
             source_to_plate = (
-                _body_pos(env, PLATE)[:2] - _body_pos(env, TARGET)[:2]
+                _support_pos(env)[:2] - _body_pos(env, TARGET)[:2]
             )
             corridor_norm = float(np.linalg.norm(source_to_plate))
             if corridor_norm > 1e-6:
@@ -953,7 +979,7 @@ def _run_episode(
                     [-source_to_plate[1], source_to_plate[0]], dtype=float
                 ) / corridor_norm
                 midpoint = 0.5 * (
-                    _body_pos(env, TARGET)[:2] + _body_pos(env, PLATE)[:2]
+                    _body_pos(env, TARGET)[:2] + _support_pos(env)[:2]
                 )
                 obstacle_side = float(
                     np.dot(_body_pos(env, OCCLUDER)[:2] - midpoint, normal)
@@ -1194,13 +1220,13 @@ def _run_episode(
         postorientation_min_path_progress = float(
             getattr(args, "postorientation_min_path_progress", 0.0)
         )
-        source_to_plate = _body_pos(env, PLATE)[:2] - source[:2]
+        source_to_plate = _support_pos(env)[:2] - source[:2]
         corridor_norm = float(np.linalg.norm(source_to_plate))
         if corridor_norm > 1e-6:
             normal = np.asarray(
                 [-source_to_plate[1], source_to_plate[0]], dtype=float
             ) / corridor_norm
-            midpoint = 0.5 * (source[:2] + _body_pos(env, PLATE)[:2])
+            midpoint = 0.5 * (source[:2] + _support_pos(env)[:2])
             obstacle_side = float(
                 np.dot(_body_pos(env, OCCLUDER)[:2] - midpoint, normal)
             )
@@ -1272,8 +1298,8 @@ def _run_episode(
     # rigid grasp offset, avoiding hard-coded asset dimensions.
     bowl_lo, _ = _world_aabb(env, TARGET)
     bowl_origin_to_bottom = float(_body_pos(env, TARGET)[2] - bowl_lo[2])
-    _, plate_hi = _world_aabb(env, PLATE)
-    desired_bowl = _body_pos(env, PLATE).copy()
+    _, plate_hi = _support_aabb(env)
+    desired_bowl = _support_pos(env).copy()
     desired_bowl[0] += getattr(args, "place_offset_x", 0.0)
     desired_bowl[1] += getattr(args, "place_offset_y", 0.0)
     transport_desired_bowl = desired_bowl.copy()
@@ -1281,11 +1307,11 @@ def _run_episode(
     transport_place_offset_y = getattr(args, "transport_place_offset_y", None)
     if transport_place_offset_x is not None:
         transport_desired_bowl[0] = (
-            _body_pos(env, PLATE)[0] + transport_place_offset_x
+            _support_pos(env)[0] + transport_place_offset_x
         )
     if transport_place_offset_y is not None:
         transport_desired_bowl[1] = (
-            _body_pos(env, PLATE)[1] + transport_place_offset_y
+            _support_pos(env)[1] + transport_place_offset_y
         )
     require_support_contact = bool(
         getattr(args, "require_support_contact_before_release", False)
@@ -1293,7 +1319,7 @@ def _run_episode(
     if require_support_contact:
         # Concave bowl / rimmed-plate AABBs are too coarse for the final
         # release height. Stage above the support, then descend to real contact.
-        desired_bowl[2] = max(float(source[2]), float(_body_pos(env, PLATE)[2]))
+        desired_bowl[2] = max(float(source[2]), float(_support_pos(env)[2]))
     else:
         desired_bowl[2] = float(
             plate_hi[2] + bowl_origin_to_bottom + args.release_clearance
@@ -1612,7 +1638,7 @@ def _run_episode(
         support_eef_xy = None
         if (
             np.linalg.norm(
-                _body_pos(env, TARGET)[:2] - _body_pos(env, PLATE)[:2]
+                _body_pos(env, TARGET)[:2] - _support_pos(env)[:2]
             )
             > 0.022
         ):
@@ -1776,7 +1802,8 @@ def _run_episode(
             "failure_final_eef_xyz": list(failure_final_eef),
             "failure_target_eef_xyz": list(failure_target_eef),
             "goal_support_body": PLATE,
-            "goal_support_xyz": _body_pos(env, PLATE).tolist(),
+            "goal_support_site": PLACEMENT_SITE,
+            "goal_support_xyz": _support_pos(env).tolist(),
             "goal_support_aabb_hi_xyz": plate_hi.tolist(),
             "desired_bowl_xyz": desired_bowl.tolist(),
             "transport_bowl_xyz": transit_plate_bowl.tolist(),
@@ -1824,9 +1851,10 @@ def _run_episode(
         "failure_target_eef_y_m": failure_target_eef[1],
         "failure_target_eef_z_m": failure_target_eef[2],
         "goal_support_body": PLATE,
-        "goal_support_x_m": float(_body_pos(env, PLATE)[0]),
-        "goal_support_y_m": float(_body_pos(env, PLATE)[1]),
-        "goal_support_z_m": float(_body_pos(env, PLATE)[2]),
+        "goal_support_site": PLACEMENT_SITE,
+        "goal_support_x_m": float(_support_pos(env)[0]),
+        "goal_support_y_m": float(_support_pos(env)[1]),
+        "goal_support_z_m": float(_support_pos(env)[2]),
         "goal_support_aabb_hi_z_m": float(plate_hi[2]),
         "desired_bowl_z_m": float(desired_bowl[2]),
         "transport_bowl_z_m": float(transit_plate_bowl[2]),

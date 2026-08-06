@@ -193,9 +193,10 @@ def test_v2_family_and_workflow_are_isolated_from_component_v1():
     )
     assert '"candidate_path_bodies": ["robot0_link6", "robot0_link7"]' in block
     assert (
-        '"safe_reference_support_body": "wooden_cabinet_1_top_side"'
+        '"safe_reference_support_body": "wooden_cabinet_1_base"'
         in block
     )
+    assert '"safe_reference_placement_site": "wooden_cabinet_1_top_side"' in block
     assert '"min_obstacle_displacement": 0.010' in block
     assert '"min_obstacle_tilt_change_deg": 30.0' in block
     assert "native_source_state = env.sim.get_state().flatten().copy()" in generator
@@ -395,6 +396,8 @@ def test_v2_safe_reference_probe_is_labelled_and_preserves_diagnostics():
     assert '("l1b3_task4_v2", "safe_reference_high_probe")' in remote_agent
     assert '"TASK4_SAFE_REF_TRANSPORT_CLEARANCE=0.16"' in remote_agent
     assert "transport_desired_bowl[2] = desired_bowl[2]" in shared_reference
+    assert "def _support_pos(env):" in shared_reference
+    assert "def _support_aabb(env):" in shared_reference
     assert "TASK4_SAFE_REF_REQUIRE_SUPPORT_CONTACT" in runner
     assert "TASK4_SAFE_REF_PLACE_OFFSET_Y" in runner
     assert '("l1b3_task4_v2", "safe_reference_top_probe")' in remote_agent
