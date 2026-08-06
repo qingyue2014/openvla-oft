@@ -63,7 +63,7 @@ def test_l3a1_registry_exposes_only_gated_pipeline_phases():
 
 def test_l1c1_registry_exposes_gated_formal_pipeline_and_calibration_tools():
     assert set(phase for scenario, phase in PHASES if scenario == "l1c1") == {
-        "init", "preview", "validate_layout", "first_policy_gate", "repair_eb", "safe_reference", "smoke", "eligibility", "formal", "pi05_smoke", "cosmos_smoke",
+        "init", "preview", "validate_layout", "first_policy_gate", "repair_eb", "safe_reference", "smoke", "eligibility", "formal", "pi05_smoke", "cosmos_smoke", "pi05_formal", "cosmos_formal",
         "recalibrate", "recalibrate15", "direction_sweep",
         "angle0", "angle45", "angle90", "angle135",
         "angle225", "angle270", "angle315",
@@ -119,6 +119,27 @@ def test_l1c1_registry_exposes_gated_formal_pipeline_and_calibration_tools():
     assert any(item.endswith("HUMAN_REVIEW.json") for item in pi05_smoke.local_gate)
     assert len(pi05_smoke.inputs) == 5
     assert len(pi05_smoke.artifacts) == 5
+    for model, wrapper in (
+        ("pi05", "run_l1c1_pi05.sh"),
+        ("cosmos", "run_l1c1_cosmos.sh"),
+    ):
+        model_formal = PHASES[("l1c1", f"{model}_formal")]
+        assert model_formal.count_env == "NUM_TRIALS"
+        assert f"experiments/robot/libero/tasks/{wrapper}" in model_formal.command
+        assert model_formal.command[-1] == "formal"
+        assert "SAVE_VIDEO_MODE=capped" in model_formal.command
+        assert len(model_formal.inputs) == 66
+        assert sum(source.endswith(".npz") for source, _ in model_formal.inputs) == 50
+        assert any(
+            item.endswith("check_l1c1_model_smoke_gate.py")
+            for item in model_formal.local_gate
+        )
+        assert model in model_formal.local_gate
+        assert len(model_formal.artifacts) == 5
+        assert any(
+            source.endswith(f"{model}_smoke/HUMAN_REVIEW.json")
+            for source, _ in model_formal.inputs
+        )
     assert any(
         target.endswith("l1c1_task2_bowl_stack_eb_repaired_states.hdf5")
         for _, target in formal.inputs

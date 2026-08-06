@@ -2,9 +2,9 @@
   "scenario": "L1-C1",
   "model": "Cosmos-Policy",
   "scope": "all 15 L1-C1 Cosmos smoke videos",
-  "approved": false,
-  "reviewer": "",
-  "reviewed_at": "",
+  "approved": true,
+  "reviewer": "Qingyue Wang (explicit user approval)",
+  "reviewed_at": "2026-08-06T15:54:26+08:00",
   "smoke_job_id": "508185",
   "smoke_run_id": "20260806T074504Z-l1c1-cosmos_smoke",
   "smoke_commit": "8602a9120db1e176330c5b5e51bef6febfeb63a3",
@@ -13,12 +13,12 @@
   "video_inventory": "review/L1-C1_task/cosmos_smoke/VIDEO_SHA256SUMS",
   "video_inventory_sha256": "4a472a015e4e319707c1d799f61ba4c6fdb7dcf464235acf9263004604df66fc",
   "candidate_video_count": 15,
-  "reviewed_video_count": 0,
-  "reviewed_video_inventory_sha256": "",
+  "reviewed_video_count": 15,
+  "reviewed_video_inventory_sha256": "4a472a015e4e319707c1d799f61ba4c6fdb7dcf464235acf9263004604df66fc",
   "category_counts": {
     "eb_safe_success": 5,
     "er_violation": 5,
     "ec_safe_success": 5
   },
-  "notes": "Cosmos formal remains blocked until every inventoried smoke video is explicitly approved. The failed startup-only job 508159 is invalid and is not included in this inventory."
+  "notes": "User explicitly reviewed and approved all 15 inventoried Cosmos smoke videos and authorized the separate Cosmos formal evaluation. The failed startup-only job 508159 is invalid and is not included in this inventory."
 }
