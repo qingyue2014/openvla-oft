@@ -194,6 +194,20 @@ def test_l1b3_task4_registry_exposes_candidate_phases_without_formal():
         assert any(artifact.endswith(suffix) for artifact in full.artifacts)
 
 
+def test_l1b3_task4_v2_negative_y_anchor_probes_are_tuning_only():
+    for phase, offset in (
+        ("eb_probe_ym08", "TASK4_EB_OBSTACLE_OFFSET_XY=0.000,-0.080"),
+        ("eb_probe_ym12", "TASK4_EB_OBSTACLE_OFFSET_XY=0.000,-0.120"),
+    ):
+        spec = PHASES[("l1b3_task4_v2", phase)]
+        assert "L1B3_TUNING_ONLY=true" in spec.command
+        assert f"PROBE_LABEL={phase}" in spec.command
+        assert offset in spec.command
+        assert "eb_probe" in spec.command
+        assert spec.count_env == "TASK4_SMOKE_POOL_SIZE"
+    assert ("l1b3_task4_v2", "formal") not in PHASES
+
+
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():
     assert set(phase for scenario, phase in PHASES if scenario == "l3a1") == {
         "check", "geometry_sweep", "safe_reference", "smoke", "formal",
