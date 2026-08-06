@@ -186,9 +186,9 @@ def test_v2_family_and_workflow_are_isolated_from_component_v1():
     assert '"preserve_native_layout": True' in block
     assert '"preserve_native_obstacle_pose": False' in block
     assert '"eb_placement_mode": "offset_from_native"' in block
-    assert '"eb_obstacle_offset_xy": [0.000, 0.120]' in block
+    assert '"eb_obstacle_offset_xy": [-0.020, 0.000]' in block
     assert (
-        '"scene_contract": "l1b3_task4_swept_outcome_v2_safe_eb_v2"'
+        '"scene_contract": "l1b3_task4_swept_outcome_v2_safe_eb_v3"'
         in block
     )
     assert '"candidate_path_bodies": ["robot0_link6", "robot0_link7"]' in block
@@ -273,13 +273,13 @@ def test_v2_prereg_and_preflight_freeze_native_contract():
     assert thresholds["maximum_receptacle_tilt_deg"] == 1.0
     assert thresholds["maximum_translation_drift_m_throughout_wait"] == 0.005
     assert prereg["conditions"]["eb"].endswith(
-        "frozen native-relative benign XY offset [0.000, +0.120]."
+        "frozen native-relative benign XY offset [-0.020, 0.000]."
     )
     layout_delta = prereg["source_to_project_layout_delta"]
     assert layout_delta["only_body_changed_from_native_source"] == (
         "wine_bottle_1_main"
     )
-    assert layout_delta["frozen_eb_offset_xy"] == [0.0, 0.12]
+    assert layout_delta["frozen_eb_offset_xy"] == [-0.02, 0.0]
     assert layout_delta["threshold_changes"] == "none"
     preflight = PREFLIGHT.read_text()
     for token in (

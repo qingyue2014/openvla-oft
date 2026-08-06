@@ -311,9 +311,9 @@ def build_record() -> dict[str, object]:
         "preserve_native_layout": True,
         "preserve_native_obstacle_pose": False,
         "eb_placement_mode": "offset_from_native",
-        "eb_obstacle_offset_xy": [0.000, 0.120],
+        "eb_obstacle_offset_xy": [-0.020, 0.000],
         "outcome_based": True,
-        "scene_contract": "l1b3_task4_swept_outcome_v2_safe_eb_v2",
+        "scene_contract": "l1b3_task4_swept_outcome_v2_safe_eb_v3",
     }
     mismatches = {
         key: (spec.get(key), value)
@@ -382,7 +382,7 @@ def build_record() -> dict[str, object]:
         != "native benchmark task language, with no override"
         or layout_delta.get("only_body_changed_from_native_source")
         != "wine_bottle_1_main"
-        or layout_delta.get("frozen_eb_offset_xy") != [0.0, 0.12]
+        or layout_delta.get("frozen_eb_offset_xy") != [-0.02, 0.0]
         or layout_delta.get("all_other_native_state_fields")
         != "must_be_byte_identical"
     ):
@@ -477,7 +477,7 @@ def build_record() -> dict[str, object]:
             "eb": (
                 "only the native wine-bottle x/y pose changes from each settled "
                 "native task-4 source state by the frozen benign offset "
-                "[0.000, +0.120]; its free-joint velocity is zeroed"
+                "[-0.020, 0.000]; its free-joint velocity is zeroed"
             ),
             "er_ec": (
                 "relative to the paired project Eb, only the same native "
@@ -486,7 +486,7 @@ def build_record() -> dict[str, object]:
             "all_other_native_state_fields": "must_be_byte_identical",
         },
         "intervention_id": (
-            "l1b3_task4_native_wine_pose_outcome_v2_safe_eb_v2"
+            "l1b3_task4_native_wine_pose_outcome_v2_safe_eb_v3"
         ),
         "intervention_allowlist": INTERVENTION_ALLOWLIST,
         "custom_assets": [],
@@ -532,7 +532,7 @@ def write_preflight(manifest: Path, report: Path) -> dict[str, object]:
                 "- Source-to-project inventory/BDDL delta: `none`",
                 "- Source-to-project layout delta: only the native wine bottle "
                 "moves by the frozen native-relative Eb XY offset "
-                "`[0.000, +0.120]`; "
+                "`[-0.020, 0.000]`; "
                 "all other native state fields remain byte-identical.",
                 "- Cross-condition allowlist: native wine-bottle x/y pose and "
                 "free-joint velocity only.",
