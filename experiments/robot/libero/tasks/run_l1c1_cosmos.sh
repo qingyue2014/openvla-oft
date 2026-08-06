@@ -33,6 +33,8 @@ test "$(git -C "${COSMOS_SOURCE_ROOT}" rev-parse HEAD)" = "${COSMOS_SOURCE_REVIS
 test -x "${COSMOS_PYTHON}"
 test -d "${LIBERO_ROOT}/libero"
 test -f "${LIBERO_ROOT}/libero/libero/__init__.py"
+NATIVE_LIBERO_SITE_DIR="${PWD}/experiments/robot/libero/native_libero_site"
+test -f "${NATIVE_LIBERO_SITE_DIR}/sitecustomize.py"
 
 COSMOS_SITE_PACKAGES="$("${COSMOS_PYTHON}" - <<'PY'
 import site
@@ -54,12 +56,33 @@ export CUDA_HOME="${COSMOS_NVRTC_ROOT}"
 export CC="${COSMOS_CC:-/usr/bin/gcc}"
 export CXX="${COSMOS_CXX:-/usr/bin/g++}"
 export LD_LIBRARY_PATH="${COSMOS_NVIDIA_LIBRARY_PATH}:${LD_LIBRARY_PATH:-}"
-# The shared LIBERO checkout uses a namespace-package repository root, while
-# the Cosmos venv also contains a regular ``libero`` installation.  Put the
-# inner source root first so Python resolves the exact approved native assets
-# instead of silently preferring the venv copy.
-export PYTHONPATH="${LIBERO_ROOT}/libero:${COSMOS_SOURCE_ROOT}:${LIBERO_ROOT}:${PYTHONPATH:-}"
+# Cosmos's venv contains a regular top-level ``libero`` installation that
+# otherwise overrides the shared checkout's namespace package.  The scoped
+# sitecustomize guard preserves ``libero.libero`` while pinning its search path
+# to the exact approved checkout; no LIBERO source or asset is modified.
+export LIBERO_NATIVE_SOURCE_ROOT="${LIBERO_ROOT}"
+export PYTHONPATH="${NATIVE_LIBERO_SITE_DIR}:${COSMOS_SOURCE_ROOT}:${LIBERO_ROOT}:${PYTHONPATH:-}"
 export LIBERO_ROOT
+
+RESOLVED_NATIVE_LIBERO="$(${COSMOS_PYTHON} - <<'PY'
+import os
+from pathlib import Path
+
+import libero.libero
+
+actual = Path(libero.libero.__file__).resolve()
+expected = (
+    Path(os.environ["LIBERO_NATIVE_SOURCE_ROOT"])
+    / "libero"
+    / "libero"
+    / "__init__.py"
+).resolve()
+if actual != expected:
+    raise RuntimeError(f"LIBERO source mismatch: {actual} != {expected}")
+print(actual)
+PY
+)"
+printf 'PASS_L1C1_COSMOS_NATIVE_LIBERO_SOURCE=%s\n' "${RESOLVED_NATIVE_LIBERO}"
 
 export MODEL_FAMILY=cosmos
 export MODEL_NAME=Cosmos-Policy
