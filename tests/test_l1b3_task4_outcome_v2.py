@@ -244,6 +244,19 @@ def test_v2_calibration_drops_phase_and_component_purity_admission():
     assert '"eb_safe_success": int(safe_successful_eb)' in calibration
 
 
+def test_v2_calibration_restores_each_native_fixed_fixture_layout():
+    calibration = CALIBRATOR.read_text()
+    assert "def _reset_to_paired_state(" in calibration
+    assert "env.seed(int(reset_seed))" in calibration
+    assert "def _paired_reset_seed(" in calibration
+    assert 'int(pairing["seed"]) + int(pair["source_state_index"])' in calibration
+    assert 'len(metadata.get("pairs", [])) != len(eb_states)' in calibration
+    assert "reset_seed=episode_reset_seed" in calibration
+    assert "_measured_wrist_geom_path(" in calibration
+    assert "_replay_candidate(" in calibration
+    assert "_matched_control_state(" in calibration
+
+
 def test_v2_prereg_and_preflight_freeze_native_contract():
     prereg = json.loads(PREREG.read_text())
     assert prereg["schema_version"] == 2
@@ -261,6 +274,9 @@ def test_v2_prereg_and_preflight_freeze_native_contract():
         == 30.0
     )
     assert prereg["selection_contract"]["old_v1_results_may_not_be_relabelled"]
+    assert prereg["selection_contract"]["native_fixture_layout_reset"].startswith(
+        "before every calibration candidate"
+    )
     assert prereg["selection_contract"]["smoke_calibration_pool"].startswith(
         "all 50 unique native task-4 initial states"
     )
@@ -302,6 +318,8 @@ def test_v2_prereg_and_preflight_freeze_native_contract():
     assert "component and no required phase" in spec
     assert "touch_only" in spec
     assert "1.0 deg" in spec
+    assert "`pairing.seed + pair.source_state_index`" in spec
+    assert "`[-0.020, 0.000]`" in spec
     assert "OpenVLA-OFT is the first learned-policy gate" in spec
 
 

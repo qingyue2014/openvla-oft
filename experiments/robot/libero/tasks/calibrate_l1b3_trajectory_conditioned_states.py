@@ -63,6 +63,47 @@ OTHER_ARM_LINKS = tuple(
 OUTCOME_BASED = False
 
 
+def _reset_to_paired_state(
+    env,
+    state: np.ndarray,
+    reset_seed: int | None,
+):
+    """Restore the fixed-fixture layout before applying serialized state.
+
+    MuJoCo state vectors contain qpos/qvel but not the sampled positions of
+    fixed LIBERO fixtures such as the wooden cabinet.  Replaying a state after
+    an unseeded reset can therefore validate the bottle against a different
+    cabinet layout.  Every calibration reset must reconstruct the native
+    episode layout before restoring the paired state.
+    """
+    if reset_seed is not None:
+        env.seed(int(reset_seed))
+    env.reset()
+    return env.set_init_state(state)
+
+
+def _paired_reset_seed(
+    pairing: dict,
+    episode: int,
+    *,
+    require_native_layout: bool,
+) -> int | None:
+    if not require_native_layout:
+        return None
+    pairs = pairing.get("pairs", [])
+    if episode >= len(pairs):
+        raise ValueError(
+            f"Pairing metadata is missing episode {episode} for native reset"
+        )
+    pair = pairs[episode]
+    if "source_state_index" not in pair or "seed" not in pairing:
+        raise ValueError(
+            "Native-layout calibration requires pairing seed and "
+            "source_state_index"
+        )
+    return int(pairing["seed"]) + int(pair["source_state_index"])
+
+
 def _episode_index(path: str) -> int | None:
     match = re.search(r"_ep(\d+)\.npz$", os.path.basename(path))
     return int(match.group(1)) if match else None
@@ -135,6 +176,7 @@ def _measured_wrist_geom_path(
     eb_state: np.ndarray,
     trajectory: dict,
     args: argparse.Namespace,
+    reset_seed: int | None = None,
 ) -> list[tuple[int, str, np.ndarray]]:
     """Replay Eb once and measure the actual terminal-wrist geom sweep.
 
@@ -164,8 +206,7 @@ def _measured_wrist_geom_path(
     if not geom_owners:
         return []
 
-    env.reset()
-    env.set_init_state(eb_state)
+    _reset_to_paired_state(env, eb_state, reset_seed)
     measured: list[tuple[int, str, np.ndarray, float]] = []
     seen: set[tuple[int, float, float]] = set()
     for index, action in enumerate(np.asarray(trajectory["actions"], dtype=float)):
@@ -222,6 +263,7 @@ def _trajectory_candidates(
     *,
     env=None,
     eb_state: np.ndarray | None = None,
+    reset_seed: int | None = None,
 ) -> list[tuple[int, str, np.ndarray]]:
     target = np.asarray(
         trajectory["body_pos__akita_black_bowl_1_main"], dtype=float
@@ -236,7 +278,13 @@ def _trajectory_candidates(
     candidate_steps: list[tuple[int, str, np.ndarray]] = []
     if env is not None and eb_state is not None:
         candidate_steps.extend(
-            _measured_wrist_geom_path(env, eb_state, trajectory, args)
+            _measured_wrist_geom_path(
+                env,
+                eb_state,
+                trajectory,
+                args,
+                reset_seed=reset_seed,
+            )
         )
     # The wrist collision meshes are offset from their body origins. The
     # coincident
@@ -330,9 +378,9 @@ def _replay_candidate(
     obstacle: str,
     target: str,
     args: argparse.Namespace,
+    reset_seed: int | None = None,
 ) -> dict:
-    env.reset()
-    obs = env.set_init_state(state)
+    obs = _reset_to_paired_state(env, state, reset_seed)
     if OUTCOME_BASED:
         oracle = SweptVolumeOutcomeOracle(
             [obstacle],
@@ -463,10 +511,10 @@ def _matched_control_state(
     obstacle: str,
     target: str,
     args: argparse.Namespace,
+    reset_seed: int | None = None,
 ) -> dict | None:
     """Find a stable same-support Ec pose outside every replayed sweep."""
-    env.reset()
-    env.set_init_state(fallback_control_state)
+    _reset_to_paired_state(env, fallback_control_state, reset_seed)
     fallback_placement = _body_pos(env, obstacle)[:2]
     placements = [fallback_placement]
     placements.extend(
@@ -482,8 +530,7 @@ def _matched_control_state(
         if placement_key in seen:
             continue
         seen.add(placement_key)
-        env.reset()
-        env.set_init_state(eb_state)
+        _reset_to_paired_state(env, eb_state, reset_seed)
         diagnostics, candidate_state = _settle_and_validate(
             env,
             candidate_spec,
@@ -496,15 +543,20 @@ def _matched_control_state(
         if not diagnostics["valid"] or not only_obstacle:
             continue
         replay = _replay_candidate(
-            env, candidate_state, trajectory, obstacle, target, args
+            env,
+            candidate_state,
+            trajectory,
+            obstacle,
+            target,
+            args,
+            reset_seed=reset_seed,
         )
         if (
             not any(replay["hits"].values())
             and replay["penetration_m"] <= args.max_contact_penetration
             and (replay["task_success"] or not args.require_task_success)
         ):
-            env.reset()
-            env.set_init_state(candidate_state)
+            _reset_to_paired_state(env, candidate_state, reset_seed)
             return {
                 "state": candidate_state,
                 "placement": placement,
@@ -577,6 +629,10 @@ def calibrate(args: argparse.Namespace) -> str:
         and len(native_source_states) != len(eb_states)
     ):
         raise ValueError("Native-source and Eb state counts differ")
+    pairing_path = Path(args.pairing_json)
+    metadata = json.loads(pairing_path.read_text())
+    if len(metadata.get("pairs", [])) != len(eb_states):
+        raise ValueError("Pairing metadata and state counts differ")
 
     trajectories = {}
     for path in sorted(glob.glob(os.path.join(args.eb_trajectories, "*.npz"))):
@@ -603,12 +659,26 @@ def calibrate(args: argparse.Namespace) -> str:
     rows: list[dict] = []
     selected_indices: list[int] = []
     try:
+        initial_reset_seed = _paired_reset_seed(
+            metadata,
+            0,
+            require_native_layout=bool(spec.get("preserve_native_layout")),
+        )
+        if initial_reset_seed is not None:
+            env.seed(initial_reset_seed)
         env.reset()
         candidate_spec = _candidate_spec(spec)
         allowed_indices = _allowed_obstacle_state_indices(
             env.sim, obstacle, candidate_spec
         )
         for episode, eb_state in enumerate(eb_states):
+            episode_reset_seed = _paired_reset_seed(
+                metadata,
+                episode,
+                require_native_layout=bool(
+                    spec.get("preserve_native_layout")
+                ),
+            )
             trajectory = trajectories.get(episode)
             task_successful_eb = bool(
                 trajectory and trajectory["metadata"].get("success", False)
@@ -651,6 +721,7 @@ def calibrate(args: argparse.Namespace) -> str:
                     args,
                     env=env,
                     eb_state=eb_state,
+                    reset_seed=episode_reset_seed,
                 )
                 if (
                     args.max_candidates_per_episode > 0
@@ -699,8 +770,9 @@ def calibrate(args: argparse.Namespace) -> str:
                     attempts += 1
                     refinement_attempts += int(is_refinement)
                     placement = np.asarray(placement_xy, dtype=float)
-                    env.reset()
-                    env.set_init_state(eb_state)
+                    _reset_to_paired_state(
+                        env, eb_state, episode_reset_seed
+                    )
                     diagnostics, candidate_state = _settle_and_validate(
                         env,
                         candidate_spec,
@@ -735,7 +807,13 @@ def calibrate(args: argparse.Namespace) -> str:
                     valid_table_candidates += 1
                     table_z_values.append(float(diagnostics["end_xyz"][2]))
                     replay = _replay_candidate(
-                        env, candidate_state, trajectory, obstacle, target, args
+                        env,
+                        candidate_state,
+                        trajectory,
+                        obstacle,
+                        target,
+                        args,
+                        reset_seed=episode_reset_seed,
                     )
                     intended_contact_candidates += int(
                         replay["hits"]["intended_contact"]
@@ -780,12 +858,14 @@ def calibrate(args: argparse.Namespace) -> str:
                             obstacle,
                             target,
                             args,
+                            reset_seed=episode_reset_seed,
                         )
                         if control is None:
                             matched_control_failures += 1
                             continue
-                        env.reset()
-                        env.set_init_state(candidate_state)
+                        _reset_to_paired_state(
+                            env, candidate_state, episode_reset_seed
+                        )
                         selected = {
                             "state": candidate_state,
                             "path_step": path_step,
@@ -986,8 +1066,6 @@ def calibrate(args: argparse.Namespace) -> str:
         writer.writeheader()
         writer.writerows(rows)
 
-    pairing_path = Path(args.pairing_json)
-    metadata = json.loads(pairing_path.read_text())
     for row, pair in zip(rows, metadata["pairs"]):
         pair["trajectory_conditioned_risk"] = bool(row["calibrated"])
         pair["trajectory_path_step"] = row["path_step"]
@@ -1055,6 +1133,11 @@ def calibrate(args: argparse.Namespace) -> str:
         "intended_links": list(INTENDED_LINKS),
         "candidate_path_bodies": list(INTENDED_LINKS),
         "outcome_based": OUTCOME_BASED,
+        "native_fixture_reset_contract": (
+            "before every calibration, candidate-replay, and matched-control "
+            "reset, seed = pairing.seed + pair.source_state_index; then "
+            "restore the serialized state"
+        ),
         "path_proxy_links": list(PATH_LINKS),
         "matched_control_offsets_xy": [
             offset.tolist() for offset in _xy_offsets(
@@ -1115,6 +1198,9 @@ def calibrate(args: argparse.Namespace) -> str:
             f"{args.min_obstacle_tilt_change_deg:.1f} deg\n"
             f"- Maximum allowed surface penetration: "
             f"{args.max_contact_penetration:.4f} m\n"
+            "- Native fixed-fixture reset: before every candidate/replay reset, "
+            "restore `pairing.seed + source_state_index`, then restore the "
+            "serialized state.\n"
             "- Pairing invariant: only the native wine-bottle free-joint pose "
             "changes.\n"
         )
