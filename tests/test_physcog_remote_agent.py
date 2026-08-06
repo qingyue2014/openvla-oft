@@ -311,6 +311,11 @@ def test_classification_prioritizes_crashes_over_stale_pass_reports():
     assert classify_result(0, "Verdict: FAIL_LAYOUT", ["FAIL_LAYOUT"]) == "gate_failure"
     assert classify_result(0, "Verdict: PASS_LAYOUT", ["PASS_LAYOUT"]) == "pass"
     assert classify_result(1, "srun: error: allocation failed", []) == "infrastructure_failure"
+    cache_failure = (
+        "Traceback (most recent call last)\n"
+        "RuntimeError: cannot cache function 'mat2quat': no locator available"
+    )
+    assert classify_result(1, cache_failure, []) == "infrastructure_failure"
 
 
 def test_classification_ignores_egl_destructor_traceback_after_success():
