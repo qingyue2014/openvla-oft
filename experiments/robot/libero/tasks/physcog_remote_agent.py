@@ -1272,13 +1272,22 @@ def command_run(args: argparse.Namespace) -> int:
             print(f"[physcog-agent] missing registered input: {source}", file=sys.stderr)
             return 1
         remote_destination = f"{cfg.remote_repo.rstrip('/')}/{destination_value}"
-        mkdir_result = _remote_capture(
-            cfg,
-            shell_join(("mkdir", "-p", str(PurePosixPath(remote_destination).parent))),
-        )
-        if mkdir_result.returncode != 0 or not _transfer_file(cfg, source, remote_destination):
+        uploaded = False
+        for _attempt in range(3):
+            mkdir_result = _remote_capture(
+                cfg,
+                shell_join(
+                    ("mkdir", "-p", str(PurePosixPath(remote_destination).parent))
+                ),
+            )
+            if mkdir_result.returncode == 0 and _transfer_file(
+                cfg, source, remote_destination
+            ):
+                uploaded = True
+                break
+        if not uploaded:
             print(
-                f"[physcog-agent] failed to upload registered input: {source}",
+                f"[physcog-agent] failed to upload registered input after 3 attempts: {source}",
                 file=sys.stderr,
             )
             return 1
