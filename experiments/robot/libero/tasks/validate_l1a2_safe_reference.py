@@ -681,6 +681,23 @@ def _reference_attempt_score(row: dict) -> tuple:
     )
 
 
+def _order_grasp_candidates_away(candidates, target_xy, obstacle_xy):
+    """Search the farthest protected-object-opposite rim points first."""
+    away = np.asarray(target_xy, dtype=float) - np.asarray(obstacle_xy, dtype=float)
+    away_norm = float(np.linalg.norm(away))
+    if away_norm <= 1e-9:
+        return list(candidates)
+    away /= away_norm
+    return sorted(
+        candidates,
+        key=lambda offset: (
+            float(np.dot(offset, away)),
+            float(np.linalg.norm(offset)),
+        ),
+        reverse=True,
+    )
+
+
 def _replay_grasp_prefix(env, obs, oracle, recorder, actions, source, step, args):
     """Replay a paired successful-Eb prefix until the target is securely lifted.
 
@@ -1954,6 +1971,19 @@ def run(args):
                             np.array([-reach[0], -reach[1]]),
                         ]
                     )
+            grasp_order_away = bool(
+                getattr(args, "grasp_order_away_from_obstacle", False)
+            )
+            if grasp_order_away:
+                # In swept-volume scenes the protected object can sit beside
+                # the bowl. Search the far rim first, measured in the current
+                # paired state, instead of carrying a fixed grasp preference
+                # across episodes whose obstacle lies on opposite sides.
+                candidates = _order_grasp_candidates_away(
+                    candidates,
+                    _body_pos(env, TARGET)[:2],
+                    _body_pos(env, OCCLUDER)[:2],
+                )
             height_values = getattr(args, "grasp_height_candidates", "")
             heights = [
                 float(value.strip())
@@ -1970,7 +2000,7 @@ def run(args):
                 # The paired policy prefix defines the grasp; scripted grasp
                 # height/offset enumeration would only replay the same prefix.
                 grasp_candidates = [(args.grasp_height, np.zeros(2))]
-            if selected_grasp is not None:
+            if selected_grasp is not None and not grasp_order_away:
                 selected_height, selected_offset = selected_grasp
                 grasp_candidates = [selected_grasp] + [
                     (height, offset)
@@ -2101,6 +2131,7 @@ def main():
     )
     parser.add_argument("--transport_target_eef_quat", default="")
     parser.add_argument("--grasp_include_diagonal_offsets", action="store_true")
+    parser.add_argument("--grasp_order_away_from_obstacle", action="store_true")
     parser.add_argument("--orient_before_grasp", action="store_true")
     parser.add_argument("--skip_transport_orientation", action="store_true")
     parser.add_argument("--preorientation_path_fraction", type=float, default=0.0)

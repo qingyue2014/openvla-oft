@@ -190,6 +190,7 @@ def main() -> None:
     )
     parser.add_argument("--transport_target_eef_quat", default="")
     parser.add_argument("--grasp_include_diagonal_offsets", action="store_true")
+    parser.add_argument("--grasp_order_away_from_obstacle", action="store_true")
     parser.add_argument("--orient_before_grasp", action="store_true")
     parser.add_argument("--skip_transport_orientation", action="store_true")
     parser.add_argument("--preorientation_path_fraction", type=float, default=0.0)

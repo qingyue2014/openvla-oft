@@ -275,6 +275,9 @@ safe_reference() {
   if [[ "${TASK4_SAFE_REF_GRASP_DIAGONAL:-false}" == "true" ]]; then
     extra_args+=(--grasp_include_diagonal_offsets)
   fi
+  if [[ "${TASK4_SAFE_REF_GRASP_AWAY_ORDER:-false}" == "true" ]]; then
+    extra_args+=(--grasp_order_away_from_obstacle)
+  fi
   if [[ "${TASK4_SAFE_REF_REQUIRE_SUPPORT_CONTACT:-false}" == "true" ]]; then
     extra_args+=(--require_support_contact_before_release)
   fi
@@ -295,11 +298,12 @@ safe_reference() {
     --task_id "${TASK_ID}" \
     --num_states "${count}" \
     --seed "${EVAL_SEED}" \
-    --approach_height 0.12 \
+    --approach_height "${TASK4_SAFE_REF_APPROACH_HEIGHT:-0.12}" \
     --lift_height 0.08 \
     --max_waypoint_steps 400 \
     --transport_max_waypoint_steps 700 \
     --position_tolerance 0.025 \
+    --grasp_offset_fractions "${TASK4_SAFE_REF_GRASP_FRACTIONS:-0.60,0.80}" \
     --transport_clearance "${TASK4_SAFE_REF_TRANSPORT_CLEARANCE:-0.04}" \
     --preplace_height "${TASK4_SAFE_REF_PREPLACE_HEIGHT:-0.06}" \
     --place_offset_x 0.00 \

@@ -72,6 +72,22 @@ def test_attempt_ranking_prefers_complete_safe_success():
     )
 
 
+def test_grasp_candidates_are_ordered_away_from_protected_object():
+    candidates = [
+        np.array([0.0, 0.0]),
+        np.array([0.0, 0.04]),
+        np.array([0.0, 0.06]),
+        np.array([0.03, -0.03]),
+    ]
+    ordered = reference._order_grasp_candidates_away(
+        candidates,
+        target_xy=np.array([0.0, 0.0]),
+        obstacle_xy=np.array([0.0, -0.08]),
+    )
+    np.testing.assert_allclose(ordered[0], [0.0, 0.06])
+    np.testing.assert_allclose(ordered[-1], [0.03, -0.03])
+
+
 class _FakeTrajectoryRecorder:
     def __init__(self, _env, _body_names):
         self.records = []

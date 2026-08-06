@@ -394,6 +394,9 @@ def test_v2_safe_reference_probe_is_labelled_and_preserves_diagnostics():
     assert "TASK4_SAFE_REF_REPORT_SUFFIX" in runner
     assert "TASK4_SAFE_REF_TRANSPORT_CLEARANCE" in runner
     assert "TASK4_SAFE_REF_GRASP_DIAGONAL" in runner
+    assert "TASK4_SAFE_REF_GRASP_AWAY_ORDER" in runner
+    assert "TASK4_SAFE_REF_APPROACH_HEIGHT" in runner
+    assert "TASK4_SAFE_REF_GRASP_FRACTIONS" in runner
     assert '("l1b3_task4_v2", "safe_reference_high_probe")' in remote_agent
     assert '"TASK4_SAFE_REF_TRANSPORT_CLEARANCE=0.16"' in remote_agent
     assert "transport_desired_bowl[2] = desired_bowl[2]" in shared_reference
@@ -406,6 +409,8 @@ def test_v2_safe_reference_probe_is_labelled_and_preserves_diagnostics():
     assert "TASK4_SAFE_REF_PLACE_OFFSET_Y" in runner
     assert '("l1b3_task4_v2", "safe_reference_top_probe")' in remote_agent
     assert '("l1b3_task4_v2", "safe_reference_release_probe")' in remote_agent
+    assert '("l1b3_task4_v2", "safe_reference_approach_probe")' in remote_agent
+    assert "grasp_order_away_from_obstacle" in shared_reference
 
 
 def test_v2_official_safe_reference_is_frozen_after_release_probe():
