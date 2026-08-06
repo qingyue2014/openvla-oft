@@ -55,6 +55,12 @@ CONFIRM_STEPS = 5
 MAX_TRANSLATION_DRIFT_M = 0.005
 MAX_RECEPTACLE_TILT_DEG = 1.0
 MAX_OTHER_OBJECT_TILT_DEG = 2.0
+# The serialized native state is sampled before the evaluator has taken its
+# first controller no-op. Bound that restore-entry transient separately from
+# the stabilization window; samples 1..N must satisfy the stricter window
+# limits below, and the exact first-policy sample has its own tighter limits.
+MAX_RESTORE_LINEAR_SPEED_MPS = 0.100
+MAX_RESTORE_ANGULAR_SPEED_RADPS = 0.500
 MAX_WINDOW_LINEAR_SPEED_MPS = 0.025
 MAX_WINDOW_ANGULAR_SPEED_RADPS = 0.25
 MAX_FIRST_POLICY_LINEAR_SPEED_MPS = 0.010
@@ -311,11 +317,15 @@ def _evaluate_trace(
             for position in positions
         )
         max_tilt = max(float(sample[body_name]["tilt_deg"]) for sample in samples)
+        pre_wait_linear = float(samples[0][body_name]["linear_speed_mps"])
+        pre_wait_angular = float(samples[0][body_name]["angular_speed_radps"])
         max_linear = max(
-            float(sample[body_name]["linear_speed_mps"]) for sample in samples
+            float(sample[body_name]["linear_speed_mps"])
+            for sample in samples[1:]
         )
         max_angular = max(
-            float(sample[body_name]["angular_speed_radps"]) for sample in samples
+            float(sample[body_name]["angular_speed_radps"])
+            for sample in samples[1:]
         )
         first_policy = samples[FORMAL_WAIT_STEPS][body_name]
         tilt_limit = _tilt_limit(body_name)
@@ -323,6 +333,10 @@ def _evaluate_trace(
             failures.append(f"{body_name}:translation_drift")
         if max_tilt > tilt_limit:
             failures.append(f"{body_name}:tilt")
+        if pre_wait_linear > MAX_RESTORE_LINEAR_SPEED_MPS:
+            failures.append(f"{body_name}:restore_linear_speed")
+        if pre_wait_angular > MAX_RESTORE_ANGULAR_SPEED_RADPS:
+            failures.append(f"{body_name}:restore_angular_speed")
         if max_linear > MAX_WINDOW_LINEAR_SPEED_MPS:
             failures.append(f"{body_name}:window_linear_speed")
         if max_angular > MAX_WINDOW_ANGULAR_SPEED_RADPS:
@@ -348,8 +362,10 @@ def _evaluate_trace(
             "max_translation_drift_m": max_drift,
             "max_tilt_deg": max_tilt,
             "tilt_limit_deg": tilt_limit,
-            "max_linear_speed_mps": max_linear,
-            "max_angular_speed_radps": max_angular,
+            "pre_wait_linear_speed_mps": pre_wait_linear,
+            "pre_wait_angular_speed_radps": pre_wait_angular,
+            "max_stabilization_linear_speed_mps": max_linear,
+            "max_stabilization_angular_speed_radps": max_angular,
             "support_signatures_throughout": [
                 sample[body_name]["support_contacts"] for sample in samples
             ],
@@ -766,8 +782,19 @@ def validate(args) -> dict[str, object]:
             ),
             "max_other_object_tilt_deg_throughout": MAX_OTHER_OBJECT_TILT_DEG,
             "max_translation_drift_m_throughout": MAX_TRANSLATION_DRIFT_M,
-            "max_window_linear_speed_mps": MAX_WINDOW_LINEAR_SPEED_MPS,
-            "max_window_angular_speed_radps": MAX_WINDOW_ANGULAR_SPEED_RADPS,
+            "max_restore_entry_linear_speed_mps": (
+                MAX_RESTORE_LINEAR_SPEED_MPS
+            ),
+            "max_restore_entry_angular_speed_radps": (
+                MAX_RESTORE_ANGULAR_SPEED_RADPS
+            ),
+            "stabilization_window_starts_after_controller_noop_step": 1,
+            "max_stabilization_linear_speed_mps": (
+                MAX_WINDOW_LINEAR_SPEED_MPS
+            ),
+            "max_stabilization_angular_speed_radps": (
+                MAX_WINDOW_ANGULAR_SPEED_RADPS
+            ),
             "max_first_policy_linear_speed_mps": (
                 MAX_FIRST_POLICY_LINEAR_SPEED_MPS
             ),

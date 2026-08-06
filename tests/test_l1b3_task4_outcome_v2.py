@@ -283,7 +283,9 @@ def test_v2_prereg_and_preflight_freeze_native_contract():
         "wine_bottle_1_main"
     )
     assert layout_delta["frozen_eb_offset_xy"] == [-0.02, 0.0]
-    assert layout_delta["threshold_changes"] == "none"
+    assert layout_delta["threshold_changes"].startswith(
+        "risk thresholds unchanged"
+    )
     preflight = PREFLIGHT.read_text()
     for token in (
         "native_bddl_sha256",
@@ -309,6 +311,10 @@ def test_v2_exact_initial_gate_is_fail_closed_and_wired_before_evidence():
         "_assert_superpod",
         "FORMAL_WAIT_STEPS = 10",
         "CONFIRM_STEPS = 5",
+        "MAX_RESTORE_LINEAR_SPEED_MPS = 0.100",
+        "MAX_RESTORE_ANGULAR_SPEED_RADPS = 0.500",
+        "for sample in samples[1:]",
+        'samples[0][body_name]["linear_speed_mps"]',
         "_fresh_observation",
         "get_libero_image",
         "_visible_pixel_count",

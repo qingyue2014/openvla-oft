@@ -212,6 +212,18 @@ def test_l1b3_task4_v2_anchor_probes_are_tuning_only():
     assert ("l1b3_task4_v2", "formal") not in PHASES
 
 
+def test_l1b3_task4_v2_smoke_cleans_complete_rollout_directories():
+    artifacts = PHASES[("l1b3_task4_v2", "smoke")].artifacts
+    for condition in ("eb", "er", "ec"):
+        rollout = (
+            "rollouts/libero_goal/"
+            "L1-B3-task4-outcome-v2-bowl-cabinet-native-wine-"
+            f"{condition}"
+        )
+        assert rollout in artifacts
+        assert f"{rollout}/trajectories" not in artifacts
+
+
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():
     assert set(phase for scenario, phase in PHASES if scenario == "l3a1") == {
         "check", "geometry_sweep", "safe_reference", "smoke", "formal",
