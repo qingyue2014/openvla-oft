@@ -52,14 +52,18 @@ if [[ -n "${TASK4_EB_OBSTACLE_OFFSET_XY:-}" ]]; then
   exit 2
 fi
 
-# Freeze the 5/5 release-confirm controller accepted in Superpod diagnostic
-# job 508166. Registered tuning probes carry a report suffix and may preserve
-# their labelled overrides; official smoke/prepare/formal paths may not.
+# Freeze the release-confirm and obstacle-opposite approach controller accepted
+# on the same five immutable ER states in Superpod jobs 508166 and 508224.
+# Registered tuning probes carry a report suffix and may preserve their labelled
+# overrides; official smoke/prepare/formal paths may not.
 if [[ -z "${TASK4_SAFE_REF_REPORT_SUFFIX:-}" ]]; then
   declare -A frozen_safe_reference=(
     [TASK4_SAFE_REF_TRANSPORT_CLEARANCE]="0.02"
     [TASK4_SAFE_REF_PREPLACE_HEIGHT]="0.03"
     [TASK4_SAFE_REF_GRASP_DIAGONAL]="true"
+    [TASK4_SAFE_REF_GRASP_AWAY_ORDER]="true"
+    [TASK4_SAFE_REF_APPROACH_HEIGHT]="0.24"
+    [TASK4_SAFE_REF_GRASP_FRACTIONS]="0.80,0.90,1.00,1.10"
     [TASK4_SAFE_REF_REQUIRE_SUPPORT_CONTACT]="false"
     [TASK4_SAFE_REF_CONFIRM_SUPPORT_AFTER_RELEASE]="true"
     [TASK4_SAFE_REF_MAX_POST_RELEASE_DISPLACEMENT]="0.05"

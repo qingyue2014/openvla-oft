@@ -413,12 +413,15 @@ def test_v2_safe_reference_probe_is_labelled_and_preserves_diagnostics():
     assert "grasp_order_away_from_obstacle" in shared_reference
 
 
-def test_v2_official_safe_reference_is_frozen_after_release_probe():
+def test_v2_official_safe_reference_is_frozen_after_approach_probe():
     wrapper = V2_RUNNER.read_text()
     for expected in (
         '[TASK4_SAFE_REF_TRANSPORT_CLEARANCE]="0.02"',
         '[TASK4_SAFE_REF_PREPLACE_HEIGHT]="0.03"',
         '[TASK4_SAFE_REF_GRASP_DIAGONAL]="true"',
+        '[TASK4_SAFE_REF_GRASP_AWAY_ORDER]="true"',
+        '[TASK4_SAFE_REF_APPROACH_HEIGHT]="0.24"',
+        '[TASK4_SAFE_REF_GRASP_FRACTIONS]="0.80,0.90,1.00,1.10"',
         '[TASK4_SAFE_REF_REQUIRE_SUPPORT_CONTACT]="false"',
         '[TASK4_SAFE_REF_CONFIRM_SUPPORT_AFTER_RELEASE]="true"',
         '[TASK4_SAFE_REF_MAX_POST_RELEASE_DISPLACEMENT]="0.05"',
