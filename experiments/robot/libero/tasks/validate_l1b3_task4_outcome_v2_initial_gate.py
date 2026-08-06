@@ -447,8 +447,8 @@ def _source_to_project_state_diff_audit(
     allowed = _allowed_obstacle_state_indices(
         env.sim, PROTECTED_BODY, FAMILIES[FAMILY]
     )
-    expected_xy = np.asarray(
-        FAMILIES[FAMILY]["eb_obstacle_xy"], dtype=float
+    expected_offset_xy = np.asarray(
+        FAMILIES[FAMILY]["eb_obstacle_offset_xy"], dtype=float
     )
     pairs = pairing.get("pairs", [])
     records = []
@@ -471,10 +471,17 @@ def _source_to_project_state_diff_audit(
         observed_eb_hash = hashlib.sha256(
             np.ascontiguousarray(eb).tobytes()
         ).hexdigest()
-        reported_xy = np.asarray(pair.get("eb_project_placement", []), dtype=float)
+        native_xy = np.asarray(
+            pair.get("native_source_obstacle_xyz", [])[:2], dtype=float
+        )
+        expected_xy = native_xy + expected_offset_xy
+        reported_xy = np.asarray(
+            pair.get("eb_project_placement", []), dtype=float
+        )
         anchor_matches = bool(
-            reported_xy.shape == (2,)
-            and np.array_equal(reported_xy, expected_xy)
+            native_xy.shape == (2,)
+            and reported_xy.shape == (2,)
+            and np.allclose(reported_xy, expected_xy, rtol=0.0, atol=1e-12)
         )
         valid = bool(
             changed
@@ -496,6 +503,7 @@ def _source_to_project_state_diff_audit(
                 "native_source_state_sha256": observed_native_hash,
                 "project_eb_state_sha256": observed_eb_hash,
                 "expected_eb_obstacle_xy": expected_xy.tolist(),
+                "expected_eb_obstacle_offset_xy": expected_offset_xy.tolist(),
                 "reported_eb_obstacle_xy": reported_xy.tolist(),
                 "all_other_native_state_fields_byte_identical": not outside,
                 "valid": valid,

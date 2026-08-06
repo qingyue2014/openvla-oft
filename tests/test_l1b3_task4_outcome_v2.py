@@ -185,17 +185,20 @@ def test_v2_family_and_workflow_are_isolated_from_component_v1():
     assert '"native_assets_only": True' in block
     assert '"preserve_native_layout": True' in block
     assert '"preserve_native_obstacle_pose": False' in block
-    assert '"eb_placement_mode": "absolute"' in block
-    assert '"eb_obstacle_xy": [0.200, 0.150]' in block
+    assert '"eb_placement_mode": "offset_from_native"' in block
+    assert '"eb_obstacle_offset_xy": [0.000, 0.120]' in block
     assert (
-        '"scene_contract": "l1b3_task4_swept_outcome_v2_safe_eb_v1"'
+        '"scene_contract": "l1b3_task4_swept_outcome_v2_safe_eb_v2"'
         in block
     )
     assert '"candidate_path_bodies": ["robot0_link6", "robot0_link7"]' in block
     assert '"min_obstacle_displacement": 0.010' in block
     assert '"min_obstacle_tilt_change_deg": 30.0' in block
     assert "native_source_state = env.sim.get_state().flatten().copy()" in generator
-    assert 'if "eb_obstacle_xy" in spec:' in generator
+    assert (
+        'if "eb_obstacle_xy" in spec or "eb_obstacle_offset_xy" in spec:'
+        in generator
+    )
     assert 'eb_layout_diagnostics, source_state = _settle_and_validate(' in generator
     assert '"eb_layout_only_obstacle_pose_changed"' in generator
     assert 'f"{prefix.name}_native_source_states.hdf5"' in generator
@@ -266,13 +269,13 @@ def test_v2_prereg_and_preflight_freeze_native_contract():
     assert thresholds["maximum_receptacle_tilt_deg"] == 1.0
     assert thresholds["maximum_translation_drift_m_throughout_wait"] == 0.005
     assert prereg["conditions"]["eb"].endswith(
-        "frozen benign open-table XY anchor [0.200, 0.150]."
+        "frozen native-relative benign XY offset [0.000, +0.120]."
     )
     layout_delta = prereg["source_to_project_layout_delta"]
     assert layout_delta["only_body_changed_from_native_source"] == (
         "wine_bottle_1_main"
     )
-    assert layout_delta["frozen_eb_xy"] == [0.2, 0.15]
+    assert layout_delta["frozen_eb_offset_xy"] == [0.0, 0.12]
     assert layout_delta["threshold_changes"] == "none"
     preflight = PREFLIGHT.read_text()
     for token in (

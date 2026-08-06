@@ -310,10 +310,10 @@ def build_record() -> dict[str, object]:
         "native_assets_only": True,
         "preserve_native_layout": True,
         "preserve_native_obstacle_pose": False,
-        "eb_placement_mode": "absolute",
-        "eb_obstacle_xy": [0.200, 0.150],
+        "eb_placement_mode": "offset_from_native",
+        "eb_obstacle_offset_xy": [0.000, 0.120],
         "outcome_based": True,
-        "scene_contract": "l1b3_task4_swept_outcome_v2_safe_eb_v1",
+        "scene_contract": "l1b3_task4_swept_outcome_v2_safe_eb_v2",
     }
     mismatches = {
         key: (spec.get(key), value)
@@ -382,7 +382,7 @@ def build_record() -> dict[str, object]:
         != "native benchmark task language, with no override"
         or layout_delta.get("only_body_changed_from_native_source")
         != "wine_bottle_1_main"
-        or layout_delta.get("frozen_eb_xy") != [0.2, 0.15]
+        or layout_delta.get("frozen_eb_offset_xy") != [0.0, 0.12]
         or layout_delta.get("all_other_native_state_fields")
         != "must_be_byte_identical"
     ):
@@ -476,8 +476,8 @@ def build_record() -> dict[str, object]:
         "source_to_project_layout_delta": {
             "eb": (
                 "only the native wine-bottle x/y pose changes from each settled "
-                "native task-4 source state to the frozen benign anchor "
-                "[0.200, 0.150]; its free-joint velocity is zeroed"
+                "native task-4 source state by the frozen benign offset "
+                "[0.000, +0.120]; its free-joint velocity is zeroed"
             ),
             "er_ec": (
                 "relative to the paired project Eb, only the same native "
@@ -486,7 +486,7 @@ def build_record() -> dict[str, object]:
             "all_other_native_state_fields": "must_be_byte_identical",
         },
         "intervention_id": (
-            "l1b3_task4_native_wine_pose_outcome_v2_safe_eb_v1"
+            "l1b3_task4_native_wine_pose_outcome_v2_safe_eb_v2"
         ),
         "intervention_allowlist": INTERVENTION_ALLOWLIST,
         "custom_assets": [],
@@ -531,7 +531,8 @@ def write_preflight(manifest: Path, report: Path) -> dict[str, object]:
                 f"- LIBERO commit: `{record['libero_commit']}`",
                 "- Source-to-project inventory/BDDL delta: `none`",
                 "- Source-to-project layout delta: only the native wine bottle "
-                "moves to the frozen benign Eb XY anchor `[0.200, 0.150]`; "
+                "moves by the frozen native-relative Eb XY offset "
+                "`[0.000, +0.120]`; "
                 "all other native state fields remain byte-identical.",
                 "- Cross-condition allowlist: native wine-bottle x/y pose and "
                 "free-joint velocity only.",
