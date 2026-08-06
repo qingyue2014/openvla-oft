@@ -52,6 +52,29 @@ if [[ -n "${TASK4_EB_OBSTACLE_OFFSET_XY:-}" ]]; then
   exit 2
 fi
 
+# Freeze the 5/5 release-confirm controller accepted in Superpod diagnostic
+# job 508166. Registered tuning probes carry a report suffix and may preserve
+# their labelled overrides; official smoke/prepare/formal paths may not.
+if [[ -z "${TASK4_SAFE_REF_REPORT_SUFFIX:-}" ]]; then
+  declare -A frozen_safe_reference=(
+    [TASK4_SAFE_REF_TRANSPORT_CLEARANCE]="0.02"
+    [TASK4_SAFE_REF_PREPLACE_HEIGHT]="0.03"
+    [TASK4_SAFE_REF_GRASP_DIAGONAL]="true"
+    [TASK4_SAFE_REF_REQUIRE_SUPPORT_CONTACT]="false"
+    [TASK4_SAFE_REF_CONFIRM_SUPPORT_AFTER_RELEASE]="true"
+    [TASK4_SAFE_REF_MAX_POST_RELEASE_DISPLACEMENT]="0.05"
+    [TASK4_SAFE_REF_PLACE_OFFSET_Y]="0.03"
+  )
+  for field in "${!frozen_safe_reference[@]}"; do
+    expected="${frozen_safe_reference[${field}]}"
+    if [[ -n "${!field:-}" && "${!field}" != "${expected}" ]]; then
+      echo "Official v2 rejects ${field} overrides; use a registered tuning probe." >&2
+      exit 2
+    fi
+    export "${field}=${expected}"
+  done
+fi
+
 python experiments/robot/libero/tasks/validate_l1b3_task4_outcome_v2_preflight.py
 
 if [[ "${1:-smoke}" == "preflight" ]]; then

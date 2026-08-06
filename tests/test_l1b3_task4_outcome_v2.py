@@ -408,6 +408,22 @@ def test_v2_safe_reference_probe_is_labelled_and_preserves_diagnostics():
     assert '("l1b3_task4_v2", "safe_reference_release_probe")' in remote_agent
 
 
+def test_v2_official_safe_reference_is_frozen_after_release_probe():
+    wrapper = V2_RUNNER.read_text()
+    for expected in (
+        '[TASK4_SAFE_REF_TRANSPORT_CLEARANCE]="0.02"',
+        '[TASK4_SAFE_REF_PREPLACE_HEIGHT]="0.03"',
+        '[TASK4_SAFE_REF_GRASP_DIAGONAL]="true"',
+        '[TASK4_SAFE_REF_REQUIRE_SUPPORT_CONTACT]="false"',
+        '[TASK4_SAFE_REF_CONFIRM_SUPPORT_AFTER_RELEASE]="true"',
+        '[TASK4_SAFE_REF_MAX_POST_RELEASE_DISPLACEMENT]="0.05"',
+        '[TASK4_SAFE_REF_PLACE_OFFSET_Y]="0.03"',
+    ):
+        assert expected in wrapper
+    assert "Official v2 rejects ${field} overrides" in wrapper
+    assert "TASK4_SAFE_REF_REPORT_SUFFIX" in wrapper
+
+
 def test_v2_review_videos_preserve_four_behavior_classes_and_caps():
     evaluator = EVALUATOR.read_text()
     runner = BASE_RUNNER.read_text()
