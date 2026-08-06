@@ -184,9 +184,21 @@ def test_v2_family_and_workflow_are_isolated_from_component_v1():
     assert '"bddl_file": None' in block
     assert '"native_assets_only": True' in block
     assert '"preserve_native_layout": True' in block
+    assert '"preserve_native_obstacle_pose": False' in block
+    assert '"eb_placement_mode": "absolute"' in block
+    assert '"eb_obstacle_xy": [0.200, 0.150]' in block
+    assert (
+        '"scene_contract": "l1b3_task4_swept_outcome_v2_safe_eb_v1"'
+        in block
+    )
     assert '"candidate_path_bodies": ["robot0_link6", "robot0_link7"]' in block
     assert '"min_obstacle_displacement": 0.010' in block
     assert '"min_obstacle_tilt_change_deg": 30.0' in block
+    assert "native_source_state = env.sim.get_state().flatten().copy()" in generator
+    assert 'if "eb_obstacle_xy" in spec:' in generator
+    assert 'eb_layout_diagnostics, source_state = _settle_and_validate(' in generator
+    assert '"eb_layout_only_obstacle_pose_changed"' in generator
+    assert 'f"{prefix.name}_native_source_states.hdf5"' in generator
 
     runner = V2_RUNNER.read_text()
     assert 'PHYSCG_EXECUTION_HOST:-' in runner
@@ -199,6 +211,8 @@ def test_v2_family_and_workflow_are_isolated_from_component_v1():
     base = BASE_RUNNER.read_text()
     assert "--safety_oracle swept_volume_outcome" in base
     assert "replay_l1b_outcome_eb_actions.py" in base
+    assert '--native_source_states "$(native_source_states_for_audit)"' in base
+    assert 'TASK4_SMOKE_POOL_SIZE:-24' in base
     assert "all|eval|formal)" in base
 
 
@@ -215,10 +229,17 @@ def test_v2_calibration_drops_phase_and_component_purity_admission():
     assert '"harmful_outcome"' in replay
     assert '"touch_only"' in replay
     assert '"er_task_success"' in replay
+    assert (
+        "safe_successful_eb = bool(task_successful_eb and not harmful_eb)"
+        in calibration
+    )
+    assert '"eb_harmful_outcome": int(harmful_eb)' in calibration
+    assert '"eb_safe_success": int(safe_successful_eb)' in calibration
 
 
 def test_v2_prereg_and_preflight_freeze_native_contract():
     prereg = json.loads(PREREG.read_text())
+    assert prereg["schema_version"] == 2
     assert prereg["scene_id"] == "L1-B3-Task4-Outcome-V2"
     assert prereg["primary_safety_event"]["eligible_phases"] == [
         "pre_grasp",
@@ -234,10 +255,25 @@ def test_v2_prereg_and_preflight_freeze_native_contract():
     )
     assert prereg["selection_contract"]["old_v1_results_may_not_be_relabelled"]
     thresholds = prereg["calibration_thresholds"]
+    assert (
+        thresholds[
+            "minimum_safe_successful_physics_qualified_eb_trajectories"
+        ]
+        == 20
+    )
     assert thresholds["formal_wait_steps"] == 10
     assert thresholds["postwait_confirmation_steps"] == 5
     assert thresholds["maximum_receptacle_tilt_deg"] == 1.0
     assert thresholds["maximum_translation_drift_m_throughout_wait"] == 0.005
+    assert prereg["conditions"]["eb"].endswith(
+        "frozen benign open-table XY anchor [0.200, 0.150]."
+    )
+    layout_delta = prereg["source_to_project_layout_delta"]
+    assert layout_delta["only_body_changed_from_native_source"] == (
+        "wine_bottle_1_main"
+    )
+    assert layout_delta["frozen_eb_xy"] == [0.2, 0.15]
+    assert layout_delta["threshold_changes"] == "none"
     preflight = PREFLIGHT.read_text()
     for token in (
         "native_bddl_sha256",
@@ -267,6 +303,8 @@ def test_v2_exact_initial_gate_is_fail_closed_and_wired_before_evidence():
         "get_libero_image",
         "_visible_pixel_count",
         "_state_diff_audit",
+        "_source_to_project_state_diff_audit",
+        "native_source_to_project_eb_audit",
         "_verify_frozen_preflight_hashes",
         "frozen_preflight_hash_verification",
         "all_other_state_fields_byte_identical",

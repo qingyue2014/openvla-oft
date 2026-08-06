@@ -309,8 +309,11 @@ def build_record() -> dict[str, object]:
         "bddl_file": None,
         "native_assets_only": True,
         "preserve_native_layout": True,
+        "preserve_native_obstacle_pose": False,
+        "eb_placement_mode": "absolute",
+        "eb_obstacle_xy": [0.200, 0.150],
         "outcome_based": True,
-        "scene_contract": "l1b3_task4_swept_outcome_v2",
+        "scene_contract": "l1b3_task4_swept_outcome_v2_safe_eb_v1",
     }
     mismatches = {
         key: (spec.get(key), value)
@@ -370,15 +373,22 @@ def build_record() -> dict[str, object]:
     )
     preregistration = json.loads(prereg.read_text(encoding="utf-8"))
     native_contract = preregistration.get("native_task", {})
+    layout_delta = preregistration.get("source_to_project_layout_delta", {})
     if (
         preregistration.get("family") != FAMILY
         or native_contract.get("benchmark_prompt") != TASK_PROMPT
         or native_contract.get("native_bddl_embedded_language") != bddl_prompt
         or native_contract.get("evaluated_policy_prompt_source")
         != "native benchmark task language, with no override"
+        or layout_delta.get("only_body_changed_from_native_source")
+        != "wine_bottle_1_main"
+        or layout_delta.get("frozen_eb_xy") != [0.2, 0.15]
+        or layout_delta.get("all_other_native_state_fields")
+        != "must_be_byte_identical"
     ):
         raise ValueError(
-            "preregistration does not match the selected native prompt contract"
+            "preregistration does not match the selected native prompt/layout "
+            "contract"
         )
     project_relative_paths = (
         "experiments/robot/libero/physcog_oracles.py",
@@ -464,13 +474,20 @@ def build_record() -> dict[str, object]:
             "none; evaluated BDDL is the selected native source"
         ),
         "source_to_project_layout_delta": {
-            "eb": "native task-4 source state followed by common settling",
-            "er_ec": (
-                "only native wine-bottle free-joint x/y pose and zeroed "
-                "free-joint velocity"
+            "eb": (
+                "only the native wine-bottle x/y pose changes from each settled "
+                "native task-4 source state to the frozen benign anchor "
+                "[0.200, 0.150]; its free-joint velocity is zeroed"
             ),
+            "er_ec": (
+                "relative to the paired project Eb, only the same native "
+                "wine-bottle free-joint x/y pose and zeroed free-joint velocity"
+            ),
+            "all_other_native_state_fields": "must_be_byte_identical",
         },
-        "intervention_id": "l1b3_task4_native_wine_pose_outcome_v2",
+        "intervention_id": (
+            "l1b3_task4_native_wine_pose_outcome_v2_safe_eb_v1"
+        ),
         "intervention_allowlist": INTERVENTION_ALLOWLIST,
         "custom_assets": [],
         "custom_bddl": False,
@@ -513,6 +530,9 @@ def write_preflight(manifest: Path, report: Path) -> dict[str, object]:
                 f"`{record['native_asset_manifest_sha256']}`",
                 f"- LIBERO commit: `{record['libero_commit']}`",
                 "- Source-to-project inventory/BDDL delta: `none`",
+                "- Source-to-project layout delta: only the native wine bottle "
+                "moves to the frozen benign Eb XY anchor `[0.200, 0.150]`; "
+                "all other native state fields remain byte-identical.",
                 "- Cross-condition allowlist: native wine-bottle x/y pose and "
                 "free-joint velocity only.",
                 "- Custom assets, BDDL, prompt, or goal changes: `none`",

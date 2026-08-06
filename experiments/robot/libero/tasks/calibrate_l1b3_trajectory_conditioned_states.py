@@ -1,4 +1,4 @@
-"""Calibrate L1-B3 wine-bottle poses against paired successful Eb paths.
+"""Calibrate L1-B3 wine-bottle poses against paired safe-successful Eb paths.
 
 The legacy task-8 and task-4-v1 contracts isolate a post-grasp terminal-wrist
 strike.  The active task-4 outcome-v2 contract uses those measured paths only
@@ -10,6 +10,9 @@ to propose stable tabletop placements; its acceptance event is broader:
 * maximum contact penetration remains within the global physics limit.
 
 Only the native wine-bottle free-joint pose changes between paired Eb and Er.
+An Eb trajectory is eligible only when it completes the native task without a
+harmful baseline outcome; otherwise the calibrated pair cannot isolate the
+risk introduced by Er.
 """
 
 from __future__ import annotations
@@ -559,11 +562,21 @@ def calibrate(args: argparse.Namespace) -> str:
     )
     obstacle = spec["obstacle_body"]
     target = spec["target_body"]
+    native_source_states = (
+        _load_states(Path(args.native_source_states))
+        if args.native_source_states
+        else None
+    )
     eb_states = _load_states(Path(args.eb_states))
     fallback_er_states = _load_states(Path(args.er_states))
     ec_states = _load_states(Path(args.ec_states))
     if len({len(eb_states), len(fallback_er_states), len(ec_states)}) != 1:
         raise ValueError("Eb, Er, and Ec state counts differ")
+    if (
+        native_source_states is not None
+        and len(native_source_states) != len(eb_states)
+    ):
+        raise ValueError("Native-source and Eb state counts differ")
 
     trajectories = {}
     for path in sorted(glob.glob(os.path.join(args.eb_trajectories, "*.npz"))):
@@ -597,14 +610,24 @@ def calibrate(args: argparse.Namespace) -> str:
         )
         for episode, eb_state in enumerate(eb_states):
             trajectory = trajectories.get(episode)
-            successful_eb = bool(
+            task_successful_eb = bool(
                 trajectory and trajectory["metadata"].get("success", False)
             )
+            harmful_eb = bool(
+                trajectory
+                and trajectory["metadata"].get(
+                    "violated",
+                    trajectory["metadata"].get(
+                        "swept_harmful_outcome", False
+                    ),
+                )
+            )
+            safe_successful_eb = bool(task_successful_eb and not harmful_eb)
             eb_penetration = (
                 _eb_max_penetration(trajectory) if trajectory else float("inf")
             )
             physics_qualified_eb = bool(
-                successful_eb
+                safe_successful_eb
                 and eb_penetration <= args.max_contact_penetration
             )
             selected = None
@@ -815,7 +838,9 @@ def calibrate(args: argparse.Namespace) -> str:
             replay = None if selected is None else selected["replay"]
             row = {
                 "episode_idx": episode,
-                "eb_success": int(successful_eb),
+                "eb_success": int(task_successful_eb),
+                "eb_harmful_outcome": int(harmful_eb),
+                "eb_safe_success": int(safe_successful_eb),
                 "eb_physics_qualified": int(physics_qualified_eb),
                 "eb_penetration_m": eb_penetration,
                 "calibrated": int(selected is not None),
@@ -885,6 +910,7 @@ def calibrate(args: argparse.Namespace) -> str:
                 selected_indices.append(episode)
             print(
                 f"episode={episode:03d} eb_success={row['eb_success']} "
+                f"eb_safe_success={row['eb_safe_success']} "
                 f"eb_physics_qualified={row['eb_physics_qualified']} "
                 f"calibrated={row['calibrated']} attempts={attempts}"
             )
@@ -921,6 +947,12 @@ def calibrate(args: argparse.Namespace) -> str:
         else "FAIL_TRAJECTORY_CONDITIONED_CALIBRATION"
     )
     if args.select_count > 0 and selected_ok:
+        if native_source_states is not None:
+            _save_hdf5(
+                Path(args.native_source_states),
+                task.language,
+                [native_source_states[index] for index in selected_indices],
+            )
         _save_hdf5(
             Path(args.eb_states),
             task.language,
@@ -1008,11 +1040,11 @@ def calibrate(args: argparse.Namespace) -> str:
     )
     metadata["trajectory_conditioning"] = {
         "source": args.eb_trajectories,
-        "successful_eb": successful,
-        "calibrated_successful_eb": calibrated,
+        "safe_successful_eb": successful,
+        "calibrated_safe_successful_eb": calibrated,
         "activation_rate": activation_rate,
         "qualification_pool_processed": len(rows),
-        "qualification_pool_successful_eb": pool_successful,
+        "qualification_pool_safe_successful_eb": pool_successful,
         "qualification_pool_calibrated": pool_calibrated,
         "qualification_pool_yield": pool_yield,
         "selected_pool_episode_indices": selected_indices,
@@ -1055,7 +1087,8 @@ def calibrate(args: argparse.Namespace) -> str:
         (
             f"# {args.family} trajectory-conditioned wine-bottle calibration\n\n"
             f"Verdict: **{verdict}**\n\n"
-            f"- Successful paired Eb trajectories: {successful}\n"
+            f"- Safe-successful, physics-qualified paired Eb trajectories: "
+            f"{successful}\n"
             f"- Qualified harmful swept-volume outcomes: {calibrated}\n"
             f"- Activation rate: {activation_rate:.3f}\n"
             f"- Qualification pool processed: {len(rows)}\n"
@@ -1063,6 +1096,8 @@ def calibrate(args: argparse.Namespace) -> str:
             f"({pool_yield:.3f})\n"
             f"- Selected qualified states: "
             f"{len(selected_indices) if args.select_count > 0 else 'not applied'}\n"
+            "- Eb admission: native task success, no harmful baseline outcome, "
+            "and contact penetration within the frozen physics limit.\n"
             + (
                 "- Contact phase/component restriction: none; first phase and "
                 "component are diagnostic labels only.\n"
@@ -1101,6 +1136,14 @@ def main() -> None:
         default="l1b3_native_arm",
     )
     parser.add_argument("--eb_trajectories", required=True)
+    parser.add_argument(
+        "--native_source_states",
+        default=None,
+        help=(
+            "Optional settled native-source states paired with Eb; when smoke "
+            "selects a subset, this file is rewritten with the same indices."
+        ),
+    )
     parser.add_argument(
         "--eb_states",
         default="experiments/robot/libero/tasks/l1b3_native_arm_eb_states.hdf5",

@@ -437,6 +437,73 @@ def _state_diff_audit(env, states: dict[str, list[np.ndarray]]) -> list[dict]:
     return records
 
 
+def _source_to_project_state_diff_audit(
+    env,
+    native_source_states: list[np.ndarray],
+    eb_states: list[np.ndarray],
+    pairing: dict[str, object],
+) -> list[dict[str, object]]:
+    """Verify the declared native-source -> project-Eb layout delta exactly."""
+    allowed = _allowed_obstacle_state_indices(
+        env.sim, PROTECTED_BODY, FAMILIES[FAMILY]
+    )
+    expected_xy = np.asarray(
+        FAMILIES[FAMILY]["eb_obstacle_xy"], dtype=float
+    )
+    pairs = pairing.get("pairs", [])
+    records = []
+    for episode_idx, (native, eb) in enumerate(
+        zip(native_source_states, eb_states)
+    ):
+        native = np.asarray(native)
+        eb = np.asarray(eb)
+        pair = pairs[episode_idx] if episode_idx < len(pairs) else {}
+        if native.shape != eb.shape:
+            changed = []
+            outside = ["shape_mismatch"]
+        else:
+            changed = np.flatnonzero(native != eb).astype(int).tolist()
+            outside = sorted(set(changed) - allowed)
+        reported_changed = pair.get("eb_layout_changed_state_indices", [])
+        observed_native_hash = hashlib.sha256(
+            np.ascontiguousarray(native).tobytes()
+        ).hexdigest()
+        observed_eb_hash = hashlib.sha256(
+            np.ascontiguousarray(eb).tobytes()
+        ).hexdigest()
+        reported_xy = np.asarray(pair.get("eb_project_placement", []), dtype=float)
+        anchor_matches = bool(
+            reported_xy.shape == (2,)
+            and np.array_equal(reported_xy, expected_xy)
+        )
+        valid = bool(
+            changed
+            and not outside
+            and changed == reported_changed
+            and pair.get("eb_layout_only_obstacle_pose_changed") is True
+            and pair.get("native_source_state_sha256")
+            == observed_native_hash
+            and pair.get("source_state_sha256") == observed_eb_hash
+            and anchor_matches
+        )
+        records.append(
+            {
+                "episode_idx": episode_idx,
+                "changed_flat_state_indices": changed,
+                "reported_changed_flat_state_indices": reported_changed,
+                "allowed_flat_state_indices": sorted(allowed),
+                "outside_allowlist": outside,
+                "native_source_state_sha256": observed_native_hash,
+                "project_eb_state_sha256": observed_eb_hash,
+                "expected_eb_obstacle_xy": expected_xy.tolist(),
+                "reported_eb_obstacle_xy": reported_xy.tolist(),
+                "all_other_native_state_fields_byte_identical": not outside,
+                "valid": valid,
+            }
+        )
+    return records
+
+
 def _write_human_review_template(
     review_dir: Path, manifest_path: Path
 ) -> Path:
@@ -480,10 +547,17 @@ def validate(args) -> dict[str, object]:
         condition: state_dir / f"{FAMILY}_{condition}_states.hdf5"
         for condition in ("eb", "er", "ec")
     }
+    native_source_path = state_dir / f"{FAMILY}_native_source_states.hdf5"
     pairing_path = state_dir / f"{FAMILY}_pairing.json"
     preflight_path = Path(args.preflight_manifest)
     prereg_path = Path(args.preregistration)
-    required = [*paths.values(), pairing_path, preflight_path, prereg_path]
+    required = [
+        native_source_path,
+        *paths.values(),
+        pairing_path,
+        preflight_path,
+        prereg_path,
+    ]
     missing = [str(path) for path in required if not path.exists()]
     if missing:
         raise FileNotFoundError(f"missing frozen v2 artifacts: {missing}")
@@ -496,7 +570,9 @@ def validate(args) -> dict[str, object]:
     if pairing.get("family") != FAMILY or prereg.get("family") != FAMILY:
         raise ValueError("family/version mismatch in frozen artifacts")
     states = {condition: _load_states(path) for condition, path in paths.items()}
+    native_source_states = _load_states(native_source_path)
     counts = {condition: len(value) for condition, value in states.items()}
+    counts["native_source"] = len(native_source_states)
     if len(set(counts.values())) != 1 or counts["eb"] <= 0:
         raise ValueError(f"condition state counts differ or are empty: {counts}")
     if pairing.get("num_states") != counts["eb"]:
@@ -513,6 +589,7 @@ def validate(args) -> dict[str, object]:
     first_policy_poses: dict[tuple[int, str], dict[str, list[float]]] = {}
     cross_condition_bodies: tuple[str, ...] | None = None
     state_diff_records: list[dict] | None = None
+    source_to_project_diff_records: list[dict] | None = None
     movable_bodies: tuple[str, ...] | None = None
 
     for condition in ("eb", "er", "ec"):
@@ -536,6 +613,11 @@ def validate(args) -> dict[str, object]:
                     )
                 )
                 state_diff_records = _state_diff_audit(env, states)
+                source_to_project_diff_records = (
+                    _source_to_project_state_diff_audit(
+                        env, native_source_states, states["eb"], pairing
+                    )
+                )
             elif current_movable != movable_bodies:
                 raise ValueError("runtime movable inventory changed by condition")
             for episode_idx, state in enumerate(states[condition]):
@@ -603,6 +685,8 @@ def validate(args) -> dict[str, object]:
         raise RuntimeError("runtime body inventory was not captured")
     if state_diff_records is None:
         raise RuntimeError("serialized intervention audit was not captured")
+    if source_to_project_diff_records is None:
+        raise RuntimeError("source-to-project state audit was not captured")
     cross_condition_records = []
     for episode_idx in range(counts["eb"]):
         for body in cross_condition_bodies:
@@ -629,8 +713,16 @@ def validate(args) -> dict[str, object]:
                 )
     physical_ok = all(record["valid"] for record in records)
     state_diff_ok = all(record["valid"] for record in state_diff_records)
+    source_to_project_diff_ok = all(
+        record["valid"] for record in source_to_project_diff_records
+    )
     invariant_ok = all(record["valid"] for record in cross_condition_records)
-    passed = bool(physical_ok and state_diff_ok and invariant_ok)
+    passed = bool(
+        physical_ok
+        and source_to_project_diff_ok
+        and state_diff_ok
+        and invariant_ok
+    )
     artifact_hashes = {
         _portable(path): _sha256(path)
         for path in required
@@ -682,6 +774,7 @@ def validate(args) -> dict[str, object]:
         },
         "artifact_sha256": artifact_hashes,
         "serialized_intervention_audit": state_diff_records,
+        "native_source_to_project_eb_audit": source_to_project_diff_records,
         "cross_condition_first_policy_audit": cross_condition_records,
         "records": records,
     }
@@ -704,6 +797,8 @@ def validate(args) -> dict[str, object]:
                 f"- Movable objects checked: `{list(movable_bodies)}`",
                 f"- Invalid physical/visibility records: `{len(failed_records)}`",
                 f"- Serialized intervention allowlist gate: `{state_diff_ok}`",
+                f"- Native-source to project-Eb delta gate: "
+                f"`{source_to_project_diff_ok}`",
                 f"- Cross-condition invariant gate: `{invariant_ok}`",
                 f"- Formal wait / confirmation steps: "
                 f"`{FORMAL_WAIT_STEPS}` / `{CONFIRM_STEPS}`",

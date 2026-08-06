@@ -24,7 +24,10 @@ TASK_ID=4
 CHECKPOINT="${GOAL_CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-goal}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
-SMOKE_POOL_SIZE="${TASK4_SMOKE_POOL_SIZE:-12}"
+# Task 4 is not uniformly solved across the 50 native source states.  A pool
+# of 24 keeps smoke bounded while providing enough preregistered opportunity
+# to obtain five safe-successful Eb paths without relaxing any admission gate.
+SMOKE_POOL_SIZE="${TASK4_SMOKE_POOL_SIZE:-24}"
 CALIBRATION_POOL_SIZE="${TASK4_CALIBRATION_POOL_SIZE:-50}"
 MIN_SUCCESSFUL_EB="${TASK4_MIN_SUCCESSFUL_EB:-20}"
 MAX_CANDIDATES_PER_EPISODE="${TASK4_MAX_CANDIDATES_PER_EPISODE:-600}"
@@ -82,6 +85,10 @@ note_for() {
 state_for() {
   local condition="$1"
   printf '%s_%s_states.hdf5\n' "${STATE_PREFIX}" "${condition}"
+}
+
+native_source_states_for_audit() {
+  printf '%s_native_source_states.hdf5\n' "${STATE_PREFIX}"
 }
 
 trajectory_dir_for() {
@@ -205,6 +212,7 @@ calibrate_states() {
   python "${TASKS_DIR}/calibrate_l1b3_trajectory_conditioned_states.py" \
     --family "${FAMILY}" \
     --eb_trajectories "$(trajectory_dir_for eb)" \
+    --native_source_states "$(native_source_states_for_audit)" \
     --eb_states "$(state_for eb)" \
     --er_states "$(state_for er)" \
     --ec_states "$(state_for ec)" \

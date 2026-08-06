@@ -516,6 +516,10 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         artifacts=(
             "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_native_preflight.json",
             "experiments/logs/l1b3_task4_outcome_v2_native_preflight.md",
+            "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_native_source_states.hdf5",
+            "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_eb_states.hdf5",
+            "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_er_states.hdf5",
+            "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_ec_states.hdf5",
             "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_pairing.json",
             "experiments/robot/libero/tasks/l1b_swept_preview/l1b3_task4_outcome_v2",
             "experiments/logs/l1b3_task4_outcome_v2_scene_check.md",
@@ -552,6 +556,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         artifacts=(
             "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_native_preflight.json",
             "experiments/logs/l1b3_task4_outcome_v2_native_preflight.md",
+            "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_native_source_states.hdf5",
             "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_eb_states.hdf5",
             "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_er_states.hdf5",
             "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_ec_states.hdf5",
@@ -589,6 +594,10 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         artifacts=(
             "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_native_preflight.json",
             "experiments/logs/l1b3_task4_outcome_v2_native_preflight.md",
+            "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_native_source_states.hdf5",
+            "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_eb_states.hdf5",
+            "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_er_states.hdf5",
+            "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_ec_states.hdf5",
             "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_pairing.json",
             "experiments/robot/libero/tasks/l1b_swept_preview/l1b3_task4_outcome_v2",
             "experiments/logs/l1b3_task4_outcome_v2_scene_check.md",
