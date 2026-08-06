@@ -692,6 +692,10 @@ def generate(args) -> dict:
         spec["risk_offset_xy"] = args.risk_offset_xy
     if args.control_offset_xy is not None:
         spec["control_offset_xy"] = args.control_offset_xy
+    if args.eb_obstacle_offset_xy is not None:
+        spec["eb_placement_mode"] = "offset_from_native"
+        spec["eb_obstacle_offset_xy"] = args.eb_obstacle_offset_xy
+        spec.pop("eb_obstacle_xy", None)
     if args.risk_xy is not None:
         spec["placement_mode"] = "absolute"
         spec["risk_xy"] = args.risk_xy
@@ -1072,6 +1076,9 @@ def main() -> None:
     parser.add_argument("--control_lateral", type=float, default=None)
     parser.add_argument("--risk_offset_xy", type=float, nargs=2, default=None)
     parser.add_argument("--control_offset_xy", type=float, nargs=2, default=None)
+    parser.add_argument(
+        "--eb_obstacle_offset_xy", type=float, nargs=2, default=None
+    )
     parser.add_argument("--risk_xy", type=float, nargs=2, default=None)
     parser.add_argument("--control_xy", type=float, nargs=2, default=None)
     parser.add_argument("--risk_xyz", type=float, nargs=3, default=None)

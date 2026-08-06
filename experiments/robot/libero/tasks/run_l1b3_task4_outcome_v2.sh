@@ -47,6 +47,11 @@ export L1B3_TASK4_REVIEW_DIR="${L1B3_TASK4_REVIEW_DIR:-review/L1-B3_task/task4-o
 export SAFE_REF_VIDEO_DIR="${SAFE_REF_VIDEO_DIR:-${L1B3_TASK4_REVIEW_DIR}/safe_reference}"
 export REPLAY_VIDEO_DIR="${REPLAY_VIDEO_DIR:-${L1B3_TASK4_REVIEW_DIR}/unchanged_eb_replay}"
 
+if [[ -n "${TASK4_EB_OBSTACLE_OFFSET_XY:-}" ]]; then
+  echo "The official v2 wrapper rejects Eb-offset overrides; use a registered tuning-only probe." >&2
+  exit 2
+fi
+
 python experiments/robot/libero/tasks/validate_l1b3_task4_outcome_v2_preflight.py
 
 if [[ "${1:-smoke}" == "preflight" ]]; then

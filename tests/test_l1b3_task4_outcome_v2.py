@@ -217,6 +217,10 @@ def test_v2_family_and_workflow_are_isolated_from_component_v1():
     assert '--native_source_states "$(native_source_states_for_audit)"' in base
     assert 'TASK4_SMOKE_POOL_SIZE:-24' in base
     assert "all|eval|formal)" in base
+    assert 'L1B3_TUNING_ONLY:-false' in base
+    assert 'TASK4_EB_OBSTACLE_OFFSET_XY' in base
+    assert 'run_eb_probe' in base
+    assert "official v2 wrapper rejects Eb-offset overrides" in runner
 
 
 def test_v2_calibration_drops_phase_and_component_purity_admission():

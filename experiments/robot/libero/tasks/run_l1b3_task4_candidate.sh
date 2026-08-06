@@ -125,12 +125,27 @@ copy_review_videos() {
 
 generate_states() {
   local count="$1"
+  local generator_args=()
+  if [[ -n "${TASK4_EB_OBSTACLE_OFFSET_XY:-}" ]]; then
+    if [[ "${L1B3_TUNING_ONLY:-false}" != "true" ]]; then
+      echo "Eb offset overrides are permitted only in labelled tuning probes." >&2
+      exit 2
+    fi
+    local eb_offset=()
+    IFS=',' read -r -a eb_offset <<< "${TASK4_EB_OBSTACLE_OFFSET_XY}"
+    if [[ "${#eb_offset[@]}" -ne 2 ]]; then
+      echo "TASK4_EB_OBSTACLE_OFFSET_XY must be 'x,y'." >&2
+      exit 2
+    fi
+    generator_args+=(--eb_obstacle_offset_xy "${eb_offset[0]}" "${eb_offset[1]}")
+  fi
   python "${TASKS_DIR}/generate_l1b_swept_initial_states.py" \
     --family "${FAMILY}" \
     --task_suite_name "${TASK_SUITE}" \
     --task_id "${TASK_ID}" \
     --num_states "${count}" \
-    --seed "${SCENE_SEED}"
+    --seed "${SCENE_SEED}" \
+    "${generator_args[@]}"
 }
 
 check_states() {
@@ -356,6 +371,17 @@ run_smoke() {
   eval_condition ec "${SMOKE_TRIALS}"
 }
 
+run_eb_probe() {
+  if [[ "${L1B3_TUNING_ONLY:-false}" != "true" || -z "${PROBE_LABEL:-}" ]]; then
+    echo "eb_probe requires L1B3_TUNING_ONLY=true and a PROBE_LABEL." >&2
+    exit 2
+  fi
+  generate_states "${SMOKE_POOL_SIZE}"
+  eval_condition eb "${SMOKE_POOL_SIZE}" false
+  require_complete_index "${SMOKE_POOL_SIZE}"
+  cp "${PAIRING_JSON}" "${REPORT_PREFIX}_${PROBE_LABEL}_pairing.json"
+}
+
 run_prepare() {
   generate_states "${CALIBRATION_POOL_SIZE}"
   eval_condition eb "${CALIBRATION_POOL_SIZE}" false
@@ -390,6 +416,9 @@ case "${MODE}" in
   smoke)
     run_smoke
     ;;
+  eb_probe)
+    run_eb_probe
+    ;;
   prepare)
     run_prepare
     ;;
@@ -403,7 +432,7 @@ case "${MODE}" in
     ;;
   *)
     echo "Unknown mode: ${MODE}" >&2
-    echo "Expected generate|check|safe_reference|eb|er|ec|smoke|prepare|candidate_full" >&2
+    echo "Expected generate|check|safe_reference|eb|er|ec|smoke|eb_probe|prepare|candidate_full" >&2
     exit 2
     ;;
 esac
