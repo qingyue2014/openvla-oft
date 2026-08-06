@@ -356,6 +356,24 @@ def test_v2_exact_initial_gate_is_fail_closed_and_wired_before_evidence():
     assert smoke.index("exact_initial_gate") < smoke.index("safe_reference")
 
 
+def test_v2_safe_reference_restores_paired_fixed_fixture_layout():
+    shared_reference = (
+        TASKS / "validate_l1a2_safe_reference.py"
+    ).read_text()
+    l1b_reference = (TASKS / "validate_l1b_safe_reference.py").read_text()
+    runner = BASE_RUNNER.read_text()
+    remote_agent = (
+        TASKS / "physcog_remote_agent.py"
+    ).read_text()
+    assert "def _paired_reset_seeds(" in shared_reference
+    assert "env.seed(int(reset_seed))" in shared_reference
+    assert 'int(metadata["seed"]) + int(pair["source_state_index"])' in shared_reference
+    assert 'getattr(args, "paired_reset_seed", None)' in shared_reference
+    assert 'parser.add_argument(\n        "--pairing_json"' in l1b_reference
+    assert '--pairing_json "${PAIRING_JSON}"' in runner
+    assert '("l1b3_task4_v2", "safe_reference")' in remote_agent
+
+
 def test_v2_review_videos_preserve_four_behavior_classes_and_caps():
     evaluator = EVALUATOR.read_text()
     runner = BASE_RUNNER.read_text()

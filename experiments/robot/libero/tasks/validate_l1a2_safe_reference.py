@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import sys
 from dataclasses import dataclass
@@ -49,6 +50,37 @@ class MotionFailure:
 @dataclass
 class _Status:
     violated: bool = False
+
+
+def _reset_to_paired_state(env, state, reset_seed=None):
+    """Reconstruct sampled fixed fixtures before restoring qpos/qvel."""
+    if reset_seed is not None:
+        env.seed(int(reset_seed))
+    obs = env.reset()
+    return env.set_init_state(state)
+
+
+def _paired_reset_seeds(pairing_path, state_count):
+    if not pairing_path:
+        return [None] * state_count
+    path = Path(pairing_path)
+    if not path.is_file():
+        raise FileNotFoundError(f"Missing pairing metadata: {path}")
+    metadata = json.loads(path.read_text())
+    pairs = metadata.get("pairs", [])
+    if "seed" not in metadata or len(pairs) != state_count:
+        raise ValueError(
+            "Safe-reference pairing metadata must contain one source-indexed "
+            "pair per evaluated state"
+        )
+    seeds = []
+    for episode, pair in enumerate(pairs):
+        if "source_state_index" not in pair:
+            raise ValueError(
+                f"Pairing metadata is missing source_state_index for episode {episode}"
+            )
+        seeds.append(int(metadata["seed"]) + int(pair["source_state_index"]))
+    return seeds
 
 
 class _TrajectoryAndPolicyVideoRecorder:
@@ -680,8 +712,9 @@ def _run_episode(
 ):
     from experiments.robot.libero.tasks.generate_l1a2_initial_states import _world_aabb
 
-    obs = env.reset()
-    obs = env.set_init_state(state)
+    obs = _reset_to_paired_state(
+        env, state, getattr(args, "paired_reset_seed", None)
+    )
     oracle = _TaskOnlyOracle(env, TARGET)
     oracle.reset(env, obs)
     recorder = _TrajectoryAndPolicyVideoRecorder(
@@ -1804,10 +1837,13 @@ def run(args):
     rows = []
     selected_grasp = None
     videos_saved = 0
+    paired_reset_seeds = _paired_reset_seeds(
+        getattr(args, "pairing_json", ""), len(states)
+    )
     try:
         for idx, state in enumerate(states):
-            env.reset()
-            env.set_init_state(state)
+            args.paired_reset_seed = paired_reset_seeds[idx]
+            _reset_to_paired_state(env, state, args.paired_reset_seed)
             grasp_prefix_dir = getattr(args, "grasp_action_trajectories", "")
             if grasp_prefix_dir:
                 args.grasp_action_path = str(

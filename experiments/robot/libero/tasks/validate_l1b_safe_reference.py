@@ -150,6 +150,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--family", required=True)
     parser.add_argument("--state_path", required=True)
+    parser.add_argument(
+        "--pairing_json",
+        default="",
+        help=(
+            "Optional paired source metadata used to reconstruct sampled "
+            "fixed-fixture layouts before every reset"
+        ),
+    )
     parser.add_argument("--task_suite_name", default="libero_spatial")
     parser.add_argument("--task_id", type=int, default=6)
     parser.add_argument("--bddl_file", default="")

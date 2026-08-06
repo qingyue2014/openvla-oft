@@ -274,6 +274,7 @@ safe_reference() {
   python "${TASKS_DIR}/validate_l1b_safe_reference.py" \
     --family "${FAMILY}" \
     --state_path "$(state_for er)" \
+    --pairing_json "${PAIRING_JSON}" \
     --task_suite_name "${TASK_SUITE}" \
     --task_id "${TASK_ID}" \
     --num_states "${count}" \

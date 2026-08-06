@@ -793,6 +793,24 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "rollouts/libero_goal/L1-B3-task4-outcome-v2-bowl-cabinet-native-wine-ec",
         ),
     ),
+    ("l1b3_task4_v2", "safe_reference"): PhaseSpec(
+        command=(
+            "env",
+            "PHYSCG_EXECUTION_HOST=superpod",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAFE_REF_MAX_VIDEOS=1",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1b3_task4_outcome_v2.sh",
+            "safe_reference",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1b3_task4_outcome_v2_safe_reference.md",
+            "experiments/logs/l1b3_task4_outcome_v2_safe_reference.csv",
+            "experiments/logs/l1b3_task4_outcome_v2_safe_reference_trajectories",
+            "review/L1-B3_task/task4-outcome-v2/safe_reference",
+        ),
+    ),
     ("l1b3_task4_v2", "prepare"): PhaseSpec(
         command=(
             "env",

@@ -54,7 +54,7 @@ layout delta.
 
 Serialized MuJoCo state does not contain the sampled positions of fixed native
 fixtures such as the wooden cabinet. Before every calibration candidate,
-causal replay, and matched-control reset, the evaluator must therefore seed the
+causal replay, matched-control reset, and dynamic safe-reference attempt, the evaluator must therefore seed the
 native task with `pairing.seed + pair.source_state_index`, reset the environment,
 and only then restore the paired serialized state. Missing seed metadata is a
 hard failure.
@@ -144,6 +144,13 @@ cause was that trajectory calibration restored qpos/qvel without first
 reconstructing the episode-specific fixed-fixture layout. Fixture-reset v2
 repairs that protocol defect without changing the scene, oracle, thresholds,
 or selection rule; job `508043` remains repair provenance only.
+
+Superpod smoke job `508060` passed fixture-aware calibration, the independent
+static gate, and the exact first-policy-frame gate, but failed dynamic safe
+reference 0/5. Audit showed that the safe-reference controller still used an
+unseeded per-attempt reset, so it planned against a cabinet layout not contained
+in the restored qpos/qvel vector. The run stopped before causal replay and
+ER/EC learned-policy evaluation and is invalid for experimental results.
 
 ## Superpod workflow
 
