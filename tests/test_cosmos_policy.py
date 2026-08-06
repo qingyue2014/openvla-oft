@@ -42,6 +42,8 @@ def test_l1c1_cosmos_wrapper_pins_runtime_and_frozen_scene_gate():
     assert "MODEL_OPEN_LOOP_STEPS=16" in wrapper
     assert "MODEL_FAMILY=cosmos" in wrapper
     assert "SLURM_JOB_ID" in wrapper
+    assert 'PYTHONPATH="${LIBERO_ROOT}/libero:${COSMOS_SOURCE_ROOT}' in wrapper
+    assert 'test -f "${LIBERO_ROOT}/libero/libero/__init__.py"' in wrapper
 
     smoke = PHASES[("l1c1", "cosmos_smoke")]
     assert smoke.count_env == "SMOKE_TRIALS"

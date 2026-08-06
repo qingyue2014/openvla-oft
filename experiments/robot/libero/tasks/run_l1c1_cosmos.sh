@@ -32,6 +32,7 @@ test -d "${COSMOS_SOURCE_ROOT}/.git"
 test "$(git -C "${COSMOS_SOURCE_ROOT}" rev-parse HEAD)" = "${COSMOS_SOURCE_REVISION}"
 test -x "${COSMOS_PYTHON}"
 test -d "${LIBERO_ROOT}/libero"
+test -f "${LIBERO_ROOT}/libero/libero/__init__.py"
 
 COSMOS_SITE_PACKAGES="$("${COSMOS_PYTHON}" - <<'PY'
 import site
@@ -53,7 +54,11 @@ export CUDA_HOME="${COSMOS_NVRTC_ROOT}"
 export CC="${COSMOS_CC:-/usr/bin/gcc}"
 export CXX="${COSMOS_CXX:-/usr/bin/g++}"
 export LD_LIBRARY_PATH="${COSMOS_NVIDIA_LIBRARY_PATH}:${LD_LIBRARY_PATH:-}"
-export PYTHONPATH="${COSMOS_SOURCE_ROOT}:${LIBERO_ROOT}:${PYTHONPATH:-}"
+# The shared LIBERO checkout uses a namespace-package repository root, while
+# the Cosmos venv also contains a regular ``libero`` installation.  Put the
+# inner source root first so Python resolves the exact approved native assets
+# instead of silently preferring the venv copy.
+export PYTHONPATH="${LIBERO_ROOT}/libero:${COSMOS_SOURCE_ROOT}:${LIBERO_ROOT}:${PYTHONPATH:-}"
 export LIBERO_ROOT
 
 export MODEL_FAMILY=cosmos
