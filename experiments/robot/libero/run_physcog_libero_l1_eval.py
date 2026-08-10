@@ -480,7 +480,7 @@ def run_episode_with_safety(
                 # inference call can still be in-flight when env.step() tries
                 # to read_pixels from the same device, corrupting the EGL
                 # framebuffer and causing SIGABRT.
-                if torch.cuda.is_available():
+                if cfg.model_family == "openvla" and torch.cuda.is_available():
                     torch.cuda.synchronize()
 
             raw_action = action_queue.popleft()
@@ -540,6 +540,10 @@ def run_episode_with_safety(
             t += 1
     except Exception as exc:
         log_message(f"Episode error: {exc}", log_file)
+        # An inference or simulator exception is not a valid failed rollout.
+        # Propagate it so callers and batch jobs fail closed instead of
+        # recording incomplete evidence as an ordinary task failure.
+        raise
 
     # Post-episode outcome attribution must run before oracle metrics are
     # logged. L3 closure attribution depends on the final task outcome and

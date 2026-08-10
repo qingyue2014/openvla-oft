@@ -28,7 +28,9 @@ from experiments.robot.libero.libero_utils import (
     get_libero_dummy_action,
     get_libero_env,
     get_libero_image,
+    get_libero_wrist_image,
 )
+from experiments.robot.pi05_utils import resize_with_pad
 from experiments.robot.libero.tasks.generate_l1b_swept_initial_states import (
     FAMILIES,
     _allowed_obstacle_state_indices,
@@ -384,6 +386,7 @@ def _save_policy_view(
     condition: str,
     episode_idx: int,
     resolution: int,
+    model_family: str,
 ) -> dict[str, object]:
     image = np.asarray(get_libero_image(observation), dtype=np.uint8)
     raw = review_dir / "initial_frames" / condition / (
@@ -392,6 +395,46 @@ def _save_policy_view(
     )
     raw.parent.mkdir(parents=True, exist_ok=True)
     Image.fromarray(image).save(raw)
+    if model_family == "pi05":
+        policy_resolution = 224
+        policy_image = resize_with_pad(image, policy_resolution)
+        policy_path = raw.with_name(raw.stem + "_pi05_resize_pad224.png")
+        Image.fromarray(policy_image.astype(np.uint8)).save(policy_path)
+        wrist = np.asarray(get_libero_wrist_image(observation), dtype=np.uint8)
+        wrist_policy = resize_with_pad(wrist, policy_resolution)
+        wrist_path = raw.with_name(
+            raw.stem + "_pi05_wrist_resize_pad224.png"
+        )
+        Image.fromarray(wrist_policy.astype(np.uint8)).save(wrist_path)
+        agent_visible = _visible_pixel_count(
+            env,
+            PROTECTED_BODY,
+            "agentview",
+            policy_resolution,
+            center_crop=False,
+        )
+        wrist_visible = _visible_pixel_count(
+            env,
+            PROTECTED_BODY,
+            "robot0_eye_in_hand",
+            policy_resolution,
+            center_crop=False,
+        )
+        return {
+            "model_family": model_family,
+            "raw_image_path": _portable(raw),
+            "raw_image_sha256": _sha256(raw),
+            "policy_image_path": _portable(policy_path),
+            "policy_image_sha256": _sha256(policy_path),
+            "policy_image_preprocessing": "resize_with_pad_224x224",
+            "wrist_policy_image_path": _portable(wrist_path),
+            "wrist_policy_image_sha256": _sha256(wrist_path),
+            "wine_bottle_visible_pixels_after_policy_crop": agent_visible,
+            "wine_bottle_visible_pixels_after_policy_preprocessing": (
+                agent_visible
+            ),
+            "wine_bottle_visible_pixels_in_wrist_policy_input": wrist_visible,
+        }
     cropped = _center_policy_crop(image)
     cropped = np.asarray(
         Image.fromarray(cropped).resize(
@@ -404,11 +447,13 @@ def _save_policy_view(
         env, PROTECTED_BODY, "agentview", resolution
     )
     return {
+        "model_family": model_family,
         "raw_image_path": _portable(raw),
         "raw_image_sha256": _sha256(raw),
         "center_crop_path": _portable(crop),
         "center_crop_sha256": _sha256(crop),
         "wine_bottle_visible_pixels_after_policy_crop": visible,
+        "wine_bottle_visible_pixels_after_policy_preprocessing": visible,
     }
 
 
@@ -638,7 +683,7 @@ def validate(args) -> dict[str, object]:
     for condition in ("eb", "er", "ec"):
         env, task_description = get_libero_env(
             task,
-            "openvla",
+            args.model_family,
             resolution=args.resolution,
             render_gpu_device_id=args.render_gpu_device_id,
         )
@@ -681,7 +726,7 @@ def validate(args) -> dict[str, object]:
                 first_policy_view = None
                 first_positions = None
                 for wait_step in range(1, FORMAL_WAIT_STEPS + CONFIRM_STEPS + 1):
-                    env.step(get_libero_dummy_action("openvla"))
+                    env.step(get_libero_dummy_action(args.model_family))
                     if wait_step == FORMAL_WAIT_STEPS:
                         # Refresh from the exact stabilized simulator state;
                         # never reuse the object returned by set_init_state.
@@ -695,6 +740,7 @@ def validate(args) -> dict[str, object]:
                             condition,
                             episode_idx,
                             args.resolution,
+                            args.model_family,
                         )
                         first_positions = {
                             body: np.asarray(
@@ -859,6 +905,7 @@ def validate(args) -> dict[str, object]:
         "task_id": TASK_ID,
         "task_file": preflight.get("task_file"),
         "task_prompt": TASK_PROMPT,
+        "model_family": args.model_family,
         "episode_count": counts["eb"],
         "condition_counts": counts,
         "movable_object_bodies": list(movable_bodies),
@@ -869,7 +916,11 @@ def validate(args) -> dict[str, object]:
             "sim.forward",
             f"{FORMAL_WAIT_STEPS}_controller_noop_steps",
             "forced_observation_refresh",
-            "get_libero_image_policy_preprocessing",
+            (
+                "get_libero_image_and_wrist_resize_with_pad_224x224"
+                if args.model_family == "pi05"
+                else "get_libero_image_center_crop_policy_preprocessing"
+            ),
             "first_policy_frame",
             f"{CONFIRM_STEPS}_postwait_confirmation_steps",
         ],
@@ -1009,6 +1060,9 @@ def main() -> None:
         ),
     )
     parser.add_argument("--resolution", type=int, default=256)
+    parser.add_argument(
+        "--model_family", choices=("openvla", "pi05"), default="openvla"
+    )
     parser.add_argument("--render_gpu_device_id", type=int, default=-1)
     parser.add_argument("--fail_on_invalid", action="store_true")
     validate(parser.parse_args())

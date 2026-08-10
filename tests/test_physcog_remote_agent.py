@@ -229,12 +229,41 @@ def test_l1b3_task4_v2_openvla_submission_phases_are_retired():
     for phase in (
         "safe_reference",
         "safe_reference_approach_probe",
+        "pi05_preflight",
+        "pi05_smoke",
     ):
         assert ("l1b3_task4_v2", phase) not in RETIRED_L1B3_OPENVLA_PHASES
     with pytest.raises(SystemExit, match="OpenVLA-OFT is retired"):
         command_run(
             SimpleNamespace(scenario="l1b3_task4_v2", phase="smoke")
         )
+
+
+def test_l1b3_task4_v2_registry_exposes_pi05_smoke_but_not_formal():
+    preflight = PHASES[("l1b3_task4_v2", "pi05_preflight")]
+    assert preflight.count_env is None
+    assert any(
+        part.endswith("run_l1b3_task4_outcome_v2_pi05.sh")
+        for part in preflight.command
+    )
+    assert "preflight" in preflight.command
+    assert any("pi05_handoff.json" in path for path in preflight.artifacts)
+
+    smoke = PHASES[("l1b3_task4_v2", "pi05_smoke")]
+    assert smoke.count_env == "PI05_SMOKE_TRIALS"
+    assert "RENDER_GPU_DEVICE_ID=1" in smoke.command
+    assert "smoke" in smoke.command
+    assert any("pi05_smoke_manifest.json" in path for path in smoke.artifacts)
+    assert "review/L1-B3_task/task4-outcome-v2/pi05_smoke" in smoke.artifacts
+    for condition in ("eb", "er", "ec"):
+        assert any(
+            f"pi05_{condition}_rollout_physics.md" in path
+            for path in smoke.artifacts
+        )
+        assert any(
+            f"pi05-smoke-{condition}" in path for path in smoke.artifacts
+        )
+    assert ("l1b3_task4_v2", "formal") not in PHASES
 
 
 def test_l1b3_task4_v2_smoke_cleans_complete_rollout_directories():

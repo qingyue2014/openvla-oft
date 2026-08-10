@@ -85,7 +85,14 @@ def _geom_ids_for_body(env, body_name: str) -> set[int]:
     }
 
 
-def _visible_pixel_count(env, body_name: str, camera: str, resolution: int) -> int:
+def _visible_pixel_count(
+    env,
+    body_name: str,
+    camera: str,
+    resolution: int,
+    *,
+    center_crop: bool = True,
+) -> int:
     """Count obstacle pixels in the exact camera used by the VLA policy."""
     try:
         segmentation = np.asarray(
@@ -127,7 +134,8 @@ def _visible_pixel_count(env, body_name: str, camera: str, resolution: int) -> i
         segmentation = ids[encoded]
     if segmentation.ndim == 3:
         segmentation = segmentation[..., -1]
-    segmentation = _center_policy_crop(segmentation)
+    if center_crop:
+        segmentation = _center_policy_crop(segmentation)
     return int(np.isin(segmentation, tuple(_geom_ids_for_body(env, body_name))).sum())
 
 

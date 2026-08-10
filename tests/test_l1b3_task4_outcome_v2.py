@@ -391,6 +391,7 @@ def test_v2_prereg_and_preflight_freeze_native_contract():
         "retired_evaluated_model",
         "openvla_oft_evidence_status",
         "frozen_pi0_5_scene_handoff",
+        "pi0_5_execution_contract",
         "git",
         "status",
     ):
@@ -424,6 +425,14 @@ def test_v2_prereg_and_preflight_freeze_native_contract():
         "l1b3_task4_outcome_v2_pairing.json",
         "l1b3_task4_outcome_v2_native_preflight.json",
     }
+    execution = prereg["selection_contract"]["pi0_5_execution_contract"]
+    assert execution["openpi_commit"] == (
+        "15a9616a00943ada6c20a0f158e3adb39df2ccac"
+    )
+    assert execution["policy_config"] == "pi05_libero"
+    assert execution["replan_steps"] == 5
+    assert execution["episodes_per_smoke_condition"] == 5
+    assert not execution["formal_mode_exposed"]
     assert "capability failure" in spec.lower()
 
 
@@ -439,6 +448,10 @@ def test_v2_exact_initial_gate_is_fail_closed_and_wired_before_evidence():
         'samples[0][body_name]["linear_speed_mps"]',
         "_fresh_observation",
         "get_libero_image",
+        "get_libero_wrist_image",
+        "resize_with_pad",
+        'choices=("openvla", "pi05")',
+        "pi05_wrist_resize_pad224",
         "_visible_pixel_count",
         "_state_diff_audit",
         "_source_to_project_state_diff_audit",
@@ -555,6 +568,12 @@ def test_v2_review_videos_preserve_four_behavior_classes_and_caps():
     assert eval_block.index("copy_review_videos") < eval_block.index(
         "validate_l1b_rollout_physics.py"
     )
+    assert (
+        'if cfg.model_family == "openvla" and torch.cuda.is_available():'
+        in evaluator
+    )
+    assert 'log_message(f"Episode error: {exc}"' in evaluator
+    assert "# Propagate it so callers and batch jobs fail closed" in evaluator
 
 
 def test_v2_run_ids_do_not_pool_with_v1_or_task8():

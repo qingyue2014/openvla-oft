@@ -378,6 +378,7 @@ def build_record() -> dict[str, object]:
     layout_delta = preregistration.get("source_to_project_layout_delta", {})
     selection_contract = preregistration.get("selection_contract", {})
     frozen_handoff = selection_contract.get("frozen_pi0_5_scene_handoff", {})
+    pi05_execution = selection_contract.get("pi0_5_execution_contract", {})
     if not isinstance(frozen_handoff, dict):
         frozen_handoff = {}
     frozen_handoff_hashes = frozen_handoff.get("artifact_sha256", {})
@@ -405,6 +406,13 @@ def build_record() -> dict[str, object]:
         != "OpenVLA-OFT"
         or selection_contract.get("openvla_oft_evidence_status")
         != "development_and_calibration_provenance_only_not_an_evaluated_model"
+        or not isinstance(pi05_execution, dict)
+        or pi05_execution.get("openpi_commit")
+        != "15a9616a00943ada6c20a0f158e3adb39df2ccac"
+        or pi05_execution.get("policy_config") != "pi05_libero"
+        or pi05_execution.get("replan_steps") != 5
+        or pi05_execution.get("episodes_per_smoke_condition") != 5
+        or pi05_execution.get("formal_mode_exposed") is not False
         or frozen_handoff.get("source_job_id") != "512800"
         or frozen_handoff.get("scene_contract")
         != "l1b3_task4_swept_outcome_v2_matched_ec_v4"
@@ -423,8 +431,12 @@ def build_record() -> dict[str, object]:
             "contract"
         )
     project_relative_paths = (
+        "pyproject.toml",
+        "experiments/robot/pi05_utils.py",
+        "experiments/robot/robot_utils.py",
         "experiments/robot/libero/physcog_oracles.py",
         "experiments/robot/libero/libero_utils.py",
+        "experiments/robot/libero/run_libero_eval.py",
         "experiments/robot/libero/run_physcog_libero_l1_eval.py",
         "experiments/robot/libero/tasks/generate_l1b_swept_initial_states.py",
         "experiments/robot/libero/tasks/l1b_matched_control.py",
@@ -435,8 +447,10 @@ def build_record() -> dict[str, object]:
         "experiments/robot/libero/tasks/validate_l1b_safe_reference.py",
         "experiments/robot/libero/tasks/validate_l1b3_task4_outcome_v2_initial_gate.py",
         "experiments/robot/libero/tasks/validate_l1b3_task4_outcome_v2_preflight.py",
+        "experiments/robot/libero/tasks/verify_l1b3_task4_pi05_handoff.py",
         "experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh",
         "experiments/robot/libero/tasks/run_l1b3_task4_outcome_v2.sh",
+        "experiments/robot/libero/tasks/run_l1b3_task4_outcome_v2_pi05.sh",
     )
     project_paths = (prereg,) + tuple(
         REPO_ROOT / relative for relative in project_relative_paths
@@ -448,9 +462,15 @@ def build_record() -> dict[str, object]:
         REPO_ROOT
         / "experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh"
     ).read_text(encoding="utf-8")
+    pi05_runner_text = (
+        REPO_ROOT
+        / "experiments/robot/libero/tasks/"
+        "run_l1b3_task4_outcome_v2_pi05.sh"
+    ).read_text(encoding="utf-8")
     policy_prompt_path_verified = bool(
         "task_description = task.language" in libero_utils_text
         and "--task_description_override" not in base_runner_text
+        and "--task_description_override" not in pi05_runner_text
     )
     if not policy_prompt_path_verified:
         raise ValueError(
@@ -530,6 +550,7 @@ def build_record() -> dict[str, object]:
             "retired_evaluated_model"
         ],
         "frozen_pi0_5_scene_handoff": frozen_handoff,
+        "pi0_5_execution_contract": pi05_execution,
         "capability_failure_interpretation": selection_contract[
             "capability_failure_interpretation"
         ],

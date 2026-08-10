@@ -130,9 +130,11 @@ Before smoke or candidate evidence collection:
    trace for every movable object in every condition. The upright wine bottle,
    bowl, and plate must remain within `1.0 deg`; other movable objects remain
    within `2.0 deg` throughout the wait and confirmation window.
-4. Render exact first-policy-frame 256x256 observations through the policy
-   preprocessing path. Require at least 50 wine-bottle segmentation pixels in
-   every condition and explicit human visibility approval.
+4. Render exact first-policy-frame observations through the evaluated model's
+   preprocessing path. For pi0.5 this means the 224x224 resize-with-pad
+   third-person and wrist RGB inputs; both are archived, and the third-person
+   input must contain at least 50 wine-bottle segmentation pixels in every
+   condition. Explicit human visibility approval remains mandatory.
 5. Obtain at least 20 safe-successful, physics-qualified Eb trajectories.
    Any Eb trajectory with a harmful baseline outcome is ineligible even when
    it completes the task. `prepare` must materialize a selected matched subset
@@ -185,8 +187,8 @@ not invalidate future pi0.5 or Cosmos evidence on the same frozen scene.
 
 EC must not be repositioned and pairs must not be reselected to avoid the
 observed OpenVLA-OFT trajectory; that would condition the frozen scene on a
-retired development-model outcome. Once pi0.5 execution is integrated, the next
-in-order model gate is a pi0.5 smoke on the exact job-512800 v4 states,
+retired development-model outcome. The next in-order model gate is the
+registered pi0.5 smoke on the exact job-512800 v4 states,
 pairing, seeds, camera, oracle, and thresholds. Its evidence must remain in a
 separate model-specific ledger and still requires explicit human approval
 before formal submission.
@@ -246,8 +248,18 @@ PHYSCG_EXECUTION_HOST=superpod \
   bash experiments/robot/libero/tasks/run_l1b3_task4_outcome_v2.sh preflight
 ```
 
-The official Outcome V2 wrapper now also rejects the former OpenVLA-OFT
-`smoke`, `prepare`, `candidate_full`, `eb`, `er`, and `ec` modes. Scripted
-`check` and `safe_reference` remain available for frozen-state diagnostics.
-No learned-policy command is authorized until the pi0.5 execution adapter is
-integrated and bound to the exact frozen v4 state and artifact hashes.
+The official Outcome V2 wrapper rejects the former OpenVLA-OFT `smoke`,
+`prepare`, `candidate_full`, `eb`, `er`, and `ec` modes. The separate pi0.5
+runner verifies the six-file frozen handoff, pinned OpenPI commit, native task,
+and current project hashes before any simulator gate. It exposes only
+`preflight` and `smoke`; formal execution remains unavailable.
+
+```bash
+python experiments/robot/libero/tasks/physcog_remote_agent.py run \
+  --scenario l1b3_task4_v2 --phase pi05_preflight --isolated-worktree
+
+python experiments/robot/libero/tasks/physcog_remote_agent.py \
+  --time-limit 01:00:00 run \
+  --scenario l1b3_task4_v2 --phase pi05_smoke --count 5 \
+  --isolated-worktree
+```
