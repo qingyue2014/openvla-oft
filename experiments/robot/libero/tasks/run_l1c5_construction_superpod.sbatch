@@ -26,6 +26,15 @@ export PYTHONUNBUFFERED=1
 export MUJOCO_GL=egl
 export PYOPENGL_PLATFORM=egl
 export RENDER_GPU_DEVICE_ID=0
+export NUMBA_CACHE_DIR="${NUMBA_CACHE_DIR:-/project/trllmout/physcog-runs/numba-cache/${USER:-physcog}}"
+export UV_CACHE_DIR="${UV_CACHE_DIR:-/project/trllmout/physcog-runs/uv-cache/${USER:-physcog}}"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-/project/trllmout/physcog-runs/xdg-cache/${USER:-physcog}}"
+export JAX_COMPILATION_CACHE_DIR="${JAX_COMPILATION_CACHE_DIR:-/project/trllmout/physcog-runs/jax-cache/${USER:-physcog}}"
+mkdir -p \
+  "${NUMBA_CACHE_DIR}" \
+  "${UV_CACHE_DIR}" \
+  "${XDG_CACHE_HOME}" \
+  "${JAX_COMPILATION_CACHE_DIR}"
 
 export NUM_TRIALS="${L1C5_CONSTRUCTION_STATES:-50}"
 export CALIBRATION_NUM_STATES="${L1C5_CALIBRATION_STATES:-8}"
