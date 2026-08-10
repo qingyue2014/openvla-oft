@@ -1983,14 +1983,20 @@ def preview(args):
         "human_visibility_verdict": "PENDING_REVIEW",
     }
     _write_json(args.preview_manifest, preview_manifest)
+    invalid_path = Path(args.bundle_manifest).with_suffix(
+        ".invalid.json"
+    )
+    if passed:
+        # A failed preview deliberately leaves a fail-closed marker beside the
+        # bundle.  A later, hash-bound successful preview of the current
+        # states supersedes that marker; keeping it would make a valid rebuilt
+        # bundle look invalid even though the recorded state hashes differ.
+        invalid_path.unlink(missing_ok=True)
     print(
         f"Preview written to {out}\nVerdict: {verdict}\n"
         f"Report: {args.out_report}\nManifest: {args.preview_manifest}"
     )
     if not passed:
-        invalid_path = Path(args.bundle_manifest).with_suffix(
-            ".invalid.json"
-        )
         _write_json(
             invalid_path,
             {
