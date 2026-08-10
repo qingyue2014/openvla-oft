@@ -1974,14 +1974,17 @@ def screen_occupants(args):
         env.set_init_state(base)
         baseline_anchor_policy_start = body_pos(env, spec.anchor_body)
         baseline_anchor_visible_policy_start = _visible_pixels_in_policy_crop(
-            env, spec.anchor_body
+            env, spec.anchor_body, model_family=args.policy_model_family
         )
         for step in range(1, args.timeline_steps + 1):
             env.step([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
             if step == args.policy_start_step:
                 baseline_anchor_policy_start = body_pos(env, spec.anchor_body)
                 baseline_anchor_visible_policy_start = (
-                    _visible_pixels_in_policy_crop(env, spec.anchor_body)
+                    _visible_pixels_in_policy_crop(
+                        env, spec.anchor_body,
+                        model_family=args.policy_model_family,
+                    )
                 )
         for body_name in args.candidates:
             if body_name not in known_bodies:
@@ -2007,7 +2010,9 @@ def screen_occupants(args):
                     - anchor_point(env, candidate_spec)[:2]
                 )
             )
-            visible_settled = _visible_pixels_in_policy_crop(env, body_name)
+            visible_settled = _visible_pixels_in_policy_crop(
+                env, body_name, model_family=args.policy_model_family
+            )
 
             # Match generate(): retain only the settled candidate free joint,
             # then restore the official robot, basket, target, and all other
@@ -2031,9 +2036,14 @@ def screen_occupants(args):
                 env, body_name, candidate_spec.anchor_body
             )
             anchor_visible_t0 = _visible_pixels_in_policy_crop(
-                env, candidate_spec.anchor_body
+                env, candidate_spec.anchor_body,
+                model_family=args.policy_model_family,
             )
-            visibility = [_visible_pixels_in_policy_crop(env, body_name)]
+            visibility = [
+                _visible_pixels_in_policy_crop(
+                    env, body_name, model_family=args.policy_model_family
+                )
+            ]
             policy_start_metrics = None
             if args.policy_start_step == 0:
                 policy_start_metrics = (
@@ -2041,7 +2051,12 @@ def screen_occupants(args):
                 )
             for step in range(1, args.timeline_steps + 1):
                 env.step([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
-                visibility.append(_visible_pixels_in_policy_crop(env, body_name))
+                visibility.append(
+                    _visible_pixels_in_policy_crop(
+                        env, body_name,
+                        model_family=args.policy_model_family,
+                    )
+                )
                 if step == args.policy_start_step:
                     current_relative_pos, current_relative_mat = (
                         _body_pose_relative_to_anchor(
@@ -2073,7 +2088,8 @@ def screen_occupants(args):
                             )
                         ),
                         _visible_pixels_in_policy_crop(
-                            env, candidate_spec.anchor_body
+                            env, candidate_spec.anchor_body,
+                            model_family=args.policy_model_family,
                         ),
                     )
             policy_start_step = min(args.policy_start_step, args.timeline_steps)
@@ -2202,13 +2218,14 @@ def _render_segmentation_geom_ids(env, camera: str, resolution: int) -> np.ndarr
 
 
 def _visible_pixels_in_policy_crop(
-    env, body_name: str, camera: str = "agentview", resolution: int = 256
+    env, body_name: str, camera: str = "agentview", resolution: int = 256,
+    model_family: str = "openvla",
 ) -> int:
     geom_ids = descendant_geom_ids(env, body_name)
     seg_ids = _render_segmentation_geom_ids(env, camera, resolution)
     raw_mask = np.isin(seg_ids, tuple(geom_ids))
-    policy_mask = _policy_camera_crop(
-        raw_mask.astype(np.uint8), resize=False
+    policy_mask = _model_policy_camera(
+        raw_mask.astype(np.uint8), model_family, is_mask=True
     ).astype(bool)
     return int(policy_mask.sum())
 
@@ -3524,6 +3541,11 @@ def main():
     p.add_argument("--timeline_steps", type=int, default=30)
     p.add_argument("--recognizable_pixels", type=int, default=100)
     p.add_argument("--max_anchor_displacement", type=float, default=0.010)
+    p.add_argument(
+        "--policy_model_family",
+        choices=("openvla", "pi05", "cosmos"),
+        default="pi05",
+    )
 
     p = sub.add_parser("calibrate")
     _defaults(p)
