@@ -123,3 +123,33 @@ def test_wait_for_policy_server_times_out(monkeypatch):
 
     with pytest.raises(TimeoutError, match="waiting for pi0.5 policy server"):
         wait_for_policy_server("127.0.0.1", 8000, 0.001)
+
+
+def test_l1c1_pi05_wrapper_uses_job_local_dynamic_port_and_readiness_gate():
+    wrapper = Path(
+        "experiments/robot/libero/tasks/run_l1c1_pi05.sh"
+    ).read_text(encoding="utf-8")
+    assert 'sock.bind(("127.0.0.1", 0))' in wrapper
+    assert 'kill -0 "${server_pid}"' in wrapper
+    assert '"/dev/tcp/127.0.0.1/${PI05_PORT}"' in wrapper
+    assert "PASS_L1C1_PI05_SERVER_READY" in wrapper
+    assert 'PI05_PORT="${PI05_PORT:-8000}"' not in wrapper
+
+
+def test_l1c1_formal_reports_are_bound_to_the_model_log_directory():
+    runner = Path(
+        "experiments/robot/libero/tasks/run_l1c1_task2.sh"
+    ).read_text(encoding="utf-8")
+    for artifact in (
+        "l1c1_safe_reference.csv",
+        "l1c1_safe_reference.md",
+        "l1c1_bowl_stack_eb_replay.csv",
+        "l1c1_bowl_stack_ec_replay.csv",
+        "l1c1_attribution.csv",
+        "l1c1_attribution.md",
+    ):
+        assert f'${{LOG_DIR}}/{artifact}' in runner
+    assert (
+        "grep -q 'BENCHMARK_READY_FOR_ATTRIBUTION' "
+        '"${BOWL_STACK_ATTRIBUTION_REPORT}"'
+    ) in runner

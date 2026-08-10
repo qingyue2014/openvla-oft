@@ -138,6 +138,15 @@ RISK_DEPENDENT_XY_ANGLE_DEG="${RISK_DEPENDENT_XY_ANGLE_DEG:-135}"
 BOWL_STACK_CALIBRATION_CSV="${BOWL_STACK_CALIBRATION_CSV:-${LOG_DIR}/l1c1_bowl_stack_calibration.csv}"
 BOWL_STACK_CALIBRATION_REPORT="${BOWL_STACK_CALIBRATION_REPORT:-${LOG_DIR}/l1c1_bowl_stack_calibration.md}"
 BOWL_STACK_SAFE_REFERENCE_VIDEOS="${BOWL_STACK_SAFE_REFERENCE_VIDEOS:-${LOG_DIR}/l1c1_safe_reference_videos}"
+BOWL_STACK_SAFE_REFERENCE_TRAJECTORIES="${BOWL_STACK_SAFE_REFERENCE_TRAJECTORIES:-${LOG_DIR}/l1c1_safe_reference_trajectories}"
+BOWL_STACK_SAFE_REFERENCE_CSV="${BOWL_STACK_SAFE_REFERENCE_CSV:-${LOG_DIR}/l1c1_safe_reference.csv}"
+BOWL_STACK_SAFE_REFERENCE_REPORT="${BOWL_STACK_SAFE_REFERENCE_REPORT:-${LOG_DIR}/l1c1_safe_reference.md}"
+BOWL_STACK_EB_REPLAY_CSV="${BOWL_STACK_EB_REPLAY_CSV:-${LOG_DIR}/l1c1_bowl_stack_eb_replay.csv}"
+BOWL_STACK_EB_REPLAY_REPORT="${BOWL_STACK_EB_REPLAY_REPORT:-${LOG_DIR}/l1c1_bowl_stack_eb_replay.md}"
+BOWL_STACK_EC_REPLAY_CSV="${BOWL_STACK_EC_REPLAY_CSV:-${LOG_DIR}/l1c1_bowl_stack_ec_replay.csv}"
+BOWL_STACK_EC_REPLAY_REPORT="${BOWL_STACK_EC_REPLAY_REPORT:-${LOG_DIR}/l1c1_bowl_stack_ec_replay.md}"
+BOWL_STACK_ATTRIBUTION_CSV="${BOWL_STACK_ATTRIBUTION_CSV:-${LOG_DIR}/l1c1_attribution.csv}"
+BOWL_STACK_ATTRIBUTION_REPORT="${BOWL_STACK_ATTRIBUTION_REPORT:-${LOG_DIR}/l1c1_attribution.md}"
 NATIVE_PREFLIGHT_JSON="${NATIVE_PREFLIGHT_JSON:-${LOG_DIR}/l1c1_native_preflight.json}"
 NATIVE_PREFLIGHT_REPORT="${NATIVE_PREFLIGHT_REPORT:-${LOG_DIR}/l1c1_native_preflight.md}"
 BOWL_STACK_EB_NOTE="${BOWL_STACK_EB_NOTE:-L1-C1-hidden-bowl-stack-eb}"
@@ -404,7 +413,10 @@ run_bowl_stack_safe_reference() {
     --max_upper_drop "${MAX_UPPER_DROP}" \
     --max_bowl_tilt_deg "${MAX_BOWL_TILT_DEG}" \
     --max_plate_tilt_deg "${MAX_PLATE_TILT_DEG}" \
+    --trajectory_dir "${BOWL_STACK_SAFE_REFERENCE_TRAJECTORIES}" \
     --video_dir "${BOWL_STACK_SAFE_REFERENCE_VIDEOS}" \
+    --out_csv "${BOWL_STACK_SAFE_REFERENCE_CSV}" \
+    --out_report "${BOWL_STACK_SAFE_REFERENCE_REPORT}" \
     --fail_on_invalid
 }
 
@@ -498,7 +510,9 @@ run_bowl_stack_replay() {
   run_bowl_stack_er_replay
   python experiments/robot/libero/tasks/replay_l1c1_ec_actions.py \
     --eb "${BOWL_STACK_EB_TRAJECTORY_DIR}" \
-    --ec_states "${BOWL_STACK_EC_STATE_PATH}"
+    --ec_states "${BOWL_STACK_EC_STATE_PATH}" \
+    --out_csv "${BOWL_STACK_EC_REPLAY_CSV}" \
+    --out_report "${BOWL_STACK_EC_REPLAY_REPORT}"
 }
 
 run_bowl_stack_er_replay() {
@@ -510,6 +524,8 @@ run_bowl_stack_er_replay() {
     --max_bowl_tilt_deg "${MAX_BOWL_TILT_DEG}" \
     --max_lower_plate_offset "${MAX_LOWER_PLATE_OFFSET}" \
     --max_plate_tilt_deg "${MAX_PLATE_TILT_DEG}" \
+    --out_csv "${BOWL_STACK_EB_REPLAY_CSV}" \
+    --out_report "${BOWL_STACK_EB_REPLAY_REPORT}" \
     --fail_on_invalid
 }
 
@@ -545,7 +561,12 @@ write_bowl_stack_analysis() {
   python experiments/robot/libero/tasks/analyze_l1c1_bowl_stack.py \
     --eb "rollouts/libero_spatial/${BOWL_STACK_EB_NOTE}/trajectories" \
     --er "rollouts/libero_spatial/${BOWL_STACK_ER_NOTE}/trajectories" \
-    --ec "rollouts/libero_spatial/${BOWL_STACK_EC_NOTE}/trajectories"
+    --ec "rollouts/libero_spatial/${BOWL_STACK_EC_NOTE}/trajectories" \
+    --replay_csv "${BOWL_STACK_EB_REPLAY_CSV}" \
+    --safe_reference_csv "${BOWL_STACK_SAFE_REFERENCE_CSV}" \
+    --ec_replay_csv "${BOWL_STACK_EC_REPLAY_CSV}" \
+    --out_csv "${BOWL_STACK_ATTRIBUTION_CSV}" \
+    --out_report "${BOWL_STACK_ATTRIBUTION_REPORT}"
 }
 
 run_bowl_stack_analysis() {
@@ -769,7 +790,7 @@ case "${MODE}" in
     run_bowl_stack_risk "${NUM_TRIALS}" "${BOWL_STACK_ER_NOTE}"
     run_bowl_stack_ec "${NUM_TRIALS}" "${BOWL_STACK_EC_NOTE}"
     write_bowl_stack_analysis
-    grep -q 'BENCHMARK_READY_FOR_ATTRIBUTION' "${LOG_DIR}/l1c1_attribution.md"
+    grep -q 'BENCHMARK_READY_FOR_ATTRIBUTION' "${BOWL_STACK_ATTRIBUTION_REPORT}"
     record_results
     ;;
   baseline) run_native_baseline "${NUM_TRIALS}" ;;

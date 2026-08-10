@@ -4,7 +4,6 @@ set -euo pipefail
 MODE="${1:-smoke}"
 OPENPI_ROOT="${OPENPI_ROOT:-/home/drwqyhappy/04-mycode/openpi-15a9616}"
 OPENPI_COMMIT="15a9616a00943ada6c20a0f158e3adb39df2ccac"
-PI05_PORT="${PI05_PORT:-8000}"
 PI05_SERVER_GPU="${PI05_SERVER_GPU:-0}"
 SERVER_PYTHON="${OPENPI_ROOT}/.venv/bin/python"
 SERVER_LOG="${SERVER_LOG:-experiments/logs/l1c1_pi05_server.log}"
@@ -21,6 +20,24 @@ fi
 actual_openpi_commit="$(git -C "${OPENPI_ROOT}" rev-parse HEAD)"
 if [[ "${actual_openpi_commit}" != "${OPENPI_COMMIT}" ]]; then
   echo "FAIL_L1C1_PI05_RUNTIME: OpenPI commit ${actual_openpi_commit} != ${OPENPI_COMMIT}" >&2
+  exit 2
+fi
+
+# A fixed localhost port can collide with an unrelated job on the same DGX.
+# Select an available port immediately before launching the server unless the
+# caller deliberately preregistered one.
+if [[ -z "${PI05_PORT:-}" ]]; then
+  PI05_PORT="$("${SERVER_PYTHON}" - <<'PY'
+import socket
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.bind(("127.0.0.1", 0))
+    print(sock.getsockname()[1])
+PY
+)"
+fi
+if [[ ! "${PI05_PORT}" =~ ^[0-9]+$ ]] || (( PI05_PORT < 1024 || PI05_PORT > 65535 )); then
+  echo "FAIL_L1C1_PI05_RUNTIME: invalid PI05_PORT=${PI05_PORT}" >&2
   exit 2
 fi
 
@@ -53,6 +70,29 @@ cleanup() {
   wait "${server_pid}" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
+
+# Do not let the evaluator spend its full connection timeout after an early
+# server crash (for example, a port bind failure).  The evaluator starts only
+# after the exact server process is alive and accepting localhost connections.
+server_ready=0
+for ((attempt = 0; attempt < 900; attempt++)); do
+  if ! kill -0 "${server_pid}" 2>/dev/null; then
+    echo "FAIL_L1C1_PI05_SERVER_START: server exited before readiness on port ${PI05_PORT}" >&2
+    tail -n 100 "${SERVER_LOG}" >&2 || true
+    exit 2
+  fi
+  if (exec 3<>"/dev/tcp/127.0.0.1/${PI05_PORT}") 2>/dev/null; then
+    server_ready=1
+    break
+  fi
+  sleep 1
+done
+if (( server_ready != 1 )); then
+  echo "FAIL_L1C1_PI05_SERVER_START: timed out waiting for port ${PI05_PORT}" >&2
+  tail -n 100 "${SERVER_LOG}" >&2 || true
+  exit 2
+fi
+printf 'PASS_L1C1_PI05_SERVER_READY port=%s pid=%s\n' "${PI05_PORT}" "${server_pid}"
 
 export PYTHONPATH="${OPENPI_ROOT}/packages/openpi-client/src:${PYTHONPATH:-}"
 export MODEL_FAMILY=pi05
