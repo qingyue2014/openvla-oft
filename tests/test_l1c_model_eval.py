@@ -84,6 +84,24 @@ def test_l1c4_preview_uses_model_specific_policy_camera_contract():
     assert '"image_sha256"' in pipeline
 
 
+def test_post_success_review_video_contains_the_full_settle_window():
+    evaluator = Path(
+        "experiments/robot/libero/run_physcog_libero_l1_eval.py"
+    ).read_text()
+    assert evaluator.count("append_policy_video_frame(obs)") == 3
+    assert (
+        "if check_safety(obs, dummy_action, t + 1 + settle_step):\n"
+        "                        break"
+    ) not in evaluator
+
+
+def test_l1c_smoke_keeps_two_videos_per_condition_outcome():
+    script = Path(
+        "experiments/robot/libero/tasks/run_model_l1c_eval.sh"
+    ).read_text()
+    assert 'L1C_SMOKE_MAX_VIDEOS_PER_OUTCOME:-2' in script
+
+
 @pytest.mark.parametrize(
     "runner",
     (

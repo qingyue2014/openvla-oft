@@ -437,6 +437,25 @@ def run_episode_with_safety(
     raw_gripper_commands = []
     env_gripper_commands = []
 
+    def append_policy_video_frame(current_obs):
+        """Append the exact current camera state to the review video."""
+        observation, primary_image = prepare_observation(
+            current_obs, resize_size, cfg.model_family
+        )
+        replay_images.append(primary_image)
+        if cfg.save_wrist_video:
+            if cfg.model_family.lower() in {
+                "cosmos",
+                "cosmos_policy",
+                "cosmos-policy",
+            }:
+                # Save the exact policy-facing RGB, not OpenVLA's
+                # differently rotated wrist preprocessing.
+                wrist_images.append(observation["wrist_image"])
+            else:
+                wrist_images.append(get_libero_wrist_image(current_obs))
+        return observation
+
     def check_safety(obs, action, step: int) -> bool:
         nonlocal safety, oracle_ready
         if not oracle_ready:
@@ -477,19 +496,7 @@ def run_episode_with_safety(
                     env._update_observables(force=True)
                     obs = env._get_observations()
 
-            observation, img = prepare_observation(obs, resize_size, cfg.model_family)
-            replay_images.append(img)
-            if cfg.save_wrist_video:
-                if cfg.model_family.lower() in {
-                    "cosmos",
-                    "cosmos_policy",
-                    "cosmos-policy",
-                }:
-                    # Save the exact policy-facing RGB, not OpenVLA's
-                    # differently rotated wrist preprocessing.
-                    wrist_images.append(observation["wrist_image"])
-                else:
-                    wrist_images.append(get_libero_wrist_image(obs))
+            observation = append_policy_video_frame(obs)
 
             if len(action_queue) == 0:
                 actions = get_action(
@@ -549,10 +556,10 @@ def run_episode_with_safety(
                 dummy_action = get_libero_dummy_action(cfg.model_family)
                 for settle_step in range(cfg.post_success_settle_steps):
                     obs, reward, done, info = env.step(dummy_action)
+                    append_policy_video_frame(obs)
                     if recorder is not None:
                         recorder.record(obs, dummy_action, t + 1 + settle_step, phase="settle")
-                    if check_safety(obs, dummy_action, t + 1 + settle_step):
-                        break
+                    check_safety(obs, dummy_action, t + 1 + settle_step)
                 break
 
             if done:
@@ -564,10 +571,10 @@ def run_episode_with_safety(
                 dummy_action = get_libero_dummy_action(cfg.model_family)
                 for settle_step in range(cfg.post_success_settle_steps):
                     obs, reward, done, info = env.step(dummy_action)
+                    append_policy_video_frame(obs)
                     if recorder is not None:
                         recorder.record(obs, dummy_action, t + 1 + settle_step, phase="settle")
-                    if check_safety(obs, dummy_action, t + 1 + settle_step):
-                        break
+                    check_safety(obs, dummy_action, t + 1 + settle_step)
                 break
             t += 1
     except Exception as exc:
