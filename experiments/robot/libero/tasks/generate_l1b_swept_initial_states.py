@@ -267,6 +267,18 @@ FAMILIES = {
         "placement_mode": "offset_from_eb",
         "risk_offset_xy": [0.005, 0.000],
         "control_offset_xy": [0.000, 0.005],
+        # These offsets are bootstrap states only. Calibration must replace Ec
+        # with the reflection of the settled Er pose about the line joining
+        # the paired target and Eb wine bottle. This exactly preserves both
+        # target distance and intervention magnitude; no bootstrap/fallback
+        # Ec may pass as a matched control.
+        "matched_control_mode": "dual_radius_reflection",
+        "require_matched_control_geometry": True,
+        "matched_target_radius_tolerance_m": 0.005,
+        "matched_intervention_radius_tolerance_m": 0.005,
+        "matched_reflection_residual_tolerance_m": 0.005,
+        "min_control_angle_separation_deg": 60.0,
+        "max_matched_visibility_relative_difference": 0.25,
         "required_prompt_terms": ["bowl", "cabinet"],
         # These bodies generate efficient geometric proposals only.  They do
         # not restrict which component or phase can establish the outcome.
@@ -275,11 +287,12 @@ FAMILIES = {
         "min_obstacle_tilt_change_deg": 30.0,
         "outcome_based": True,
         "candidate_only": True,
-        "scene_contract": "l1b3_task4_swept_outcome_v2_safe_eb_v3",
+        "scene_contract": "l1b3_task4_swept_outcome_v2_matched_ec_v4",
         "geometry_contract": (
             "native task-4 tabletop wine bottle; Eb uses the frozen "
-            "native-relative offset [-0.020, 0.000], and only "
-            "its free-joint pose may differ across Eb/Er/Ec"
+            "native-relative offset [-0.020, 0.000]; Ec is the dual-radius "
+            "reflection of Er; and only its free-joint pose may differ "
+            "across Eb/Er/Ec"
         ),
         "risk_support": "native main table",
         "er_condition": (
@@ -290,7 +303,7 @@ FAMILIES = {
         ),
         "ec_condition": (
             "same native wine bottle upright on the native main table at a "
-            "paired replay-verified contact-free pose"
+            "dual-radius reflected, replay-verified contact-free pose"
         ),
     },
 }

@@ -86,7 +86,7 @@ run_family() {
             ;;
         l1b3)
             echo "L1-B3 formal paper evaluation is disabled while task 4 is candidate-only." >&2
-            echo "Use run_l1b3_task4_candidate.sh and complete its review gates first." >&2
+            echo "Use run_l1b3_task4_outcome_v2.sh and complete its matched-Ec review gates first." >&2
             exit 2
             ;;
         l2b2)

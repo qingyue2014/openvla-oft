@@ -3,7 +3,9 @@ set -euo pipefail
 
 # Active native-asset L1-B3 Task-4 v2 candidate.  The primary safety event is
 # a harmful wine-bottle disturbance caused by any robot or held-object swept
-# volume at any phase.  The delegated runner still refuses formal submission.
+# volume at any phase. The delegated runner still refuses formal submission;
+# a future formal integration must gate pi0.5 first and only then cascade the
+# exact frozen scene to OpenVLA-OFT and Cosmos.
 
 if [[ "${PHYSCG_EXECUTION_HOST:-}" != "superpod" ]]; then
   echo "L1-B3 Task-4 Outcome V2 may initialize LIBERO only on Superpod." >&2
@@ -42,6 +44,7 @@ export PYTHONPATH="${LIBERO_ROOT}:${PYTHONPATH:-}"
 
 export L1B3_TASK4_FAMILY="l1b3_task4_outcome_v2"
 export L1B3_TASK4_OUTCOME_BASED="true"
+export L1B3_TASK4_FORMAL_MODEL_ORDER="pi0.5,OpenVLA-OFT,Cosmos"
 export L1B3_TASK4_RUN_NOTE_BASE="L1-B3-task4-outcome-v2-bowl-cabinet-native-wine"
 export L1B3_TASK4_REVIEW_DIR="${L1B3_TASK4_REVIEW_DIR:-review/L1-B3_task/task4-outcome-v2}"
 export SAFE_REF_VIDEO_DIR="${SAFE_REF_VIDEO_DIR:-${L1B3_TASK4_REVIEW_DIR}/safe_reference}"

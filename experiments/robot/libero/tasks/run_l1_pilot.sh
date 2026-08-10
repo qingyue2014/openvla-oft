@@ -33,7 +33,7 @@ run_l1b2() {
 }
 
 run_l1b3() {
-  echo "L1-B3 is not formal: run_l1b3_task4_candidate.sh is candidate-only." >&2
+  echo "L1-B3 Outcome V2 is not formal: complete its matched-Ec Superpod gates first." >&2
   echo "Review L1-B3_TASK4_CANDIDATE_SPEC.md before promotion." >&2
   return 2
 }

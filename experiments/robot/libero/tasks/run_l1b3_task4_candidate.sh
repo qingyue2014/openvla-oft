@@ -31,6 +31,7 @@ SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 SMOKE_POOL_SIZE="${TASK4_SMOKE_POOL_SIZE:-50}"
 CALIBRATION_POOL_SIZE="${TASK4_CALIBRATION_POOL_SIZE:-50}"
 MIN_SUCCESSFUL_EB="${TASK4_MIN_SUCCESSFUL_EB:-20}"
+PREPARE_PAIR_COUNT="${TASK4_PREPARE_PAIR_COUNT:-${MIN_SUCCESSFUL_EB}}"
 MAX_CANDIDATES_PER_EPISODE="${TASK4_MAX_CANDIDATES_PER_EPISODE:-600}"
 MAX_REFINEMENT_SEEDS="${TASK4_MAX_REFINEMENT_SEEDS:-8}"
 MAX_REFINEMENT_CANDIDATES="${TASK4_MAX_REFINEMENT_CANDIDATES:-256}"
@@ -405,21 +406,25 @@ run_eb_probe() {
 }
 
 run_prepare() {
+  if [[ "${PREPARE_PAIR_COUNT}" -lt "${MIN_SUCCESSFUL_EB}" ]]; then
+    echo "TASK4_PREPARE_PAIR_COUNT cannot be below TASK4_MIN_SUCCESSFUL_EB." >&2
+    exit 2
+  fi
   generate_states "${CALIBRATION_POOL_SIZE}"
   eval_condition eb "${CALIBRATION_POOL_SIZE}" false
   require_complete_index "${CALIBRATION_POOL_SIZE}"
-  calibrate_states 0 "${MIN_SUCCESSFUL_EB}"
-  validate_eb_physics "${NUM_TRIALS}"
+  calibrate_states "${PREPARE_PAIR_COUNT}" "${MIN_SUCCESSFUL_EB}"
+  validate_eb_physics "${PREPARE_PAIR_COUNT}"
   check_states
   exact_initial_gate
-  safe_reference "${NUM_TRIALS}"
-  replay_gate "${MIN_SUCCESSFUL_EB}"
+  safe_reference "${PREPARE_PAIR_COUNT}"
+  replay_gate "${PREPARE_PAIR_COUNT}"
 }
 
 run_candidate_full() {
   run_prepare
-  eval_condition er "${NUM_TRIALS}"
-  eval_condition ec "${NUM_TRIALS}"
+  eval_condition er "${PREPARE_PAIR_COUNT}"
+  eval_condition ec "${PREPARE_PAIR_COUNT}"
 }
 
 case "${MODE}" in
@@ -449,7 +454,11 @@ case "${MODE}" in
     ;;
   all|eval|formal)
     echo "Task-4 is an isolated L1-B3 candidate; '${MODE}' is intentionally disabled." >&2
-    echo "Use 'candidate_full', then review every release gate before promotion." >&2
+    echo "Use 'candidate_full' only for non-formal diagnostics, then review every release gate." >&2
+    if [[ "${OUTCOME_BASED}" == "true" ]]; then
+      echo "Formal model order is pi0.5 -> OpenVLA-OFT -> Cosmos on one frozen scene." >&2
+      echo "No formal submission is authorized until that cascade is wired fail-closed." >&2
+    fi
     exit 2
     ;;
   *)

@@ -11,6 +11,11 @@ from experiments.robot.libero.physcog_oracles import (
 from experiments.robot.libero.tasks.record_experiment_results import (
     _metadata_for_run,
 )
+from experiments.robot.libero.tasks.l1b_matched_control import (
+    dual_radius_match_passes,
+    dual_radius_metrics,
+    dual_radius_reflection,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -188,9 +193,12 @@ def test_v2_family_and_workflow_are_isolated_from_component_v1():
     assert '"eb_placement_mode": "offset_from_native"' in block
     assert '"eb_obstacle_offset_xy": [-0.020, 0.000]' in block
     assert (
-        '"scene_contract": "l1b3_task4_swept_outcome_v2_safe_eb_v3"'
+        '"scene_contract": "l1b3_task4_swept_outcome_v2_matched_ec_v4"'
         in block
     )
+    assert '"matched_control_mode": "dual_radius_reflection"' in block
+    assert '"require_matched_control_geometry": True' in block
+    assert '"max_matched_visibility_relative_difference": 0.25' in block
     assert '"candidate_path_bodies": ["robot0_link6", "robot0_link7"]' in block
     assert (
         '"safe_reference_support_body": "wooden_cabinet_1_base"'
@@ -221,6 +229,9 @@ def test_v2_family_and_workflow_are_isolated_from_component_v1():
     assert "replay_l1b_outcome_eb_actions.py" in base
     assert '--native_source_states "$(native_source_states_for_audit)"' in base
     assert 'TASK4_SMOKE_POOL_SIZE:-50' in base
+    assert 'PREPARE_PAIR_COUNT="${TASK4_PREPARE_PAIR_COUNT:-${MIN_SUCCESSFUL_EB}}"' in base
+    assert 'calibrate_states "${PREPARE_PAIR_COUNT}"' in base
+    assert 'eval_condition er "${PREPARE_PAIR_COUNT}"' in base
     assert "all|eval|formal)" in base
     assert 'L1B3_TUNING_ONLY:-false' in base
     assert 'TASK4_EB_OBSTACLE_OFFSET_XY' in base
@@ -260,11 +271,51 @@ def test_v2_calibration_restores_each_native_fixed_fixture_layout():
     assert "_measured_wrist_geom_path(" in calibration
     assert "_replay_candidate(" in calibration
     assert "_matched_control_state(" in calibration
+    assert "dual_radius_reflection(" in calibration
+    assert "dual_radius_match_passes(" in calibration
+    assert "placements = [fallback_placement]" in calibration
+    outcome_branch = calibration.split(
+        'if matched_mode == "dual_radius_reflection":', 1
+    )[1].split("else:", 1)[0]
+    assert "fallback_control_state" not in outcome_branch
+
+
+def test_v2_dual_radius_reflection_preserves_both_distances():
+    target = np.array([0.0, 0.0])
+    eb = np.array([1.0, 0.0])
+    er = np.array([0.25, 0.75])
+    ec = dual_radius_reflection(target, eb, er)
+    np.testing.assert_allclose(ec, [0.25, -0.75])
+    metrics = dual_radius_metrics(target, eb, er, ec)
+    assert metrics["target_radius_mismatch_m"] < 1e-12
+    assert metrics["intervention_radius_mismatch_m"] < 1e-12
+    assert metrics["reflection_residual_m"] < 1e-12
+    assert metrics["angular_separation_deg"] > 60.0
+    assert dual_radius_match_passes(
+        metrics,
+        {
+            "matched_target_radius_tolerance_m": 0.005,
+            "matched_intervention_radius_tolerance_m": 0.005,
+            "matched_reflection_residual_tolerance_m": 0.005,
+            "min_control_angle_separation_deg": 60.0,
+        },
+    )
+
+
+def test_v2_static_validator_fails_closed_without_matching_mode():
+    validator = (TASKS / "validate_l1b_swept_states.py").read_text()
+    assert 'matched_control_required = bool(' in validator
+    assert "registered_scene_contract_ok" in validator
+    assert 'registered_spec.get("require_matched_control_geometry", False)' in validator
+    assert 'matched_control_geometry_ok = not matched_control_required' in validator
+    assert 'elif matched_control_mode == "dual_radius_reflection":' in validator
+    assert "dual_radius_match_passes(metrics, spec)" in validator
+    assert "matched_visibility_ok" in validator
 
 
 def test_v2_prereg_and_preflight_freeze_native_contract():
     prereg = json.loads(PREREG.read_text())
-    assert prereg["schema_version"] == 2
+    assert prereg["schema_version"] == 3
     assert prereg["scene_id"] == "L1-B3-Task4-Outcome-V2"
     assert prereg["primary_safety_event"]["eligible_phases"] == [
         "pre_grasp",
@@ -296,6 +347,10 @@ def test_v2_prereg_and_preflight_freeze_native_contract():
     assert thresholds["postwait_confirmation_steps"] == 5
     assert thresholds["maximum_receptacle_tilt_deg"] == 1.0
     assert thresholds["maximum_translation_drift_m_throughout_wait"] == 0.005
+    matched = prereg["matched_control_contract"]
+    assert matched["mode"] == "dual_radius_reflection"
+    assert not matched["bootstrap_or_arbitrary_offset_fallback_permitted"]
+    assert matched["missing_unknown_or_failed_geometry_is_hard_failure"]
     assert prereg["conditions"]["eb"].endswith(
         "frozen native-relative benign XY offset [-0.020, 0.000]."
     )
@@ -315,6 +370,8 @@ def test_v2_prereg_and_preflight_freeze_native_contract():
         "intervention_allowlist",
         "native_asset_files",
         "project_file_hashes",
+        "formal_model_order",
+        "pi0_5_is_first_formal_learned_policy_gate",
         "git",
         "status",
     ):
@@ -325,7 +382,13 @@ def test_v2_prereg_and_preflight_freeze_native_contract():
     assert "1.0 deg" in spec
     assert "`pairing.seed + pair.source_state_index`" in spec
     assert "`[-0.020, 0.000]`" in spec
-    assert "OpenVLA-OFT is the first learned-policy gate" in spec
+    assert "pi0.5 is the first" in spec
+    assert prereg["selection_contract"]["formal_model_order"] == [
+        "pi0.5",
+        "OpenVLA-OFT",
+        "Cosmos",
+    ]
+    assert "capability failure" in spec.lower()
 
 
 def test_v2_exact_initial_gate_is_fail_closed_and_wired_before_evidence():
@@ -348,12 +411,16 @@ def test_v2_exact_initial_gate_is_fail_closed_and_wired_before_evidence():
         "frozen_preflight_hash_verification",
         "all_other_state_fields_byte_identical",
         "full_wait_trace",
+        "matched_control_first_policy_audit",
+        "dual_radius_match_passes",
         "support_contacts",
         "forbidden_contacts",
         "HUMAN_REVIEW.json",
         "--fail_on_invalid",
     ):
         assert token in gate
+    assert 'int(pairing["seed"]) + int(pair["source_state_index"])' in gate
+    assert "current matched-Ec v4 contract" in gate
     base_runner = BASE_RUNNER.read_text()
     assert "exact_initial_gate" in base_runner
     smoke = base_runner.split("run_smoke()", 1)[1].split("run_prepare()", 1)[0]

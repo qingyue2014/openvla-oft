@@ -313,7 +313,9 @@ def build_record() -> dict[str, object]:
         "eb_placement_mode": "offset_from_native",
         "eb_obstacle_offset_xy": [-0.020, 0.000],
         "outcome_based": True,
-        "scene_contract": "l1b3_task4_swept_outcome_v2_safe_eb_v3",
+        "matched_control_mode": "dual_radius_reflection",
+        "require_matched_control_geometry": True,
+        "scene_contract": "l1b3_task4_swept_outcome_v2_matched_ec_v4",
     }
     mismatches = {
         key: (spec.get(key), value)
@@ -374,6 +376,7 @@ def build_record() -> dict[str, object]:
     preregistration = json.loads(prereg.read_text(encoding="utf-8"))
     native_contract = preregistration.get("native_task", {})
     layout_delta = preregistration.get("source_to_project_layout_delta", {})
+    selection_contract = preregistration.get("selection_contract", {})
     if (
         preregistration.get("family") != FAMILY
         or native_contract.get("benchmark_prompt") != TASK_PROMPT
@@ -385,6 +388,14 @@ def build_record() -> dict[str, object]:
         or layout_delta.get("frozen_eb_offset_xy") != [-0.02, 0.0]
         or layout_delta.get("all_other_native_state_fields")
         != "must_be_byte_identical"
+        or preregistration.get("matched_control_contract", {}).get("mode")
+        != "dual_radius_reflection"
+        or selection_contract.get("formal_model_order")
+        != ["pi0.5", "OpenVLA-OFT", "Cosmos"]
+        or selection_contract.get(
+            "pi0_5_is_first_formal_learned_policy_gate"
+        )
+        is not True
     ):
         raise ValueError(
             "preregistration does not match the selected native prompt/layout "
@@ -395,6 +406,7 @@ def build_record() -> dict[str, object]:
         "experiments/robot/libero/libero_utils.py",
         "experiments/robot/libero/run_physcog_libero_l1_eval.py",
         "experiments/robot/libero/tasks/generate_l1b_swept_initial_states.py",
+        "experiments/robot/libero/tasks/l1b_matched_control.py",
         "experiments/robot/libero/tasks/calibrate_l1b3_trajectory_conditioned_states.py",
         "experiments/robot/libero/tasks/replay_l1b_outcome_eb_actions.py",
         "experiments/robot/libero/tasks/validate_l1b_swept_states.py",
@@ -486,9 +498,13 @@ def build_record() -> dict[str, object]:
             "all_other_native_state_fields": "must_be_byte_identical",
         },
         "intervention_id": (
-            "l1b3_task4_native_wine_pose_outcome_v2_safe_eb_v3"
+            "l1b3_task4_native_wine_pose_outcome_v2_matched_ec_v4"
         ),
         "intervention_allowlist": INTERVENTION_ALLOWLIST,
+        "formal_model_order": selection_contract["formal_model_order"],
+        "capability_failure_interpretation": selection_contract[
+            "capability_failure_interpretation"
+        ],
         "custom_assets": [],
         "custom_bddl": False,
         "libero_commit": commit,
@@ -536,6 +552,11 @@ def write_preflight(manifest: Path, report: Path) -> dict[str, object]:
                 "all other native state fields remain byte-identical.",
                 "- Cross-condition allowlist: native wine-bottle x/y pose and "
                 "free-joint velocity only.",
+                "- Matched Ec contract: dual-radius reflection; target radius, "
+                "Eb intervention magnitude, reflection residual, angular "
+                "separation, and policy-view salience all fail closed.",
+                "- Formal learned-policy order: `pi0.5 -> OpenVLA-OFT -> "
+                "Cosmos`; capability failure cannot count as safe adaptation.",
                 "- Custom assets, BDDL, prompt, or goal changes: `none`",
                 "- Note: the official task-4 BDDL contains upstream stale drawer "
                 "wording in its embedded `:language`; evaluation uses the "

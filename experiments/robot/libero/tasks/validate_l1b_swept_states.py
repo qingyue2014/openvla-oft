@@ -29,6 +29,10 @@ from experiments.robot.libero.tasks.generate_l1b_swept_initial_states import (
     _body_pos,
     _forbidden_initial_contact_pairs,
 )
+from experiments.robot.libero.tasks.l1b_matched_control import (
+    dual_radius_match_passes,
+    dual_radius_metrics,
+)
 
 
 def _load_states(path: Path) -> list[np.ndarray]:
@@ -171,7 +175,8 @@ def _policy_camera_image(env, camera: str, resolution: int) -> np.ndarray:
 
 
 def validate(args) -> bool:
-    spec = dict(FAMILIES[args.family])
+    registered_spec = dict(FAMILIES[args.family])
+    spec = dict(registered_spec)
     obstacle_body = spec["obstacle_body"]
     target_body = spec.get("target_body", TARGET_BODY)
     goal_support_body = spec.get("goal_support_body", PLATE_BODY)
@@ -215,23 +220,43 @@ def validate(args) -> bool:
             and pairing.get("unique_source_state_hashes") == len(source_hashes)
         )
     )
-    scene_contract_ok = bool(
-        not spec.get("scene_contract")
+    registered_scene_contract_ok = bool(
+        not registered_spec.get("scene_contract")
         or (
-            pairing.get("scene_contract") == spec["scene_contract"]
-            and pairing.get("geometry_contract") == spec.get("geometry_contract")
-            and bool(pairing.get("require_gripper_capture_lift", False))
-            == bool(spec.get("require_gripper_capture_lift", False))
-            and float(
-                pairing.get("min_obstacle_vertical_displacement_m", -1.0)
+            spec.get("scene_contract") == registered_spec["scene_contract"]
+            and spec.get("geometry_contract")
+            == registered_spec.get("geometry_contract")
+            and pairing.get("scene_contract")
+            == registered_spec["scene_contract"]
+            and pairing.get("geometry_contract")
+            == registered_spec.get("geometry_contract")
+        )
+    )
+    scene_contract_ok = bool(
+        registered_scene_contract_ok
+        and (
+            not spec.get("scene_contract")
+            or (
+                pairing.get("scene_contract") == spec["scene_contract"]
+                and pairing.get("geometry_contract")
+                == spec.get("geometry_contract")
+                and bool(pairing.get("require_gripper_capture_lift", False))
+                == bool(spec.get("require_gripper_capture_lift", False))
+                and float(
+                    pairing.get(
+                        "min_obstacle_vertical_displacement_m", -1.0
+                    )
+                )
+                == float(
+                    spec.get("min_obstacle_vertical_displacement", 0.0)
+                )
+                and int(pairing.get("capture_confirm_steps", -1))
+                == int(spec.get("capture_confirm_steps", 0))
+                and float(
+                    pairing.get("capture_max_relative_z_drift_m", -1.0)
+                )
+                == float(spec.get("capture_max_relative_z_drift", 0.0))
             )
-            == float(spec.get("min_obstacle_vertical_displacement", 0.0))
-            and int(pairing.get("capture_confirm_steps", -1))
-            == int(spec.get("capture_confirm_steps", 0))
-            and float(
-                pairing.get("capture_max_relative_z_drift_m", -1.0)
-            )
-            == float(spec.get("capture_max_relative_z_drift", 0.0))
         )
     )
 
@@ -254,6 +279,7 @@ def validate(args) -> bool:
     initial_contact_pairs = []
     oracle_reset_ok = True
     obstacle_positions = {condition: [] for condition in states}
+    target_positions = {condition: [] for condition in states}
     near_target_vectors = {condition: [] for condition in ("er", "ec")}
     visible_pixels = {condition: [] for condition in ("eb", "er", "ec")}
     prompt_relation_distances = {condition: [] for condition in states}
@@ -314,6 +340,9 @@ def validate(args) -> bool:
                     for name in tracked_bodies
                 }
                 obstacle_positions[condition].append(paired_poses[condition][obstacle_body])
+                target_positions[condition].append(
+                    paired_poses[condition][target_body]
+                )
                 if condition in near_target_vectors:
                     near_target_vectors[condition].append(
                         paired_poses[condition][obstacle_body][:2]
@@ -378,7 +407,17 @@ def validate(args) -> bool:
             <= float(spec.get("eb_obstacle_xy_tolerance", 0.02))
         )
     )
-    if spec.get("matched_control_mode") == "equal_radius_angular":
+    matched_control_mode = spec.get("matched_control_mode")
+    matched_control_required = bool(
+        registered_spec.get("require_matched_control_geometry", False)
+        or spec.get("require_matched_control_geometry", False)
+    )
+    intervention_radius_mismatches = []
+    reflection_residuals = []
+    matched_visibility_relative_differences = []
+    matched_visibility_ok = True
+    recorded_matching_ok = True
+    if matched_control_mode == "equal_radius_angular":
         reference_path_length = float(
             np.linalg.norm(np.asarray(spec["reference_path_delta_xy"], dtype=float))
         )
@@ -431,11 +470,60 @@ def validate(args) -> bool:
             and radius_and_angle_checks
             and all(radius_and_angle_checks)
         )
-    else:
-        commanded_equal_radius_ok = True
+    elif matched_control_mode == "dual_radius_reflection":
+        commanded_equal_radius_ok = None
         radius_mismatches = []
         angular_separations_deg = []
-        matched_control_geometry_ok = True
+        dual_radius_checks = []
+        pairing_rows = pairing.get("pairs", [])
+        recorded_matching_ok = bool(
+            len(pairing_rows) == counts["eb"]
+            and all(
+                pair.get("matched_control_mode") == matched_control_mode
+                and isinstance(pair.get("matched_control_geometry"), dict)
+                for pair in pairing_rows
+            )
+        )
+        for episode_idx in range(counts["eb"]):
+            metrics = dual_radius_metrics(
+                target_positions["eb"][episode_idx][:2],
+                obstacle_positions["eb"][episode_idx][:2],
+                obstacle_positions["er"][episode_idx][:2],
+                obstacle_positions["ec"][episode_idx][:2],
+            )
+            radius_mismatches.append(metrics["target_radius_mismatch_m"])
+            intervention_radius_mismatches.append(
+                metrics["intervention_radius_mismatch_m"]
+            )
+            angular_separations_deg.append(
+                metrics["angular_separation_deg"]
+            )
+            reflection_residuals.append(metrics["reflection_residual_m"])
+            dual_radius_checks.append(
+                dual_radius_match_passes(metrics, spec)
+            )
+            er_pixels = visible_pixels["er"][episode_idx]
+            ec_pixels = visible_pixels["ec"][episode_idx]
+            matched_visibility_relative_differences.append(
+                abs(er_pixels - ec_pixels) / max(er_pixels, ec_pixels, 1)
+            )
+        matched_visibility_ok = bool(
+            matched_visibility_relative_differences
+            and max(matched_visibility_relative_differences)
+            <= float(spec["max_matched_visibility_relative_difference"])
+        )
+        matched_control_geometry_ok = bool(
+            recorded_matching_ok
+            and dual_radius_checks
+            and all(dual_radius_checks)
+            and matched_visibility_ok
+        )
+    else:
+        commanded_equal_radius_ok = None
+        radius_mismatches = []
+        angular_separations_deg = []
+        recorded_matching_ok = not matched_control_required
+        matched_control_geometry_ok = not matched_control_required
     required_prompt_terms = spec.get(
         "required_prompt_terms", ("black bowl", "cookie", "plate")
     )
@@ -494,12 +582,17 @@ def validate(args) -> bool:
         f"- Unique settled source-state hash gate: `{unique_source_states_ok}`",
         f"- Scene contract/version gate: `{scene_contract_ok}` "
         f"(`{pairing.get('scene_contract')}`)",
+        f"- Current registered scene contract gate: "
+        f"`{registered_scene_contract_ok}`",
         f"- Prompt preservation gate: `{prompt_ok}`",
         f"- Native task asset-set gate: `{native_asset_gate}`",
         f"- Only protected obstacle pose changed: `{only_obstacle_pose_ok}`",
         f"- Eb protected obstacle at configured far-table pose: `{eb_layout_ok}`",
+        f"- Er/Ec matched-control mode: `{matched_control_mode or 'not required'}`",
         f"- Er/Ec matched-control geometry gate: `{matched_control_geometry_ok}`",
-        f"- Commanded equal target-relative radius: `{commanded_equal_radius_ok}`",
+        f"- Recorded matched-control metadata gate: `{recorded_matching_ok}`",
+        f"- Commanded equal target-relative radius: "
+        f"`{commanded_equal_radius_ok if commanded_equal_radius_ok is not None else 'N/A'}`",
         *(
             [
                 f"- Settled Er/Ec radius mismatch (max): "
@@ -508,6 +601,22 @@ def validate(args) -> bool:
                 f"`{min(angular_separations_deg):.2f} deg`",
             ]
             if radius_mismatches and angular_separations_deg
+            else []
+        ),
+        *(
+            [
+                f"- Settled Er/Ec intervention-radius mismatch (max): "
+                f"`{max(intervention_radius_mismatches):.6f} m`",
+                f"- Settled Ec reflection residual (max): "
+                f"`{max(reflection_residuals):.6f} m`",
+                f"- Er/Ec policy-view visible-pixel relative mismatch (max): "
+                f"`{max(matched_visibility_relative_differences):.3f}`",
+                f"- Er/Ec policy-view salience-match gate: "
+                f"`{matched_visibility_ok}`",
+            ]
+            if intervention_radius_mismatches
+            and reflection_residuals
+            and matched_visibility_relative_differences
             else []
         ),
         f"- Capture-and-lift oracle required: "

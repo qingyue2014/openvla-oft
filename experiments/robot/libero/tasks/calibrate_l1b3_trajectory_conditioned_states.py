@@ -49,6 +49,11 @@ from experiments.robot.libero.tasks.generate_l1b_swept_initial_states import (
     benchmark,
     get_libero_path,
 )
+from experiments.robot.libero.tasks.l1b_matched_control import (
+    dual_radius_match_passes,
+    dual_radius_metrics,
+    dual_radius_reflection,
+)
 from experiments.robot.libero.tasks.validate_l1b_swept_states import _load_states
 
 
@@ -507,20 +512,41 @@ def _matched_control_state(
     trajectory: dict,
     candidate_spec: dict,
     allowed_indices: set[int],
-    risk_xy: np.ndarray,
+    risk_state: np.ndarray,
     obstacle: str,
     target: str,
     args: argparse.Namespace,
     reset_seed: int | None = None,
 ) -> dict | None:
-    """Find a stable same-support Ec pose outside every replayed sweep."""
-    _reset_to_paired_state(env, fallback_control_state, reset_seed)
-    fallback_placement = _body_pos(env, obstacle)[:2]
-    placements = [fallback_placement]
-    placements.extend(
-        np.asarray(risk_xy + offset, dtype=float)
-        for offset in _xy_offsets(args.matched_control_offsets_xy)
-    )
+    """Find a stable same-support Ec pose outside every replayed sweep.
+
+    Outcome V2 is fail closed: its only proposal is the exact dual-radius
+    reflection of settled Er. The legacy bootstrap state and arbitrary offsets
+    remain available only to older component-specific candidate families.
+    """
+    _reset_to_paired_state(env, eb_state, reset_seed)
+    target_xy = _body_pos(env, target)[:2]
+    eb_obstacle_xy = _body_pos(env, obstacle)[:2]
+    _reset_to_paired_state(env, risk_state, reset_seed)
+    er_obstacle_xy = _body_pos(env, obstacle)[:2]
+    matched_mode = candidate_spec.get("matched_control_mode")
+    if matched_mode == "dual_radius_reflection":
+        try:
+            placements = [
+                dual_radius_reflection(
+                    target_xy, eb_obstacle_xy, er_obstacle_xy
+                )
+            ]
+        except ValueError:
+            return None
+    else:
+        _reset_to_paired_state(env, fallback_control_state, reset_seed)
+        fallback_placement = _body_pos(env, obstacle)[:2]
+        placements = [fallback_placement]
+        placements.extend(
+            np.asarray(er_obstacle_xy + offset, dtype=float)
+            for offset in _xy_offsets(args.matched_control_offsets_xy)
+        )
     seen: set[tuple[float, float]] = set()
     for placement in placements:
         placement_key = (
@@ -542,6 +568,18 @@ def _matched_control_state(
         only_obstacle = bool(changed) and set(changed).issubset(allowed_indices)
         if not diagnostics["valid"] or not only_obstacle:
             continue
+        _reset_to_paired_state(env, candidate_state, reset_seed)
+        settled_ec_xy = _body_pos(env, obstacle)[:2]
+        matching = None
+        if matched_mode == "dual_radius_reflection":
+            matching = dual_radius_metrics(
+                target_xy,
+                eb_obstacle_xy,
+                er_obstacle_xy,
+                settled_ec_xy,
+            )
+            if not dual_radius_match_passes(matching, candidate_spec):
+                continue
         replay = _replay_candidate(
             env,
             candidate_state,
@@ -563,6 +601,7 @@ def _matched_control_state(
                 "end_xyz": _body_pos(env, obstacle),
                 "changed_indices": changed,
                 "diagnostics": diagnostics,
+                "matching": matching,
             }
     return None
 
@@ -854,7 +893,7 @@ def calibrate(args: argparse.Namespace) -> str:
                             trajectory,
                             candidate_spec,
                             allowed_indices,
-                            placement[:2],
+                            candidate_state,
                             obstacle,
                             target,
                             args,
@@ -961,6 +1000,38 @@ def calibrate(args: argparse.Namespace) -> str:
                 ),
                 "control_z": (
                     "" if selected is None else selected["control"]["end_xyz"][2]
+                ),
+                "matched_target_radius_mismatch_m": (
+                    ""
+                    if selected is None
+                    or selected["control"]["matching"] is None
+                    else selected["control"]["matching"][
+                        "target_radius_mismatch_m"
+                    ]
+                ),
+                "matched_intervention_radius_mismatch_m": (
+                    ""
+                    if selected is None
+                    or selected["control"]["matching"] is None
+                    else selected["control"]["matching"][
+                        "intervention_radius_mismatch_m"
+                    ]
+                ),
+                "matched_control_angular_separation_deg": (
+                    ""
+                    if selected is None
+                    or selected["control"]["matching"] is None
+                    else selected["control"]["matching"][
+                        "angular_separation_deg"
+                    ]
+                ),
+                "matched_reflection_residual_m": (
+                    ""
+                    if selected is None
+                    or selected["control"]["matching"] is None
+                    else selected["control"]["matching"][
+                        "reflection_residual_m"
+                    ]
                 ),
                 "contact_names": (
                     "" if replay is None else " <-> ".join(replay["contact_names"] or ())
@@ -1094,6 +1165,25 @@ def calibrate(args: argparse.Namespace) -> str:
             pair["ec_changed_state_indices"] = _changed_state_indices(
                 eb_states[episode], output_ec_states[episode]
             )
+            pair["matched_control_mode"] = spec.get("matched_control_mode")
+            pair["matched_control_geometry"] = (
+                {
+                    "target_radius_mismatch_m": float(
+                        row["matched_target_radius_mismatch_m"]
+                    ),
+                    "intervention_radius_mismatch_m": float(
+                        row["matched_intervention_radius_mismatch_m"]
+                    ),
+                    "angular_separation_deg": float(
+                        row["matched_control_angular_separation_deg"]
+                    ),
+                    "reflection_residual_m": float(
+                        row["matched_reflection_residual_m"]
+                    ),
+                }
+                if row["matched_target_radius_mismatch_m"] != ""
+                else None
+            )
     if args.select_count > 0 and selected_ok:
         selected_pairs = []
         for episode_idx, pool_episode_idx in enumerate(selected_indices):
@@ -1133,6 +1223,10 @@ def calibrate(args: argparse.Namespace) -> str:
         "intended_links": list(INTENDED_LINKS),
         "candidate_path_bodies": list(INTENDED_LINKS),
         "outcome_based": OUTCOME_BASED,
+        "matched_control_mode": spec.get("matched_control_mode"),
+        "matched_control_fail_closed": bool(
+            spec.get("require_matched_control_geometry", False)
+        ),
         "native_fixture_reset_contract": (
             "before every calibration, candidate-replay, and matched-control "
             "reset, seed = pairing.seed + pair.source_state_index; then "

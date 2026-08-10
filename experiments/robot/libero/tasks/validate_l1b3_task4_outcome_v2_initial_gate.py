@@ -33,6 +33,10 @@ from experiments.robot.libero.tasks.generate_l1b_swept_initial_states import (
     FAMILIES,
     _allowed_obstacle_state_indices,
 )
+from experiments.robot.libero.tasks.l1b_matched_control import (
+    dual_radius_match_passes,
+    dual_radius_metrics,
+)
 from experiments.robot.libero.tasks.validate_l1b_swept_states import (
     _center_policy_crop,
     _fresh_observation,
@@ -593,6 +597,17 @@ def validate(args) -> dict[str, object]:
     frozen_hash_verification = _verify_frozen_preflight_hashes(preflight)
     if pairing.get("family") != FAMILY or prereg.get("family") != FAMILY:
         raise ValueError("family/version mismatch in frozen artifacts")
+    family_spec = FAMILIES[FAMILY]
+    if (
+        pairing.get("scene_contract") != family_spec["scene_contract"]
+        or pairing.get("geometry_contract")
+        != family_spec["geometry_contract"]
+        or pairing.get("spec", {}).get("matched_control_mode")
+        != "dual_radius_reflection"
+    ):
+        raise ValueError(
+            "paired states do not implement the current matched-Ec v4 contract"
+        )
     states = {condition: _load_states(path) for condition, path in paths.items()}
     native_source_states = _load_states(native_source_path)
     counts = {condition: len(value) for condition, value in states.items()}
@@ -611,6 +626,10 @@ def validate(args) -> dict[str, object]:
     review_dir = Path(args.review_dir)
     records: list[dict[str, object]] = []
     first_policy_poses: dict[tuple[int, str], dict[str, list[float]]] = {}
+    first_policy_matched_poses: dict[
+        tuple[int, str], dict[str, list[float]]
+    ] = {}
+    first_policy_visible_pixels: dict[tuple[int, str], int] = {}
     cross_condition_bodies: tuple[str, ...] | None = None
     state_diff_records: list[dict] | None = None
     source_to_project_diff_records: list[dict] | None = None
@@ -645,6 +664,15 @@ def validate(args) -> dict[str, object]:
             elif current_movable != movable_bodies:
                 raise ValueError("runtime movable inventory changed by condition")
             for episode_idx, state in enumerate(states[condition]):
+                pair = pairing["pairs"][episode_idx]
+                if "seed" not in pairing or "source_state_index" not in pair:
+                    raise ValueError(
+                        "exact initial gate requires pairing seed and "
+                        "source_state_index for every native fixture reset"
+                    )
+                env.seed(
+                    int(pairing["seed"]) + int(pair["source_state_index"])
+                )
                 env.reset()
                 env.set_init_state(state)
                 env.sim.forward()
@@ -691,6 +719,20 @@ def validate(args) -> dict[str, object]:
                 if not visibility_ok:
                     failures.append("wine_bottle:policy_view_visibility")
                 first_policy_poses[(episode_idx, condition)] = first_positions
+                first_policy_matched_poses[(episode_idx, condition)] = {
+                    body: list(
+                        samples[FORMAL_WAIT_STEPS][body]["position"]
+                    )
+                    for body in (
+                        PROTECTED_BODY,
+                        str(FAMILIES[FAMILY]["target_body"]),
+                    )
+                }
+                first_policy_visible_pixels[(episode_idx, condition)] = int(
+                    first_policy_view[
+                        "wine_bottle_visible_pixels_after_policy_crop"
+                    ]
+                )
                 records.append(
                     {
                         "episode_idx": episode_idx,
@@ -741,11 +783,67 @@ def validate(args) -> dict[str, object]:
         record["valid"] for record in source_to_project_diff_records
     )
     invariant_ok = all(record["valid"] for record in cross_condition_records)
+    matched_control_records = []
+    for episode_idx in range(counts["eb"]):
+        target_body = str(family_spec["target_body"])
+        metrics = dual_radius_metrics(
+            np.asarray(
+                first_policy_matched_poses[(episode_idx, "eb")][target_body]
+            )[:2],
+            np.asarray(
+                first_policy_matched_poses[(episode_idx, "eb")][PROTECTED_BODY]
+            )[:2],
+            np.asarray(
+                first_policy_matched_poses[(episode_idx, "er")][PROTECTED_BODY]
+            )[:2],
+            np.asarray(
+                first_policy_matched_poses[(episode_idx, "ec")][PROTECTED_BODY]
+            )[:2],
+        )
+        er_pixels = first_policy_visible_pixels[(episode_idx, "er")]
+        ec_pixels = first_policy_visible_pixels[(episode_idx, "ec")]
+        visibility_relative_difference = abs(er_pixels - ec_pixels) / max(
+            er_pixels, ec_pixels, 1
+        )
+        pair = pairing["pairs"][episode_idx]
+        metadata_valid = bool(
+            pair.get("matched_control_mode") == "dual_radius_reflection"
+            and isinstance(pair.get("matched_control_geometry"), dict)
+        )
+        geometry_valid = dual_radius_match_passes(metrics, family_spec)
+        visibility_valid = bool(
+            visibility_relative_difference
+            <= float(
+                family_spec["max_matched_visibility_relative_difference"]
+            )
+        )
+        matched_control_records.append(
+            {
+                "episode_idx": episode_idx,
+                **metrics,
+                "er_policy_visible_pixels": er_pixels,
+                "ec_policy_visible_pixels": ec_pixels,
+                "policy_visible_pixel_relative_difference": (
+                    visibility_relative_difference
+                ),
+                "recorded_calibration_metadata_valid": metadata_valid,
+                "geometry_valid": geometry_valid,
+                "visibility_match_valid": visibility_valid,
+                "valid": bool(
+                    metadata_valid and geometry_valid and visibility_valid
+                ),
+            }
+        )
+    matched_control_ok = bool(
+        matched_control_records
+        and all(record["valid"] for record in matched_control_records)
+    )
     passed = bool(
         physical_ok
         and source_to_project_diff_ok
         and state_diff_ok
         and invariant_ok
+        and matched_control_ok
     )
     artifact_hashes = {
         _portable(path): _sha256(path)
@@ -806,11 +904,27 @@ def validate(args) -> dict[str, object]:
             "max_cross_condition_invariant_drift_m": (
                 MAX_CROSS_CONDITION_INVARIANT_DRIFT_M
             ),
+            "max_er_ec_target_radius_mismatch_m": family_spec[
+                "matched_target_radius_tolerance_m"
+            ],
+            "max_er_ec_eb_intervention_radius_mismatch_m": family_spec[
+                "matched_intervention_radius_tolerance_m"
+            ],
+            "max_ec_reflection_residual_m": family_spec[
+                "matched_reflection_residual_tolerance_m"
+            ],
+            "min_er_ec_target_angle_separation_deg": family_spec[
+                "min_control_angle_separation_deg"
+            ],
+            "max_er_ec_policy_visible_pixel_relative_difference": family_spec[
+                "max_matched_visibility_relative_difference"
+            ],
         },
         "artifact_sha256": artifact_hashes,
         "serialized_intervention_audit": state_diff_records,
         "native_source_to_project_eb_audit": source_to_project_diff_records,
         "cross_condition_first_policy_audit": cross_condition_records,
+        "matched_control_first_policy_audit": matched_control_records,
         "records": records,
     }
     output_path = Path(args.output_manifest)
@@ -835,6 +949,8 @@ def validate(args) -> dict[str, object]:
                 f"- Native-source to project-Eb delta gate: "
                 f"`{source_to_project_diff_ok}`",
                 f"- Cross-condition invariant gate: `{invariant_ok}`",
+                f"- Exact first-policy matched-control gate: "
+                f"`{matched_control_ok}`",
                 f"- Formal wait / confirmation steps: "
                 f"`{FORMAL_WAIT_STEPS}` / `{CONFIRM_STEPS}`",
                 f"- Wine-bottle visibility threshold: `>= {MIN_VISIBLE_PIXELS}` pixels",
