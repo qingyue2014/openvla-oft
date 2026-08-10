@@ -513,6 +513,12 @@ def test_v2_review_videos_preserve_four_behavior_classes_and_caps():
     assert "task_success={success}" in evaluator
     assert 'if [[ "${existing}" -ge 10 ]]' in runner
     assert '${condition}_${category}_${basename}' in runner
+    eval_block = runner.split("eval_condition()", 1)[1].split(
+        "calibrate_states()", 1
+    )[0]
+    assert eval_block.index("copy_review_videos") < eval_block.index(
+        "validate_l1b_rollout_physics.py"
+    )
 
 
 def test_v2_run_ids_do_not_pool_with_v1_or_task8():

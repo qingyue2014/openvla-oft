@@ -206,17 +206,20 @@ eval_condition() {
     --run_id_note "$(note_for "${condition}")" \
     "${oracle_args[@]}"
 
+  # Preserve the short review evidence before the fail-closed physics gate.
+  # Otherwise a rejected rollout exits under `set -e` before its diagnostic
+  # video reaches the repository review directory.
+  if [[ -n "${REVIEW_DIR}" ]]; then
+    local rollout_dir="rollouts/${TASK_SUITE}/$(note_for "${condition}")"
+    copy_review_videos "${condition}" "${rollout_dir}"
+  fi
+
   if [[ "${SAVE_TRAJECTORY,,}" == "true" && "${validate_physics}" == "true" ]]; then
     python "${TASKS_DIR}/validate_l1b_rollout_physics.py" \
       --trajectory_dir "${trajectory_dir}" \
       --expected_episodes "${count}" \
       --max_contact_penetration "${MAX_CONTACT_PENETRATION}" \
       --out_report "${REPORT_PREFIX}_${condition}_rollout_physics.md"
-  fi
-
-  if [[ -n "${REVIEW_DIR}" ]]; then
-    local rollout_dir="rollouts/${TASK_SUITE}/$(note_for "${condition}")"
-    copy_review_videos "${condition}" "${rollout_dir}"
   fi
 }
 
