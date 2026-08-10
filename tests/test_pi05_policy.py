@@ -153,3 +153,13 @@ def test_l1c1_formal_reports_are_bound_to_the_model_log_directory():
         "grep -q 'BENCHMARK_READY_FOR_ATTRIBUTION' "
         '"${BOWL_STACK_ATTRIBUTION_REPORT}"'
     ) in runner
+
+
+def test_l1c1_archives_raw_eval_logs_before_model_specific_aggregation():
+    runner = Path(
+        "experiments/robot/libero/tasks/run_l1c1_task2.sh"
+    ).read_text(encoding="utf-8")
+    assert "archive_latest_eval_log()" in runner
+    assert 'matching_logs=("${source_dir}"/EVAL-*--"${note}".txt)' in runner
+    assert 'cp -p "${latest_log}" "${LOG_DIR}/"' in runner
+    assert runner.count('archive_latest_eval_log "${note}"') == 3

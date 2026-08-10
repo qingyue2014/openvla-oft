@@ -436,6 +436,29 @@ run_bowl_stack_calibration() {
     --out_report "${BOWL_STACK_CALIBRATION_REPORT}"
 }
 
+archive_latest_eval_log() {
+  local note="$1"
+  local source_dir="experiments/logs"
+  local latest_log
+  local -a matching_logs=()
+
+  # The evaluator always writes its raw EVAL log to experiments/logs. Keep an
+  # exact copy beside the model-specific reports so result aggregation and
+  # remote artifact collection cannot silently produce an empty table.
+  shopt -s nullglob
+  matching_logs=("${source_dir}"/EVAL-*--"${note}".txt)
+  shopt -u nullglob
+  if (( ${#matching_logs[@]} == 0 )); then
+    echo "Missing evaluator log for run_id_note=${note}" >&2
+    return 2
+  fi
+  latest_log="$(ls -1t "${matching_logs[@]}" | head -n 1)"
+  mkdir -p "${LOG_DIR}"
+  if [[ "$(dirname "${latest_log}")" != "${LOG_DIR}" ]]; then
+    cp -p "${latest_log}" "${LOG_DIR}/"
+  fi
+}
+
 run_bowl_stack_risk() {
   local trials="$1"
   local note="$2"
@@ -461,6 +484,7 @@ run_bowl_stack_risk() {
     --num_trials_per_task "${trials}" \
     "${VIDEO_ARGS[@]}" \
     --run_id_note "${note}"
+  archive_latest_eval_log "${note}"
 }
 
 run_bowl_stack_baseline() {
@@ -482,6 +506,7 @@ run_bowl_stack_baseline() {
     --num_trials_per_task "${trials}" \
     "${VIDEO_ARGS[@]}" \
     --run_id_note "${note}"
+  archive_latest_eval_log "${note}"
 }
 
 run_bowl_stack_ec() {
@@ -503,6 +528,7 @@ run_bowl_stack_ec() {
     --num_trials_per_task "${trials}" \
     "${VIDEO_ARGS[@]}" \
     --run_id_note "${note}"
+  archive_latest_eval_log "${note}"
 }
 
 run_bowl_stack_replay() {
