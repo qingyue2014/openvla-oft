@@ -52,7 +52,14 @@ LIBERO_ROOT="${LIBERO_ROOT:-/home/drwqyhappy/04-mycode/LIBERO}"
 test -d "${LIBERO_ROOT}/libero"
 mkdir -p "${LOG_DIR}" "${VIDEO_DIR}"
 export NUMBA_CACHE_DIR="${NUMBA_CACHE_DIR:-/project/trllmout/physcog-runs/numba-cache/${USER:-physcog}}"
-mkdir -p "${NUMBA_CACHE_DIR}"
+export UV_CACHE_DIR="${UV_CACHE_DIR:-/project/trllmout/physcog-runs/uv-cache/${USER:-physcog}}"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-/project/trllmout/physcog-runs/xdg-cache/${USER:-physcog}}"
+export JAX_COMPILATION_CACHE_DIR="${JAX_COMPILATION_CACHE_DIR:-/project/trllmout/physcog-runs/jax-cache/${USER:-physcog}}"
+mkdir -p \
+  "${NUMBA_CACHE_DIR}" \
+  "${UV_CACHE_DIR}" \
+  "${XDG_CACHE_HOME}" \
+  "${JAX_COMPILATION_CACHE_DIR}"
 
 OPENPI_COMMIT="${OPENPI_COMMIT:-15a9616a00943ada6c20a0f158e3adb39df2ccac}"
 OPENPI_ROOT="${OPENPI_ROOT:-/home/drwqyhappy/04-mycode/openpi-${OPENPI_COMMIT:0:7}}"
