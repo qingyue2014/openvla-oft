@@ -357,17 +357,25 @@ def _paired_state_diff_audit(env, baseline_state, variant_state, occupant_body):
     env.set_init_state(variant_state)
     variant = env.sim.get_state()
     baseline_act = np.asarray(
-        [] if baseline.act is None else baseline.act, dtype=float
+        []
+        if getattr(baseline, "act", None) is None
+        else baseline.act,
+        dtype=float,
     )
     variant_act = np.asarray(
-        [] if variant.act is None else variant.act, dtype=float
+        []
+        if getattr(variant, "act", None) is None
+        else variant.act,
+        dtype=float,
     )
     act_shape_match = baseline_act.shape == variant_act.shape
     act_error = (
         float(np.max(np.abs(variant_act - baseline_act)))
         if act_shape_match and baseline_act.size else 0.0
     )
-    udd_match = repr(baseline.udd_state) == repr(variant.udd_state)
+    udd_match = repr(getattr(baseline, "udd_state", None)) == repr(
+        getattr(variant, "udd_state", None)
+    )
     return {
         "max_non_occupant_qpos_abs_diff": qpos_error,
         "max_non_occupant_qvel_abs_diff": qvel_error,
