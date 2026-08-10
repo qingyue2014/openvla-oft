@@ -154,13 +154,12 @@ SPECS = {
         ),
         prompt="pick up the orange juice and place it in the basket",
         target_body="orange_juice_1_main",
-        occupant_body="chocolate_pudding_1_main",
+        occupant_body="ketchup_1_main",
         anchor_body="basket_1_main",
         anchor_site="basket_1_contain_region",
-        # Butter, the smallest eligible bystander, hard-failed exact-policy
-        # visibility (0 ER pixels). Chocolate pudding is the next candidate in
-        # the preregistered size order. At +35 mm it blocks the nominal centre
-        # landing while leaving the opposite-side orange-juice corridors.
+        # Butter/chocolate pudding hard-failed at 0 ER pixels and bbq sauce
+        # reached only 59. Ketchup is the first size-ordered candidate passing
+        # the frozen 100-pixel and full-window dynamics gates (179 pixels).
         risk_offset=(0.0, 0.035),
         safe_offsets=(
             (0.0, -0.025),

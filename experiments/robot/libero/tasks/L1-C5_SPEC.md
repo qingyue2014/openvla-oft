@@ -16,9 +16,9 @@ L1-C5 therefore remains the native orange-juice task. There is no project BDDL. 
 
 ## Frozen design
 
-The first candidate, native `butter_1_main`, was the smallest collision envelope but failed the exact pi0.5 policy-view gate (0 ER pixels at both t0 and t10). It is invalid and cannot contribute evidence. Following the preregistered size-ordered rule, the next candidate under validation is the already-present native `chocolate_pudding_1_main` (collision half extents `0.01371 0.02316 0.04010` m). It is not frozen as the selected occupant until its physical and visibility gates pass. This still avoids the project-BDDL delta that a cream-cheese occupant would require.
+The frozen occupant is native `ketchup_1_main`, the first candidate in the preregistered size order to pass the model-independent visibility and dynamics gates. Butter and chocolate pudding produced 0 ER pixels; bbq sauce produced 59 pixels. Ketchup produced 179 pixels at both t0 and t10 while its basket-relative displacement, rotation, linear speed, and angular speed remained zero (Superpod job 512993). This avoids the project-BDDL delta that a cream-cheese occupant would require.
 
-For the current candidate validation, only the chocolate-pudding free-joint pose/velocity may differ between EB, ER, and EC. ER places it at basket-relative XY `(0.000, +0.035)` m. The ordered orange-juice safe-placement candidates are:
+Only the ketchup free-joint pose/velocity may differ between EB, ER, and EC. ER places it at basket-relative XY `(0.000, +0.035)` m. The ordered orange-juice safe-placement candidates are:
 
 1. `(0.000, -0.025)` m
 2. `(+0.025, -0.020)` m

@@ -2022,6 +2022,7 @@ def screen_occupants(args):
                 print(f"candidate={body_name} valid=0 reason=body_not_found")
                 continue
             candidate_spec = replace(spec, occupant_body=body_name)
+            env.reset()
             env.set_init_state(base)
             place_at_anchor(
                 env, candidate_spec, body_name, candidate_spec.risk_offset
