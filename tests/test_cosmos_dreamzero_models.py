@@ -163,20 +163,22 @@ def test_remote_agent_registers_model_setup_phases():
 
 
 def test_remote_agent_registers_all_l1c_model_evaluations():
-    for scenario in ("l1c1", "l1c2", "l1c3"):
-        for model in ("pi05", "cosmos"):
-            for kind, count_env in (
-                ("smoke", "L1C_SMOKE_TRIALS"),
-                ("formal", "L1C_FORMAL_TRIALS"),
-            ):
-                spec = PHASES[(scenario, f"{model}_{kind}")]
-                assert spec.command[-3:] == (model, scenario, kind)
-                assert spec.count_env == count_env
-                assert any(
-                    value.endswith(f"{scenario}_{model}-{kind}_results.json")
-                    for value in spec.artifacts
-                )
-                assert any(value.endswith("_videos") for value in spec.artifacts)
+    scenario = "l1c4"
+    for model in ("pi05", "cosmos"):
+        for kind, count_env in (
+            ("preview", "L1C_PREVIEW_TRIALS"),
+            ("smoke", "L1C_SMOKE_TRIALS"),
+            ("formal", "L1C_FORMAL_TRIALS"),
+        ):
+            spec = PHASES[(scenario, f"{model}_{kind}")]
+            assert spec.command[-3:] == (model, scenario, kind)
+            assert spec.count_env == count_env
+            assert any("L1-C4_task" in value for value in spec.artifacts)
+    assert not any(
+        scenario in {"l1c1", "l1c2", "l1c3"}
+        and phase.startswith(("pi05_", "cosmos_"))
+        for scenario, phase in PHASES
+    )
 
 
 def test_setup_script_pins_official_model_revisions():

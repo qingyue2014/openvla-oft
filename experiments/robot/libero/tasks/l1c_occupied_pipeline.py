@@ -1064,6 +1064,9 @@ def preview(args):
         for idx, state in enumerate(eb_states[:preview_count]):
             env.reset()
             env.set_init_state(state)
+            env.sim.forward()
+            env._post_process()
+            env._update_observables(force=True)
             for _ in range(args.policy_start_step):
                 env.step([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
             eb_anchor_at_policy_start[idx] = body_pos(env, spec.anchor_body)
@@ -1072,8 +1075,11 @@ def preview(args):
             states = load_states(path, spec.prompt)
             for idx, state in enumerate(states[:preview_count]):
                 env.reset()
-                obs = env.set_init_state(state)
+                env.set_init_state(state)
                 env.sim.forward()
+                env._post_process()
+                env._update_observables(force=True)
+                obs = env._get_observations()
                 occupant_relative_t0, occupant_rotation_t0 = (
                     _body_pose_relative_to_anchor(
                         env, spec.occupant_body, spec.anchor_body
@@ -1093,10 +1099,19 @@ def preview(args):
                         256, 256, camera_name="agentview"
                     )
                 image = np.asarray(image)
-                policy_image = _policy_camera_crop(image)
+                policy_image = _model_policy_camera(
+                    image, args.policy_model_family
+                )
                 Image.fromarray(policy_image).save(
                     out / f"{condition}_{idx:02d}_policy_t0.png"
                 )
+                wrist_image = obs.get("robot0_eye_in_hand_image")
+                if wrist_image is not None:
+                    Image.fromarray(
+                        _model_policy_camera(
+                            np.asarray(wrist_image), args.policy_model_family
+                        )
+                    ).save(out / f"{condition}_{idx:02d}_wrist_t0.png")
 
                 occupant_geoms = descendant_geom_ids(
                     env, spec.occupant_body
@@ -1105,13 +1120,15 @@ def preview(args):
                 seg_ids = _render_segmentation_geom_ids(
                     env, "agentview", 256
                 )
-                occupant_mask_t0 = _policy_camera_crop(
+                occupant_mask_t0 = _model_policy_camera(
                     np.isin(seg_ids, tuple(occupant_geoms)).astype(np.uint8),
-                    resize=False,
+                    args.policy_model_family,
+                    is_mask=True,
                 ).astype(bool)
-                anchor_mask_t0 = _policy_camera_crop(
+                anchor_mask_t0 = _model_policy_camera(
                     np.isin(seg_ids, tuple(anchor_geoms)).astype(np.uint8),
-                    resize=False,
+                    args.policy_model_family,
+                    is_mask=True,
                 ).astype(bool)
                 Image.fromarray(
                     occupant_mask_t0.astype(np.uint8) * 255
@@ -1129,26 +1146,45 @@ def preview(args):
                         256, 256, camera_name="agentview"
                     )
                 Image.fromarray(
-                    _policy_camera_crop(np.asarray(policy_start_image))
+                    _model_policy_camera(
+                        np.asarray(policy_start_image),
+                        args.policy_model_family,
+                    )
                 ).save(
                     out
                     / f"{condition}_{idx:02d}_policy_t"
                     f"{args.policy_start_step}.png"
                 )
+                policy_start_wrist = policy_start_obs.get(
+                    "robot0_eye_in_hand_image"
+                )
+                if policy_start_wrist is not None:
+                    Image.fromarray(
+                        _model_policy_camera(
+                            np.asarray(policy_start_wrist),
+                            args.policy_model_family,
+                        )
+                    ).save(
+                        out
+                        / f"{condition}_{idx:02d}_wrist_t"
+                        f"{args.policy_start_step}.png"
+                    )
                 start_seg_ids = _render_segmentation_geom_ids(
                     env, "agentview", 256
                 )
-                occupant_mask_start = _policy_camera_crop(
+                occupant_mask_start = _model_policy_camera(
                     np.isin(
                         start_seg_ids, tuple(occupant_geoms)
                     ).astype(np.uint8),
-                    resize=False,
+                    args.policy_model_family,
+                    is_mask=True,
                 ).astype(bool)
-                anchor_mask_start = _policy_camera_crop(
+                anchor_mask_start = _model_policy_camera(
                     np.isin(
                         start_seg_ids, tuple(anchor_geoms)
                     ).astype(np.uint8),
-                    resize=False,
+                    args.policy_model_family,
+                    is_mask=True,
                 ).astype(bool)
                 Image.fromarray(
                     occupant_mask_start.astype(np.uint8) * 255
@@ -1332,7 +1368,7 @@ def preview(args):
         f"- States per condition: {preview_count}",
         f"- Recognizable threshold: {args.recognizable_pixels} policy-crop pixels",
         f"- Policy start: t={args.policy_start_step}",
-        "- Policy view: OpenVLA agentview 180-degree rotation, 0.9 center crop, 224x224.",
+        f"- Policy view: {_policy_camera_contract(args.policy_model_family)}.",
         "- Forbidden initial contacts: occupant-target and occupant-robot.",
         "- Human visibility verdict: **PENDING_REVIEW**.",
         "",
@@ -1361,7 +1397,11 @@ def preview(args):
         "state_sha256": _state_hashes(args),
         "bundle_manifest_sha256": _file_sha256(args.bundle_manifest),
         "csv_sha256": _file_sha256(args.out_csv),
-        "policy_camera": "agentview/openvla-rotate180-center-crop-0.9/224",
+        "policy_camera": _policy_camera_contract(args.policy_model_family),
+        "image_sha256": {
+            path.name: _file_sha256(path)
+            for path in sorted(out.glob("*.png"))
+        },
         "human_visibility_verdict": "PENDING_REVIEW",
     }
     _write_json(args.preview_manifest, preview_manifest)
@@ -1690,6 +1730,41 @@ def _policy_camera_crop(array: np.ndarray, crop_scale: float = 0.9, resize: bool
         return cropped
     # OPENVLA_IMAGE_SIZE is 224. LANCZOS matches the policy's RGB resize.
     return np.asarray(Image.fromarray(cropped).resize((224, 224), resample=Image.Resampling.LANCZOS))
+
+
+def _policy_camera_contract(model_family: str) -> str:
+    family = str(model_family).lower()
+    if family == "pi05":
+        return "agentview/pi05-rotate180-resize-with-pad/224"
+    if family == "cosmos":
+        return "agentview/cosmos-vertical-flip/native-256"
+    return "agentview/openvla-rotate180-center-crop-0.9/224"
+
+
+def _model_policy_camera(
+    array: np.ndarray, model_family: str, *, is_mask: bool = False
+) -> np.ndarray:
+    """Apply the exact registered primary-camera transform without a model."""
+    from PIL import Image
+
+    family = str(model_family).lower()
+    image = np.asarray(array)
+    if family == "openvla":
+        return _policy_camera_crop(image, resize=not is_mask)
+    if family == "pi05":
+        rotated = image[::-1, ::-1].copy()
+        resample = Image.Resampling.NEAREST if is_mask else Image.Resampling.BILINEAR
+        return np.asarray(
+            Image.fromarray(rotated).resize((224, 224), resample=resample)
+        )
+    if family == "cosmos":
+        return np.flipud(image).copy()
+    raise ValueError(f"Unsupported policy_model_family: {model_family}")
+
+
+def _policy_camera_transform(array: np.ndarray, model_family: str) -> np.ndarray:
+    """Backward-compatible public helper used by the model-camera audit."""
+    return _model_policy_camera(array, model_family)
 
 
 def _placement_result(
@@ -2731,6 +2806,11 @@ def main():
     p.add_argument("--num_states", type=int, default=3)
     p.add_argument("--min_states", type=int, default=1)
     p.add_argument("--policy_start_step", type=int, default=10)
+    p.add_argument(
+        "--policy_model_family",
+        choices=("openvla", "pi05", "cosmos"),
+        default="openvla",
+    )
     p.add_argument("--recognizable_pixels", type=int, default=100)
     p.add_argument("--max_occupant_displacement", type=float, default=0.006)
     p.add_argument(

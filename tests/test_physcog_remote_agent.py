@@ -60,13 +60,29 @@ def test_l1c4_registry_separates_native_gates_from_model_smoke():
         "safe_reference",
         "smoke",
         "formal",
+        "pi05_preview",
+        "pi05_smoke",
+        "pi05_formal",
+        "cosmos_preview",
+        "cosmos_smoke",
+        "cosmos_formal",
     }
     runner = "experiments/robot/libero/tasks/run_l1c4_occupied_basket.sh"
-    for phase in phases:
+    native_phases = {
+        "check", "preview", "calibrate", "safe_reference", "smoke", "formal"
+    }
+    for phase in native_phases:
         spec = PHASES[("l1c4", phase)]
         assert runner in spec.command
         assert "RENDER_GPU_DEVICE_ID=1" in spec.command
         assert not any("libero_90" in value for value in spec.command)
+    model_runner = "experiments/robot/libero/tasks/run_model_l1c_eval.sh"
+    for model in ("pi05", "cosmos"):
+        for kind in ("preview", "smoke", "formal"):
+            spec = PHASES[("l1c4", f"{model}_{kind}")]
+            assert model_runner in spec.command
+            assert spec.command[-3:] == (model, "l1c4", kind)
+            assert not any("libero_90" in value for value in spec.command)
     assert PHASES[("l1c4", "check")].count_env == "NUM_TRIALS"
     assert PHASES[("l1c4", "calibrate")].count_env == "CALIBRATION_NUM_STATES"
     assert (

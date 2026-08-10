@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MODEL="${1:?usage: run_model_l1c_eval.sh pi05|cosmos l1c1|l1c2|l1c3 smoke|formal}"
-SCENARIO="${2:?usage: run_model_l1c_eval.sh pi05|cosmos l1c1|l1c2|l1c3 smoke|formal}"
-RUN_KIND="${3:?usage: run_model_l1c_eval.sh pi05|cosmos l1c1|l1c2|l1c3 smoke|formal}"
+MODEL="${1:?usage: run_model_l1c_eval.sh pi05|cosmos l1c4 preview|smoke|formal}"
+SCENARIO="${2:?usage: run_model_l1c_eval.sh pi05|cosmos l1c4 preview|smoke|formal}"
+RUN_KIND="${3:?usage: run_model_l1c_eval.sh pi05|cosmos l1c4 preview|smoke|formal}"
 case "${MODEL}" in
   pi05|cosmos) ;;
   *) echo "Unsupported model: ${MODEL}" >&2; exit 2 ;;
 esac
 case "${SCENARIO}" in
-  l1c1|l1c2|l1c3) ;;
+  l1c4) ;;
   *) echo "Unsupported scenario: ${SCENARIO}" >&2; exit 2 ;;
 esac
 case "${RUN_KIND}" in
+  preview)
+    COUNT="${L1C_PREVIEW_TRIALS:-5}"
+    RUN_MODE="preview"
+    ;;
   smoke)
     COUNT="${L1C_SMOKE_TRIALS:-5}"
     RUN_MODE="smoke"
@@ -23,6 +27,10 @@ case "${RUN_KIND}" in
     ;;
   *) echo "Unsupported evaluation kind: ${RUN_KIND}" >&2; exit 2 ;;
 esac
+if [[ "${RUN_KIND}" == "preview" && ( "${SCENARIO}" != "l1c4" || "${COUNT}" -ne 5 ) ]]; then
+  echo "Registered model-specific preview is restricted to exactly 5 L1-C4 states." >&2
+  exit 2
+fi
 if [[ "${RUN_KIND}" == "smoke" && "${COUNT}" -ne 5 ]]; then
   echo "Registered L1-C smoke evaluation requires exactly 5 episodes." >&2
   exit 2
@@ -83,6 +91,98 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+
+L1C4_FROZEN_ROOT="${L1C4_FROZEN_ROOT:-/project/trllmout/physcog-frozen/l1c4/ecde780ec2d93696bf1a01e7a16213e19c446ded}"
+
+assert_sha256() {
+  local expected="$1"
+  local path="$2"
+  test -s "${path}"
+  local observed
+  observed="$(sha256sum "${path}" | awk '{print $1}')"
+  if [[ "${observed}" != "${expected}" ]]; then
+    echo "Frozen L1-C4 artifact hash mismatch: ${path}" >&2
+    echo "expected=${expected} observed=${observed}" >&2
+    exit 1
+  fi
+}
+
+verify_l1c4_frozen_inputs() {
+  assert_sha256 cdbc127944eefd6db20ee085e4d3778a2da0b45cffafcc03d3a8b3db066581c7 "${L1C4_FROZEN_ROOT}/state_bundle/l1c4_eb_states.hdf5"
+  assert_sha256 4abd7874cae7232c3c8d1275617f89b88450c4ada2e017f7a1ca10a74e9141a0 "${L1C4_FROZEN_ROOT}/state_bundle/l1c4_er_states.hdf5"
+  assert_sha256 0a2073f67bc57012c645bc7cdb3f91d0bde55c3826b3b838b6ce4a800a801e4b "${L1C4_FROZEN_ROOT}/state_bundle/l1c4_ec_states.hdf5"
+  assert_sha256 3b6f75d97ad027204dd88f33b6063f4e1fb0dd1eb5e432961bafcc0b22902117 "${L1C4_FROZEN_ROOT}/state_bundle/l1c4_source_indices.json"
+  assert_sha256 a6a81dc9de4b54f824621dda0ce9c0d59ed37eb49bd64a02df0866b723519e6f "${L1C4_FROZEN_ROOT}/state_bundle/l1c4_state_bundle.json"
+  assert_sha256 b86942376857bd43a70d5d4776cbd9ab24033f7296305445a5f1679ef5e6786d "${L1C4_FROZEN_ROOT}/reports/l1c4_calibration.csv"
+  assert_sha256 f97df2baaaf1828c316cb5e5b42445bf0baafacfe9fcf7a48b0c8c41a5824081 "${L1C4_FROZEN_ROOT}/reports/l1c4_calibration.md"
+  assert_sha256 18394441c7c49c8b9b565cb5b2e6399b1285b49560ea882ae96f9d6f7b6f0784 "${L1C4_FROZEN_ROOT}/reports/l1c4_safe_reference.csv"
+  assert_sha256 4f22b0a7ea094882a0ab3ab951996cc42d8e2f57621f6029fc76a30970305082 "${L1C4_FROZEN_ROOT}/reports/l1c4_safe_reference.md"
+  assert_sha256 2d42567c1307ba5b275301b4ca7791b08bfd9a00696a6de2e13128adeee054de "${L1C4_FROZEN_ROOT}/review/visibility_review.md"
+  grep -Fq 'PASS_STATIC_OCCUPANCY_LAYOUT' "${L1C4_FROZEN_ROOT}/reports/l1c4_calibration.md"
+  grep -Fq 'PASS_DYNAMIC_SAFE_REFERENCE' "${L1C4_FROZEN_ROOT}/reports/l1c4_safe_reference.md"
+  grep -Fq 'PASS_HUMAN_VISIBILITY' "${L1C4_FROZEN_ROOT}/review/visibility_review.md"
+}
+
+require_bound_human_review() {
+  local review_path="$1"
+  local token="$2"
+  local artifact_manifest="$3"
+  test -s "${review_path}"
+  test -s "${artifact_manifest}"
+  grep -Fq "${token}" "${review_path}"
+  local manifest_sha
+  manifest_sha="$(sha256sum "${artifact_manifest}" | awk '{print $1}')"
+  grep -Fq "${manifest_sha}" "${review_path}"
+}
+
+run_l1c4_model_preview() {
+  verify_l1c4_frozen_inputs
+  local gate_log_dir="${RESULT_PREFIX}_gate"
+  local preview_dir="review/L1-C4_task/${MODEL}_preview"
+  rm -rf "${gate_log_dir}" "${preview_dir}"
+  mkdir -p "${gate_log_dir}" "${preview_dir}"
+  STATE_DIR="${L1C4_FROZEN_ROOT}/state_bundle" \
+  PREVIEW_DIR="${preview_dir}" \
+  LOG_DIR="${gate_log_dir}" \
+  PREVIEW_NUM_STATES="${COUNT}" \
+  POLICY_MODEL_FAMILY="${MODEL}" \
+  bash "${TASKS_DIR}/run_l1c4_occupied_basket.sh" preview
+  local artifact_manifest="${RESULT_PREFIX}_review_artifacts.sha256"
+  {
+    sha256sum "${gate_log_dir}/l1c4_native_preflight.json"
+    sha256sum "${gate_log_dir}/l1c4_native_preflight.md"
+    sha256sum "${gate_log_dir}/l1c4_exact_state_preview.csv"
+    sha256sum "${gate_log_dir}/l1c4_exact_state_preview.md"
+    find "${preview_dir}" -maxdepth 1 -type f -print0 | sort -z | xargs -0 sha256sum
+  } > "${artifact_manifest}"
+  printf 'PASS_MODEL_SPECIFIC_POLICY_VIEW_PREVIEW\n'
+  printf 'Review artifacts: %s\n' "${preview_dir}"
+  printf 'Review manifest SHA-256: %s\n' "$(sha256sum "${artifact_manifest}" | awk '{print $1}')"
+}
+
+if [[ "${SCENARIO}" == "l1c4" && "${RUN_KIND}" == "preview" ]]; then
+  run_l1c4_model_preview
+  exit 0
+fi
+
+if [[ "${SCENARIO}" == "l1c4" ]]; then
+  require_bound_human_review \
+    "review/L1-C4_task/${MODEL}_preview/review.md" \
+    "PASS_HUMAN_${MODEL^^}_POLICY_VIEW" \
+    "experiments/logs/l1c4_${MODEL}-preview_review_artifacts.sha256"
+  if [[ "${RUN_KIND}" == "formal" ]]; then
+    require_bound_human_review \
+      "review/L1-C4_task/${MODEL}_smoke/review.md" \
+      "PASS_HUMAN_${MODEL^^}_SMOKE" \
+      "experiments/logs/l1c4_${MODEL}-smoke_review_artifacts.sha256"
+  fi
+  if [[ "${MODEL}" == "cosmos" ]]; then
+    require_bound_human_review \
+      "review/L1-C4_task/pi05_formal/review.md" \
+      "PASS_HUMAN_PI05_FORMAL" \
+      "experiments/logs/l1c4_pi05-formal_review_artifacts.sha256"
+  fi
+fi
 
 if [[ "${MODEL}" == "pi05" ]]; then
   test -d "${OPENPI_ROOT}/.git"
@@ -212,6 +312,45 @@ if [[ "${SCENARIO}" == "l1c1" ]]; then
     "${BOWL_STACK_ER_NOTE}"
     "${BOWL_STACK_EC_NOTE}"
   )
+elif [[ "${SCENARIO}" == "l1c4" ]]; then
+  verify_l1c4_frozen_inputs
+  MODEL_GATE_LOG_DIR="${RESULT_PREFIX}_gate"
+  MODEL_REVIEW_DIR="review/L1-C4_task/${MODEL}_${RUN_KIND}"
+  rm -rf "${MODEL_GATE_LOG_DIR}" "${MODEL_REVIEW_DIR}"
+  mkdir -p "${MODEL_GATE_LOG_DIR}" "${MODEL_REVIEW_DIR}"
+  cp "${L1C4_FROZEN_ROOT}/reports/l1c4_calibration.csv" "${MODEL_GATE_LOG_DIR}/l1c4_calibration.csv"
+  cp "${L1C4_FROZEN_ROOT}/reports/l1c4_calibration.md" "${MODEL_GATE_LOG_DIR}/l1c4_calibration.md"
+  cp "${L1C4_FROZEN_ROOT}/reports/l1c4_safe_reference.csv" "${MODEL_GATE_LOG_DIR}/l1c4_safe_reference.csv"
+  cp "${L1C4_FROZEN_ROOT}/reports/l1c4_safe_reference.md" "${MODEL_GATE_LOG_DIR}/l1c4_safe_reference.md"
+  export STATE_DIR="${L1C4_FROZEN_ROOT}/state_bundle"
+  export PREVIEW_DIR="review/L1-C4_task/${MODEL}_preview"
+  export LOG_DIR="${MODEL_GATE_LOG_DIR}"
+  export REVIEW_DIR="${MODEL_REVIEW_DIR}"
+  export HUMAN_VISIBILITY_REVIEW="review/L1-C4_task/${MODEL}_preview/review.md"
+  export POLICY_MODEL_FAMILY="${MODEL}"
+  bash "${TASKS_DIR}/run_l1c_occupied.sh" l1c4 native_preflight
+  bash "${TASKS_DIR}/run_l1c_occupied.sh" l1c4 verify
+  bash "${TASKS_DIR}/run_l1c_occupied.sh" l1c4 eb
+  bash "${TASKS_DIR}/run_l1c_occupied.sh" l1c4 replay
+  grep -Fq 'PASS_BASELINE_PATH_NECESSITY' "${MODEL_GATE_LOG_DIR}/l1c4_eb_to_er_replay.md"
+  grep -Fq 'PASS_MATCHED_CONTROL_PATH_REPLAY' "${MODEL_GATE_LOG_DIR}/l1c4_eb_to_ec_replay.md"
+  bash "${TASKS_DIR}/run_l1c_occupied.sh" l1c4 er
+  bash "${TASKS_DIR}/run_l1c_occupied.sh" l1c4 ec
+  bash "${TASKS_DIR}/run_l1c_occupied.sh" l1c4 analyze
+  cp "${MODEL_GATE_LOG_DIR}/l1c4_native_preflight.json" "${NATIVE_PREFLIGHT_JSON}"
+  cp "${MODEL_GATE_LOG_DIR}/l1c4_native_preflight.md" "${NATIVE_PREFLIGHT_REPORT}"
+  STATE_EB="${STATE_DIR}/l1c4_eb_states.hdf5"
+  STATE_ER="${STATE_DIR}/l1c4_er_states.hdf5"
+  STATE_EC="${STATE_DIR}/l1c4_ec_states.hdf5"
+  CALIBRATION_REPORT="${L1C4_FROZEN_ROOT}/reports/l1c4_calibration.md"
+  SAFE_REFERENCE_REPORT="${L1C4_FROZEN_ROOT}/reports/l1c4_safe_reference.md"
+  ATTRIBUTION_REPORT="${MODEL_GATE_LOG_DIR}/l1c4_attribution.md"
+  ROLLOUT_ROOT="rollouts/libero_object"
+  NOTES=(
+    "L1-C4-occupied-basket-eb-${RUN_SUFFIX}"
+    "L1-C4-occupied-basket-risk-${RUN_SUFFIX}"
+    "L1-C4-occupied-basket-ec-${RUN_SUFFIX}"
+  )
 else
   bash "${TASKS_DIR}/run_l1c_occupied.sh" "${SCENARIO}" "${RUN_MODE}"
   STATE_EB="${TASKS_DIR}/${SCENARIO}_eb_states.hdf5"
@@ -242,7 +381,11 @@ test -s "${SAFE_REFERENCE_REPORT}"
 test -s "${ATTRIBUTION_REPORT}"
 test -s "${NATIVE_PREFLIGHT_JSON}"
 test -s "${NATIVE_PREFLIGHT_REPORT}"
-grep -Fq 'PASS_NATIVE_TASK_PREFLIGHT' "${NATIVE_PREFLIGHT_REPORT}"
+if [[ "${SCENARIO}" == "l1c1" ]]; then
+  grep -Fq 'PASS_NATIVE_TASK_PREFLIGHT' "${NATIVE_PREFLIGHT_REPORT}"
+else
+  grep -Fq 'PASS_NATIVE_ONLY_PREFLIGHT' "${NATIVE_PREFLIGHT_REPORT}"
+fi
 if [[ "${SCENARIO}" == "l1c1" ]]; then
   grep -Fq 'PASS_STACK_PHYSICALLY_FEASIBLE' "${CALIBRATION_REPORT}"
   grep -Fq 'PASS_DYNAMIC_SAFE_REFERENCE' "${SAFE_REFERENCE_REPORT}"
@@ -304,6 +447,17 @@ python "${TASKS_DIR}/summarize_l1c_model_eval.py" \
   --out_json "${RESULTS_JSON}" \
   --out_report "${RESULTS_REPORT}" \
   --out_manifest "${MANIFEST_PATH}"
+
+REVIEW_ARTIFACT_MANIFEST="${RESULT_PREFIX}_review_artifacts.sha256"
+{
+  sha256sum "${RESULTS_JSON}" "${RESULTS_REPORT}" "${MANIFEST_PATH}"
+  sha256sum "${NATIVE_PREFLIGHT_JSON}" "${NATIVE_PREFLIGHT_REPORT}"
+  find "${VIDEO_DIR}" -maxdepth 1 -type f -name '*.mp4' -print0 | sort -z | xargs -0 -r sha256sum
+  if [[ "${SCENARIO}" == "l1c4" ]]; then
+    find "${MODEL_REVIEW_DIR}" -mindepth 2 -maxdepth 2 -type f -name '*.mp4' -print0 | sort -z | xargs -0 -r sha256sum
+  fi
+} > "${REVIEW_ARTIFACT_MANIFEST}"
+printf 'Review manifest SHA-256: %s\n' "$(sha256sum "${REVIEW_ARTIFACT_MANIFEST}" | awk '{print $1}')"
 
 printf 'Attribution report: %s\n' "${ATTRIBUTION_REPORT}"
 printf 'Policy-camera previews: %s\n' "${PREVIEW_DIR}"

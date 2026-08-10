@@ -38,6 +38,19 @@ else
   DEFAULT_SAFE_REFERENCE_GRASP_DEPTH="0.025"
 fi
 CHECKPOINT="${CHECKPOINT:-${DEFAULT_CHECKPOINT}}"
+MODEL_FAMILY="${MODEL_FAMILY:-openvla}"
+case "${MODEL_FAMILY}" in
+  openvla|pi05|cosmos) ;;
+  *)
+    echo "Unsupported L1-C model family ${MODEL_FAMILY}; expected openvla, pi05, or cosmos." >&2
+    exit 2
+    ;;
+esac
+PI05_HOST="${PI05_HOST:-127.0.0.1}"
+PI05_PORT="${PI05_PORT:-8000}"
+PI05_REPLAN_STEPS="${PI05_REPLAN_STEPS:-5}"
+PI05_CONNECT_TIMEOUT_S="${PI05_CONNECT_TIMEOUT_S:-900}"
+MODEL_OPEN_LOOP_STEPS="${MODEL_OPEN_LOOP_STEPS:-$([[ "${MODEL_FAMILY}" == "cosmos" ]] && printf 16 || printf 8)}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-all}"
 MAX_VIDEOS_PER_OUTCOME="${MAX_VIDEOS_PER_OUTCOME:-10}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
@@ -77,9 +90,11 @@ if [[ "${SCENARIO}" == "l1c4" && ! "${NATIVE_SUITE}" =~ ^libero_(spatial|object|
   exit 2
 fi
 
-EB_NOTE="${UPPER_SCENARIO}-${SLUG}-eb"
-ER_NOTE="${UPPER_SCENARIO}-${SLUG}-risk"
-EC_NOTE="${UPPER_SCENARIO}-${SLUG}-ec"
+RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"
+NOTE_SUFFIX="${RUN_ID_SUFFIX:+-${RUN_ID_SUFFIX}}"
+EB_NOTE="${UPPER_SCENARIO}-${SLUG}-eb${NOTE_SUFFIX}"
+ER_NOTE="${UPPER_SCENARIO}-${SLUG}-risk${NOTE_SUFFIX}"
+EC_NOTE="${UPPER_SCENARIO}-${SLUG}-ec${NOTE_SUFFIX}"
 EB_TRAJ="rollouts/${NATIVE_SUITE}/${EB_NOTE}/trajectories"
 ER_TRAJ="rollouts/${NATIVE_SUITE}/${ER_NOTE}/trajectories"
 EC_TRAJ="rollouts/${NATIVE_SUITE}/${EC_NOTE}/trajectories"
@@ -147,6 +162,7 @@ run_preview() {
     --bundle_manifest "${STATE_BUNDLE_MANIFEST}" \
     --preview_manifest "${PREVIEW_MANIFEST}" \
     --out_dir "${PREVIEW_DIR}" --num_states "${PREVIEW_NUM_STATES:-3}" \
+    --policy_model_family "${POLICY_MODEL_FAMILY:-openvla}" \
     --out_csv "${PREVIEW_CSV}" --out_report "${PREVIEW_REPORT}"
 }
 
@@ -202,11 +218,24 @@ run_condition() {
     ec) state_path="${EC_STATES}"; note="${EC_NOTE}"; oracle="none"; trajectory_dir="${EC_TRAJ}" ;;
   esac
   local condition_review_dir="${REVIEW_DIR}/${condition}"
+  local model_args=(
+    --model_family "${MODEL_FAMILY}"
+    --pretrained_checkpoint "${CHECKPOINT}"
+    --num_open_loop_steps "${MODEL_OPEN_LOOP_STEPS}"
+  )
+  if [[ "${MODEL_FAMILY}" == "pi05" ]]; then
+    model_args+=(
+      --pi05_host "${PI05_HOST}"
+      --pi05_port "${PI05_PORT}"
+      --pi05_replan_steps "${PI05_REPLAN_STEPS}"
+      --pi05_connect_timeout_s "${PI05_CONNECT_TIMEOUT_S}"
+    )
+  fi
   mkdir -p "${trajectory_dir}" "${condition_review_dir}"
   find "${trajectory_dir}" -maxdepth 1 -type f \( -name '*.npz' -o -name 'index.jsonl' \) -delete
   find "${condition_review_dir}" -maxdepth 1 -type f -name '*.mp4' -delete
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
-    --pretrained_checkpoint "${CHECKPOINT}" \
+    "${model_args[@]}" \
     --task_suite_name "${NATIVE_SUITE}" \
     --task_ids "${NATIVE_TASK_ID}" \
     --native_only_preflight_manifest "${NATIVE_PREFLIGHT_JSON}" \
@@ -231,6 +260,8 @@ run_condition() {
     --max_failure_videos "${MAX_VIDEOS_PER_OUTCOME}" \
     --review_video_dir "${condition_review_dir}" \
     --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
+    --num_steps_wait 10 \
+    --seed "${SEED:-7}" \
     --run_id_note "${note}"
   local video
   for video in "${condition_review_dir}"/*.mp4; do

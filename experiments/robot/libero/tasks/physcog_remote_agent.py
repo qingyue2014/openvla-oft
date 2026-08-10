@@ -1597,6 +1597,12 @@ def _l1c_model_artifacts(
     scenario: str, model: str, evaluation_kind: str
 ) -> tuple[str, ...]:
     prefix = f"experiments/logs/{scenario}_{model}-{evaluation_kind}"
+    if scenario == "l1c4" and evaluation_kind == "preview":
+        return (
+            f"{prefix}_gate",
+            f"{prefix}_review_artifacts.sha256",
+            f"review/L1-C4_task/{model}_preview",
+        )
     shared = (
         f"{prefix}_manifest.json",
         f"{prefix}_results.json",
@@ -1610,6 +1616,15 @@ def _l1c_model_artifacts(
     )
     if model == "pi05":
         shared += (f"{prefix}_server.log",)
+    if scenario == "l1c4":
+        return shared + (
+            f"{prefix}_gate",
+            f"{prefix}_review_artifacts.sha256",
+            f"review/L1-C4_task/{model}_{evaluation_kind}",
+            f"rollouts/libero_object/L1-C4-occupied-basket-eb-{model}-{evaluation_kind}",
+            f"rollouts/libero_object/L1-C4-occupied-basket-risk-{model}-{evaluation_kind}",
+            f"rollouts/libero_object/L1-C4-occupied-basket-ec-{model}-{evaluation_kind}",
+        )
     if scenario == "l1c1":
         return shared + (
             "experiments/logs/l1c1_bowl_stack_calibration.md",
@@ -1624,7 +1639,7 @@ def _l1c_model_artifacts(
             "experiments/robot/libero/tasks/l1c1_task2_bowl_stack_source_indices.json",
             "experiments/robot/libero/tasks/l1c1_implicit_stack_preview",
         )
-    return shared + (
+    occupied_artifacts = shared + (
         f"experiments/logs/{scenario}_calibration.md",
         f"experiments/logs/{scenario}_calibration.csv",
         f"experiments/logs/{scenario}_safe_reference.md",
@@ -1637,12 +1652,35 @@ def _l1c_model_artifacts(
         f"experiments/robot/libero/tasks/{scenario}_source_indices.json",
         f"experiments/robot/libero/tasks/{scenario}_preview",
     )
+    return occupied_artifacts
 
 
 PHASES = dict(PHASES)
-for _l1c_scenario in ("l1c1", "l1c2", "l1c3"):
+for _model_setup_name, _model_setup_arg in (
+    ("setup_cosmos", "cosmos"),
+    ("setup_dreamzero", "dreamzero"),
+    ("setup_all", "all"),
+):
+    PHASES[("models", _model_setup_name)] = PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/setup_cosmos_dreamzero_models.sh",
+            _model_setup_arg,
+        ),
+        artifacts=(
+            ("experiments/logs/cosmos_superpod_setup.json",)
+            if _model_setup_arg == "cosmos"
+            else ()
+        ),
+    )
+for _l1c_scenario in ("l1c4",):
     for _l1c_model in ("pi05", "cosmos"):
-        for _l1c_kind in ("smoke", "formal"):
+        _l1c_kinds = (
+            ("preview", "smoke", "formal")
+            if _l1c_scenario == "l1c4"
+            else ("smoke", "formal")
+        )
+        for _l1c_kind in _l1c_kinds:
             _l1c_phase = f"{_l1c_model}_{_l1c_kind}"
             PHASES[(_l1c_scenario, _l1c_phase)] = PhaseSpec(
                 command=(
@@ -1656,9 +1694,13 @@ for _l1c_scenario in ("l1c1", "l1c2", "l1c3"):
                     _l1c_kind,
                 ),
                 count_env=(
-                    "L1C_SMOKE_TRIALS"
-                    if _l1c_kind == "smoke"
-                    else "L1C_FORMAL_TRIALS"
+                    "L1C_PREVIEW_TRIALS"
+                    if _l1c_kind == "preview"
+                    else (
+                        "L1C_SMOKE_TRIALS"
+                        if _l1c_kind == "smoke"
+                        else "L1C_FORMAL_TRIALS"
+                    )
                 ),
                 artifacts=_l1c_model_artifacts(
                     _l1c_scenario, _l1c_model, _l1c_kind
