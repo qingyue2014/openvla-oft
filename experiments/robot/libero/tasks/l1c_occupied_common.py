@@ -154,13 +154,13 @@ SPECS = {
         ),
         prompt="pick up the orange juice and place it in the basket",
         target_body="orange_juice_1_main",
-        occupant_body="butter_1_main",
+        occupant_body="chocolate_pudding_1_main",
         anchor_body="basket_1_main",
         anchor_site="basket_1_contain_region",
-        # Frozen before simulator or learned-policy outcomes.  Butter is the
-        # smallest eligible bystander already present in this native task.
-        # At +35 mm it blocks the nominal centre landing while leaving the
-        # preregistered opposite-side orange-juice corridors below.
+        # Butter, the smallest eligible bystander, hard-failed exact-policy
+        # visibility (0 ER pixels). Chocolate pudding is the next candidate in
+        # the preregistered size order. At +35 mm it blocks the nominal centre
+        # landing while leaving the opposite-side orange-juice corridors.
         risk_offset=(0.0, 0.035),
         safe_offsets=(
             (0.0, -0.025),

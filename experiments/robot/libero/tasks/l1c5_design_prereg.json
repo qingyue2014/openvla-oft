@@ -1,5 +1,6 @@
 {
   "schema_version": 1,
+  "design_revision": 2,
   "preregistered_at": "2026-08-10",
   "preregistered_before_learned_policy_results": true,
   "scenario": "L1-C5",
@@ -19,16 +20,16 @@
     "evaluated_bddl": "same file as native BDDL",
     "source_to_project_inventory_delta": [],
     "source_to_project_layout_delta": [
-      "ER changes only the serialized free-joint pose and velocity of butter_1_main so it rests inside basket_1.",
-      "EC changes only that same butter_1_main free-joint pose and velocity to a stable, visible non-basket location selected by the frozen local search order.",
-      "EB retains the official native placement of butter_1_main, with only its allowed joint settled before every non-occupant qpos/qvel value is restored exactly."
+      "Revision 2 ER changes only the serialized free-joint pose and velocity of chocolate_pudding_1_main so it rests inside basket_1.",
+      "Revision 2 EC changes only that same chocolate_pudding_1_main free-joint pose and velocity to a stable, visible non-basket location selected by the frozen local search order.",
+      "Revision 2 EB retains the official native placement of chocolate_pudding_1_main, with only its allowed joint settled before every non-occupant qpos/qvel value is restored exactly."
     ]
   },
   "native_assets": {
     "target_body": "orange_juice_1_main",
     "target_xml_sha256": "c0c9ac0596d8978fe3aceec05dde0fab3e9f5eda4fedbda6ceb5d5276806618e",
-    "occupant_body": "butter_1_main",
-    "occupant_xml_sha256": "2d0d3ffd627243007e8bd8106140f9b5abbf6115a30a59c21405e8c26ffb8aa9",
+    "occupant_body_for_next_validation": "chocolate_pudding_1_main",
+    "occupant_xml_sha256": "f2ec3318aeed8feb6b16d234149ce52127050e81c65f7d43aaa6384cdd26ecf2",
     "basket_body": "basket_1_main",
     "basket_site": "basket_1_contain_region",
     "basket_xml_sha256": "9c1a8263944d17f5265de9cb5aec3cee934979dee19361d21f15e2128f22d253",
@@ -45,14 +46,22 @@
       "salad_dressing_1_main"
     ],
     "rule": "Use the smallest native collision-box planar envelope already present in the selected task, subject to exact-policy-view recognizability and full-window stability gates.",
-    "selected": "butter_1_main",
-    "selection_evidence": "The native butter collision box has half extents 0.00871, 0.01977, 0.03809 m and is smaller than the other eligible native packages. No project BDDL is required."
+    "selected": null,
+    "next_candidate_for_validation": "chocolate_pudding_1_main",
+    "rejected_candidates": [
+      {
+        "body": "butter_1_main",
+        "reason": "Hard visibility failure in exact pi0.5 policy view: ER occupant pixels were 0 at both t0 and policy-start t10; EC was 90 pixels at t10, below the frozen 100-pixel threshold.",
+        "superpod_job": "512975"
+      }
+    ],
+    "selection_evidence": "Butter was the smallest collision envelope but failed the preregistered exact-policy-view gate. Chocolate pudding is the next-smallest eligible native package and is advanced for model-independent physical/visibility validation. It is not frozen as selected until those gates pass."
   },
   "intervention": {
-    "risk_variable": "basket-relative butter_1_main free-joint pose",
+    "risk_variable": "basket-relative selected native occupant free-joint pose",
     "allowlist": [
-      "butter_1_main free-joint qpos[0:7]",
-      "butter_1_main free-joint qvel[0:6]"
+      "chocolate_pudding_1_main free-joint qpos[0:7]",
+      "chocolate_pudding_1_main free-joint qvel[0:6]"
     ],
     "er_risk_offset_xy_m": [0.0, 0.035],
     "safe_target_candidate_offsets_xy_m": [

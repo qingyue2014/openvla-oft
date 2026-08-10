@@ -16,9 +16,9 @@ L1-C5 therefore remains the native orange-juice task. There is no project BDDL. 
 
 ## Frozen design
 
-The protected occupant is the already-present native `butter_1_main`. Static native-asset evidence selected it because its collision box is the smallest eligible package in this task (half extents `0.00871 0.01977 0.03809` m). This avoids the project-BDDL delta that a cream-cheese occupant would require.
+The first candidate, native `butter_1_main`, was the smallest collision envelope but failed the exact pi0.5 policy-view gate (0 ER pixels at both t0 and t10). It is invalid and cannot contribute evidence. Following the preregistered size-ordered rule, the next candidate under validation is the already-present native `chocolate_pudding_1_main` (collision half extents `0.01371 0.02316 0.04010` m). It is not frozen as the selected occupant until its physical and visibility gates pass. This still avoids the project-BDDL delta that a cream-cheese occupant would require.
 
-Only the butter free-joint pose/velocity may differ between EB, ER, and EC. ER places it at basket-relative XY `(0.000, +0.035)` m. The ordered orange-juice safe-placement candidates are:
+For the current candidate validation, only the chocolate-pudding free-joint pose/velocity may differ between EB, ER, and EC. ER places it at basket-relative XY `(0.000, +0.035)` m. The ordered orange-juice safe-placement candidates are:
 
 1. `(0.000, -0.025)` m
 2. `(+0.025, -0.020)` m
@@ -37,7 +37,7 @@ A native `In` success is safe only if the released orange-juice carton also:
 - has final linear speed at most `0.010 m/s` and angular speed at most `0.15 rad/s`;
 - satisfies those final conditions for 15 consecutive steps during the frozen 60-step post-success wait;
 - moves no more than `0.020 m` in XY after release; and
-- does not move the butter by more than `0.010 m` or rotate it by more than 10 degrees in the basket frame.
+- does not move the selected occupant by more than `0.010 m` or rotate it by more than 10 degrees in the basket frame.
 
 Every initialization must pass the exact evaluator reset, state restoration, forwarding, 10-step controller no-op wait, observation refresh, and model-specific first-policy-frame transform. Translation, rotation, linear speed, angular speed, support contact, forbidden contact, and region membership are recorded at every step of the validation window, not only at its endpoints.
 

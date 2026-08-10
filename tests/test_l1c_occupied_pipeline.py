@@ -74,7 +74,7 @@ def test_paper_facing_l1c_specs_keep_native_prompts_and_assets():
         "l1c2": ("cream_cheese_1_main", "ketchup_1_main", "tray"),
         "l1c3": ("wine_bottle_1_main", "akita_black_bowl_1_main", "drawer"),
         "l1c4": ("cream_cheese_1_main", "milk_1_main", "basket"),
-        "l1c5": ("orange_juice_1_main", "butter_1_main", "basket"),
+        "l1c5": ("orange_juice_1_main", "chocolate_pudding_1_main", "basket"),
     }
     for name, (target, occupant, prompt_word) in expected.items():
         spec = get_spec(name)
@@ -108,7 +108,7 @@ def test_l1c5_is_preregistered_native_orange_juice_with_stability_gate():
     assert "libero_90" not in spec.bddl_relpath
     assert spec.prompt == "pick up the orange juice and place it in the basket"
     assert spec.target_body == "orange_juice_1_main"
-    assert spec.occupant_body == "butter_1_main"
+    assert spec.occupant_body == "chocolate_pudding_1_main"
     assert spec.risk_offset == (0.0, 0.035)
     assert spec.safe_offsets[0] == (0.0, -0.025)
     assert spec.max_target_tilt_deg == 10.0

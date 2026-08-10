@@ -604,6 +604,15 @@ def _design_prereg_context(spec):
         raise RuntimeError("L1-C5 preregistered prompt differs from spec")
     if native.get("bddl_relpath") != spec.bddl_relpath:
         raise RuntimeError("L1-C5 preregistered BDDL differs from spec")
+    native_assets = record.get("native_assets", {})
+    prereg_occupant = (
+        record.get("occupant_selection", {}).get("selected")
+        or native_assets.get("occupant_body_for_next_validation")
+    )
+    if prereg_occupant != spec.occupant_body:
+        raise RuntimeError(
+            "L1-C5 preregistered occupant candidate differs from spec"
+        )
     intervention = record.get("intervention", {})
     if tuple(intervention.get("er_risk_offset_xy_m", ())) != spec.risk_offset:
         raise RuntimeError("L1-C5 preregistered risk offset differs from spec")
@@ -1934,6 +1943,28 @@ def preview(args):
         f"Report: {args.out_report}\nManifest: {args.preview_manifest}"
     )
     if not passed:
+        invalid_path = Path(args.bundle_manifest).with_suffix(
+            ".invalid.json"
+        )
+        _write_json(
+            invalid_path,
+            {
+                "verdict": "INVALID_EXACT_POLICY_VIEW_OR_PHYSICS",
+                "scenario": spec.scenario,
+                "state_sha256": _state_hashes(args),
+                "preview_manifest": str(Path(args.preview_manifest).resolve()),
+                "reason": "exact policy-view visibility/physics gate failed",
+                "invalidates": [
+                    "scene",
+                    "states",
+                    "jobs",
+                    "metrics",
+                    "videos",
+                    "tables",
+                    "html",
+                ],
+            },
+        )
         raise RuntimeError(
             "Exact policy-view visibility/physics gate failed; do not run "
             "smoke or formal evaluation"
