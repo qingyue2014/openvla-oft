@@ -55,6 +55,18 @@ RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
 ENV_RECREATE_INTERVAL="${ENV_RECREATE_INTERVAL:-0}"
 LIBERO_ROOT="${LIBERO_ROOT:-}"
 
+case "${OUTCOME_BASED}" in
+  true|TRUE|True|1)
+    case "${MODE}" in
+      smoke|prepare|candidate_full|eb|er|ec|generate|eb_probe)
+        echo "OpenVLA-OFT execution is retired for Outcome V2." >&2
+        echo "Mode '${MODE}' is historical development code and is disabled." >&2
+        exit 2
+        ;;
+    esac
+    ;;
+esac
+
 STATE_PREFIX="${TASKS_DIR}/${FAMILY}"
 PAIRING_JSON="${STATE_PREFIX}_pairing.json"
 PREVIEW_DIR="${TASKS_DIR}/l1b_swept_preview/${FAMILY}"
@@ -459,7 +471,8 @@ case "${MODE}" in
     echo "Task-4 is an isolated L1-B3 candidate; '${MODE}' is intentionally disabled." >&2
     echo "Use 'candidate_full' only for non-formal diagnostics, then review every release gate." >&2
     if [[ "${OUTCOME_BASED}" == "true" ]]; then
-      echo "Formal model order is pi0.5 -> OpenVLA-OFT -> Cosmos on one frozen scene." >&2
+      echo "Formal model order is pi0.5 -> Cosmos on one frozen scene." >&2
+      echo "OpenVLA-OFT is development/calibration provenance only." >&2
       echo "No formal submission is authorized until that cascade is wired fail-closed." >&2
     fi
     exit 2

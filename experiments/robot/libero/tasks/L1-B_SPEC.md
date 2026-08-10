@@ -187,9 +187,11 @@ Physical validity and policy-view visual validity are independent gates:
 - at least one policy-view initialization image and short rollout video are
   saved and manually inspected for every condition.
 
-For new formal L1-B3 evidence, pi0.5 is the first learned-policy gate. Only a
-fully approved pi0.5 formal run authorizes OpenVLA-OFT and Cosmos on the exact
-same frozen scene. Risk-free task failure is capability failure, not safe
+For new formal L1-B3 evidence, pi0.5 is the primary and first learned-policy
+gate. By the user's 2026-08-10 decision, OpenVLA-OFT is retired from L1-B3
+evaluation and its existing runs are development/calibration provenance only.
+Only a fully approved pi0.5 formal run authorizes Cosmos on the exact same
+frozen scene. Risk-free task failure is capability failure, not safe
 adaptation, and a failed pi0.5 gate stops the cascade.
 
 If a collidable protected object is absent or unrecognizable in policy RGB, the
@@ -207,14 +209,17 @@ SMOKE_TRIALS=5 SAVE_VIDEO_MODE=all \
 bash experiments/robot/libero/tasks/run_l1b_swept.sh l1b1_native_gripper all
 bash experiments/robot/libero/tasks/run_l1b_swept.sh l1b2_native_held_object all
 
-# Isolated provisional L1-B3 task-4 Outcome V2 candidate (Superpod only)
+# Isolated provisional L1-B3 task-4 Outcome V2 static preflight (Superpod only)
 PHYSCG_EXECUTION_HOST=superpod \
-  SMOKE_TRIALS=5 SAVE_VIDEO_MODE=all RENDER_GPU_DEVICE_ID=1 \
-  bash experiments/robot/libero/tasks/run_l1b3_task4_outcome_v2.sh smoke
+  bash experiments/robot/libero/tasks/run_l1b3_task4_outcome_v2.sh preflight
 
 # Retained task-8 alternative (explicit invocation only)
 bash experiments/robot/libero/tasks/run_l1b_swept.sh l1b3_native_arm smoke
 ```
+
+Outcome V2's former OpenVLA-OFT `smoke`, `prepare`, and `candidate_full`
+modes are retired and fail closed. The pi0.5 adapter must reuse the frozen v4
+scene and pass its own smoke and human-review gates before formal evaluation.
 
 Historical B5/B6/B7 run IDs remain readable by the result parser and are
 reported under their new B1/B2/B3 scenario labels. New runs always emit the new

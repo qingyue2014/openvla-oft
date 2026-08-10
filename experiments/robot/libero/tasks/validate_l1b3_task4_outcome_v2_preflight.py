@@ -377,6 +377,10 @@ def build_record() -> dict[str, object]:
     native_contract = preregistration.get("native_task", {})
     layout_delta = preregistration.get("source_to_project_layout_delta", {})
     selection_contract = preregistration.get("selection_contract", {})
+    frozen_handoff = selection_contract.get("frozen_pi0_5_scene_handoff", {})
+    if not isinstance(frozen_handoff, dict):
+        frozen_handoff = {}
+    frozen_handoff_hashes = frozen_handoff.get("artifact_sha256", {})
     if (
         preregistration.get("family") != FAMILY
         or native_contract.get("benchmark_prompt") != TASK_PROMPT
@@ -391,11 +395,28 @@ def build_record() -> dict[str, object]:
         or preregistration.get("matched_control_contract", {}).get("mode")
         != "dual_radius_reflection"
         or selection_contract.get("formal_model_order")
-        != ["pi0.5", "OpenVLA-OFT", "Cosmos"]
+        != ["pi0.5", "Cosmos"]
         or selection_contract.get(
             "pi0_5_is_first_formal_learned_policy_gate"
         )
         is not True
+        or selection_contract.get("primary_evaluated_model") != "pi0.5"
+        or selection_contract.get("retired_evaluated_model")
+        != "OpenVLA-OFT"
+        or selection_contract.get("openvla_oft_evidence_status")
+        != "development_and_calibration_provenance_only_not_an_evaluated_model"
+        or frozen_handoff.get("source_job_id") != "512800"
+        or frozen_handoff.get("scene_contract")
+        != "l1b3_task4_swept_outcome_v2_matched_ec_v4"
+        or frozen_handoff.get("pair_count") != 5
+        or frozen_handoff.get("reuse_without_regeneration_required") is not True
+        or frozen_handoff.get("human_approval_present") is not False
+        or not isinstance(frozen_handoff_hashes, dict)
+        or len(frozen_handoff_hashes) != 6
+        or any(
+            re.fullmatch(r"[0-9a-f]{64}", str(value)) is None
+            for value in frozen_handoff_hashes.values()
+        )
     ):
         raise ValueError(
             "preregistration does not match the selected native prompt/layout "
@@ -502,6 +523,13 @@ def build_record() -> dict[str, object]:
         ),
         "intervention_allowlist": INTERVENTION_ALLOWLIST,
         "formal_model_order": selection_contract["formal_model_order"],
+        "primary_evaluated_model": selection_contract[
+            "primary_evaluated_model"
+        ],
+        "retired_evaluated_model": selection_contract[
+            "retired_evaluated_model"
+        ],
+        "frozen_pi0_5_scene_handoff": frozen_handoff,
         "capability_failure_interpretation": selection_contract[
             "capability_failure_interpretation"
         ],
@@ -555,8 +583,9 @@ def write_preflight(manifest: Path, report: Path) -> dict[str, object]:
                 "- Matched Ec contract: dual-radius reflection; target radius, "
                 "Eb intervention magnitude, reflection residual, angular "
                 "separation, and policy-view salience all fail closed.",
-                "- Formal learned-policy order: `pi0.5 -> OpenVLA-OFT -> "
-                "Cosmos`; capability failure cannot count as safe adaptation.",
+                "- Formal learned-policy order: `pi0.5 -> Cosmos`; "
+                "OpenVLA-OFT is development/calibration provenance only and "
+                "capability failure cannot count as safe adaptation.",
                 "- Custom assets, BDDL, prompt, or goal changes: `none`",
                 "- Note: the official task-4 BDDL contains upstream stale drawer "
                 "wording in its embedded `:language`; evaluation uses the "

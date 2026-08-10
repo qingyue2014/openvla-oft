@@ -307,9 +307,8 @@ bash experiments/robot/libero/tasks/run_l1b_swept.sh all prepare
 SMOKE_TRIALS=5 bash experiments/robot/libero/tasks/run_l1b_swept.sh all smoke
 NUM_TRIALS=50 bash experiments/robot/libero/tasks/run_l1b_swept.sh all eval
 
-SMOKE_TRIALS=5 SAVE_VIDEO_MODE=all RENDER_GPU_DEVICE_ID=1 \
-  PHYSCG_EXECUTION_HOST=superpod \
-  bash experiments/robot/libero/tasks/run_l1b3_task4_outcome_v2.sh smoke
+PHYSCG_EXECUTION_HOST=superpod \
+  bash experiments/robot/libero/tasks/run_l1b3_task4_outcome_v2.sh preflight
 ```
 
 See `L1-B_SPEC.md` for the construct definition and mandatory static/dynamic
@@ -318,6 +317,11 @@ trajectory-conditioned calibration, capability interpretation, and promotion
 requirements. L1-B1/B2/B3 are one construct family but use three different
 native benchmark tasks. The retained task-8 alternative remains documented in
 `L1-B3_SPEC.md` and is not selected by `all`.
+OpenVLA-OFT was retired from Outcome V2 evaluation on 2026-08-10. Its existing
+runs are development/calibration provenance only; the next learned-policy gate
+is pi0.5 smoke on the exact frozen v4 scene. Until the pi0.5 execution adapter
+is integrated, Outcome V2 exposes static preflight and scripted validation but
+no learned-policy smoke or formal command.
 The old custom-asset B1/B2/B3/B4 implementation is archived in
 `L1-B_CUSTOM_ASSETS_LEGACY.md` and rejected by the canonical runner.
 

@@ -1,11 +1,17 @@
+from types import SimpleNamespace
+
+import pytest
+
 from experiments.robot.libero.tasks.physcog_remote_agent import (
     PHASES,
+    RETIRED_L1B3_OPENVLA_PHASES,
     PhaseSpec,
     RemoteConfig,
     build_batch_script,
     build_isolated_sync_script,
     build_sync_script,
     classify_result,
+    command_run,
     extract_verdicts,
     parse_markers,
 )
@@ -210,6 +216,25 @@ def test_l1b3_task4_v2_anchor_probes_are_tuning_only():
         assert "eb_probe" in spec.command
         assert spec.count_env == "TASK4_SMOKE_POOL_SIZE"
     assert ("l1b3_task4_v2", "formal") not in PHASES
+
+
+def test_l1b3_task4_v2_openvla_submission_phases_are_retired():
+    for phase in (
+        "smoke",
+        "prepare",
+        "candidate_full",
+        "eb_probe_xm02",
+    ):
+        assert ("l1b3_task4_v2", phase) in RETIRED_L1B3_OPENVLA_PHASES
+    for phase in (
+        "safe_reference",
+        "safe_reference_approach_probe",
+    ):
+        assert ("l1b3_task4_v2", phase) not in RETIRED_L1B3_OPENVLA_PHASES
+    with pytest.raises(SystemExit, match="OpenVLA-OFT is retired"):
+        command_run(
+            SimpleNamespace(scenario="l1b3_task4_v2", phase="smoke")
+        )
 
 
 def test_l1b3_task4_v2_smoke_cleans_complete_rollout_directories():

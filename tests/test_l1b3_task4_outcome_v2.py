@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import subprocess
 from types import SimpleNamespace
 
 import numpy as np
@@ -9,6 +10,7 @@ from experiments.robot.libero.physcog_oracles import (
     make_safety_oracle,
 )
 from experiments.robot.libero.tasks.record_experiment_results import (
+    _is_retired_evaluated_result,
     _metadata_for_run,
 )
 from experiments.robot.libero.tasks.l1b_matched_control import (
@@ -224,6 +226,9 @@ def test_v2_family_and_workflow_are_isolated_from_component_v1():
     assert "SLURM_JOB_ID" in runner
     assert "PHYSCG_SUPERPOD" in runner
     assert "review/L1-B3_task/task4-outcome-v2" in runner
+    assert 'MODE="${1:-preflight}"' in runner
+    assert 'L1B3_TASK4_FORMAL_MODEL_ORDER="pi0.5,Cosmos"' in runner
+    assert "OpenVLA-OFT is retired from L1-B3 Outcome V2 evaluation" in runner
     base = BASE_RUNNER.read_text()
     assert "--safety_oracle swept_volume_outcome" in base
     assert "replay_l1b_outcome_eb_actions.py" in base
@@ -237,6 +242,16 @@ def test_v2_family_and_workflow_are_isolated_from_component_v1():
     assert 'TASK4_EB_OBSTACLE_OFFSET_XY' in base
     assert 'run_eb_probe' in base
     assert "official v2 wrapper rejects Eb-offset overrides" in runner
+    assert "OpenVLA-OFT execution is retired for Outcome V2" in base
+    retired = subprocess.run(
+        ["bash", str(V2_RUNNER), "smoke"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert retired.returncode == 2
+    assert "retired" in retired.stderr.lower()
 
 
 def test_v2_calibration_drops_phase_and_component_purity_admission():
@@ -372,6 +387,10 @@ def test_v2_prereg_and_preflight_freeze_native_contract():
         "project_file_hashes",
         "formal_model_order",
         "pi0_5_is_first_formal_learned_policy_gate",
+        "primary_evaluated_model",
+        "retired_evaluated_model",
+        "openvla_oft_evidence_status",
+        "frozen_pi0_5_scene_handoff",
         "git",
         "status",
     ):
@@ -382,12 +401,29 @@ def test_v2_prereg_and_preflight_freeze_native_contract():
     assert "1.0 deg" in spec
     assert "`pairing.seed + pair.source_state_index`" in spec
     assert "`[-0.020, 0.000]`" in spec
-    assert "pi0.5 is the first" in spec
+    assert "pi0.5 is the\nprimary and first" in spec
     assert prereg["selection_contract"]["formal_model_order"] == [
         "pi0.5",
-        "OpenVLA-OFT",
         "Cosmos",
     ]
+    assert prereg["selection_contract"]["primary_evaluated_model"] == "pi0.5"
+    assert prereg["selection_contract"]["retired_evaluated_model"] == (
+        "OpenVLA-OFT"
+    )
+    handoff = prereg["selection_contract"]["frozen_pi0_5_scene_handoff"]
+    assert handoff["source_job_id"] == "512800"
+    assert handoff["scene_contract"].endswith("matched_ec_v4")
+    assert handoff["pair_count"] == 5
+    assert handoff["reuse_without_regeneration_required"]
+    assert not handoff["human_approval_present"]
+    assert set(handoff["artifact_sha256"]) == {
+        "l1b3_task4_outcome_v2_native_source_states.hdf5",
+        "l1b3_task4_outcome_v2_eb_states.hdf5",
+        "l1b3_task4_outcome_v2_er_states.hdf5",
+        "l1b3_task4_outcome_v2_ec_states.hdf5",
+        "l1b3_task4_outcome_v2_pairing.json",
+        "l1b3_task4_outcome_v2_native_preflight.json",
+    }
     assert "capability failure" in spec.lower()
 
 
@@ -533,3 +569,14 @@ def test_v2_run_ids_do_not_pool_with_v1_or_task8():
     )
     assert v2[:2] == ("L1", "L1-B3-task4-outcome-v2")
     assert len({v2[1], v1[1], task8[1]}) == 3
+
+
+def test_v2_openvla_results_are_excluded_but_pi_and_cosmos_remain():
+    base = {"scenario": "L1-B3-task4-outcome-v2"}
+    assert _is_retired_evaluated_result({**base, "model": "openvla"})
+    assert _is_retired_evaluated_result({**base, "model": "openvla_oft"})
+    assert not _is_retired_evaluated_result({**base, "model": "pi0.5"})
+    assert not _is_retired_evaluated_result({**base, "model": "cosmos"})
+    assert not _is_retired_evaluated_result(
+        {"scenario": "L1-B1", "model": "openvla_oft"}
+    )

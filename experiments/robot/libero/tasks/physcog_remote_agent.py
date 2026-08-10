@@ -1104,6 +1104,28 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
 }
 
 
+# Preserve old PhaseSpec records so historical ledgers remain readable, but
+# refuse new Superpod submission of Outcome V2 phases that execute the retired
+# OpenVLA-OFT policy or regenerate its policy-conditioned scene.
+RETIRED_L1B3_OPENVLA_PHASES = frozenset(
+    ("l1b3_task4_v2", phase)
+    for phase in (
+        "eb_probe_y18",
+        "eb_probe_xm08y12",
+        "eb_probe_xm12y18",
+        "eb_probe_ym08",
+        "eb_probe_ym12",
+        "eb_probe_xm08",
+        "eb_probe_xm12",
+        "eb_probe_xm02",
+        "eb_probe_xm04",
+        "smoke",
+        "prepare",
+        "candidate_full",
+    )
+)
+
+
 VERDICT_RE = re.compile(
     r"(?:Verdict:\s*(?:\*\*)?|verdict=|\"occlusion_gate\"\s*:\s*\")"
     r"([A-Z][A-Z0-9_-]+)",
@@ -1474,6 +1496,12 @@ def command_run(args: argparse.Namespace) -> int:
     if key not in PHASES:
         choices = ", ".join(f"{s}:{p}" for s, p in sorted(PHASES))
         raise SystemExit(f"Unregistered phase {key[0]}:{key[1]}; choose one of: {choices}")
+    if key in RETIRED_L1B3_OPENVLA_PHASES:
+        raise SystemExit(
+            "OpenVLA-OFT is retired from L1-B3 Outcome V2 evaluation; "
+            f"submission of {key[0]}:{key[1]} is disabled. Preserve the "
+            "frozen v4 scene for pi0.5."
+        )
     spec = PHASES[key]
     base_cfg = _config_from_args(args)
     cfg = base_cfg

@@ -233,6 +233,15 @@ def _metadata_for_run(run_id: str) -> tuple:
     return ("", "", "")
 
 
+def _is_retired_evaluated_result(row: Dict[str, object]) -> bool:
+    """Exclude retired L1-B3 OpenVLA evidence from result tables."""
+    model = re.sub(r"[^a-z0-9]+", "", str(row.get("model", "")).lower())
+    return (
+        row.get("scenario") == "L1-B3-task4-outcome-v2"
+        and model in {"openvla", "openvlaoft"}
+    )
+
+
 def _episode_seq(text: str, key: str) -> str:
     """Compact per-episode binary sequence for lines like 'Success: True'."""
     values = re.findall(rf"^{re.escape(key)}\s*:\s*(True|False)\s*$", text, re.MULTILINE)
@@ -352,6 +361,8 @@ def collect_records(log_dir: Path, include_incomplete: bool = False) -> List[Dic
     for path in sorted(log_dir.glob("EVAL-*.txt")):
         try:
             row = _normalize(parse_eval_log(path))
+            if _is_retired_evaluated_result(row):
+                continue
             has_final_metric = any(row.get(key) not in ("", None) for key in ("task_success_rate", "svr", "safe_success_rate"))
             if include_incomplete or has_final_metric:
                 rows.append(row)

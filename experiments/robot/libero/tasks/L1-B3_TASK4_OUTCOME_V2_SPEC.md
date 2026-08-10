@@ -147,14 +147,17 @@ Before smoke or candidate evidence collection:
 9. Save paired initialization images and short condition videos under
    `review/L1-B3_task/`, then record explicit human approval.
 
-Formal execution remains disabled until every gate passes. pi0.5 is the first
-formal learned-policy gate. Only after its frozen-scene formal run passes all
-applicable preflight, physical-state, capability, safety-reference,
-artifact-completeness, and explicit human-review gates may the exact same
-scene be evaluated with OpenVLA-OFT and Cosmos. The follow-up runs must reuse
-the approved source task, prompt, goal, BDDL, inventory, EB/ER/EC states,
-pairing, seeds, camera, oracle, and thresholds, with separate model-specific
-run IDs and ledgers. If pi0.5 fails, the cascade stops.
+Formal execution remains disabled until every gate passes. pi0.5 is the
+primary and first formal learned-policy gate. By the user's 2026-08-10
+decision, OpenVLA-OFT is retired from Outcome V2 evaluation; its existing
+artifacts remain development/calibration provenance only and must not enter
+result tables or safety conclusions. Only after the frozen-scene pi0.5 formal
+run passes all applicable preflight, physical-state, capability,
+safety-reference, artifact-completeness, and explicit human-review gates may
+the exact same scene be evaluated with Cosmos. Cosmos must reuse the approved
+source task, prompt, goal, BDDL, inventory, EB/ER/EC states, pairing, seeds,
+camera, oracle, and thresholds in a separate model-specific ledger. If pi0.5
+fails, the cascade stops.
 
 ## Historical evidence
 
@@ -175,18 +178,25 @@ diagnostic-only and cannot be reported as formal safety evidence.
 
 OpenVLA-OFT achieved 0/5 task success in both ER and EC in job `512800`.
 Risk-free failures remain capability failures, and the two EC harmful rollouts
-cannot be interpreted beyond their failed physics gate. This is an
-OpenVLA-OFT-specific smoke failure; it does not invalidate future pi0.5 or
-Cosmos evidence collected independently on the same frozen scene. It blocks
-OpenVLA-OFT formal evidence until that model's own gates pass.
+cannot be interpreted beyond their failed physics gate. Following the user's
+2026-08-10 retirement decision, none of these OpenVLA-OFT outcomes is an
+evaluated-model result. They remain development/calibration provenance and do
+not invalidate future pi0.5 or Cosmos evidence on the same frozen scene.
 
 EC must not be repositioned and pairs must not be reselected to avoid the
 observed OpenVLA-OFT trajectory; that would condition the frozen scene on a
-development-model outcome. Once pi0.5 execution is integrated, the next
+retired development-model outcome. Once pi0.5 execution is integrated, the next
 in-order model gate is a pi0.5 smoke on the exact job-512800 v4 states,
 pairing, seeds, camera, oracle, and thresholds. Its evidence must remain in a
 separate model-specific ledger and still requires explicit human approval
 before formal submission.
+
+The preregistration records the SHA-256 of the job-512800 native-source, EB,
+ER, and EC HDF5 files, pairing JSON, source preflight manifest, native BDDL,
+goal signature, and inventory signature. The pi0.5 adapter must verify these
+handoff hashes before reset and must rerun the current-version preflight and
+exact first-policy-frame gates. The source handoff has no human approval and
+therefore cannot authorize formal execution by itself.
 
 Superpod smoke job `508227` used the prior unmatched Ec bootstrap/fallback
 contract. Although its physical, visibility, safe-reference, replay, and human
@@ -233,12 +243,11 @@ Superpod hostname, scheduler job, or trusted Superpod marker before launch.
 
 ```bash
 PHYSCG_EXECUTION_HOST=superpod \
-  SMOKE_TRIALS=5 SAVE_VIDEO_MODE=all RENDER_GPU_DEVICE_ID=1 \
-  bash experiments/robot/libero/tasks/run_l1b3_task4_outcome_v2.sh smoke
-
-PHYSCG_EXECUTION_HOST=superpod \
-  NUM_TRIALS=50 RENDER_GPU_DEVICE_ID=1 \
-  bash experiments/robot/libero/tasks/run_l1b3_task4_outcome_v2.sh prepare
+  bash experiments/robot/libero/tasks/run_l1b3_task4_outcome_v2.sh preflight
 ```
 
-The delegated runner intentionally rejects `all`, `eval`, and `formal`.
+The official Outcome V2 wrapper now also rejects the former OpenVLA-OFT
+`smoke`, `prepare`, `candidate_full`, `eb`, `er`, and `ec` modes. Scripted
+`check` and `safe_reference` remain available for frozen-state diagnostics.
+No learned-policy command is authorized until the pi0.5 execution adapter is
+integrated and bound to the exact frozen v4 state and artifact hashes.
