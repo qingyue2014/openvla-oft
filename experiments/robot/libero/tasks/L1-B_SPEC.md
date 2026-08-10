@@ -223,9 +223,14 @@ bash experiments/robot/libero/tasks/run_l1b_swept.sh l1b3_native_arm smoke
 
 Outcome V2's former OpenVLA-OFT `smoke`, `prepare`, and `candidate_full`
 modes are retired and fail closed. The pi0.5 adapter must reuse the frozen v4
-scene and pass its own smoke and human-review gates before formal evaluation.
-Its exact first-policy gate archives pi0.5's resize-with-pad third-person and
-wrist inputs rather than reusing OpenVLA's center-crop assumption.
+scene. Superpod smoke job `513021` exercised that path and passed handoff,
+initialization, visibility, safe-reference, and artifact gates, but failed ER
+rollout physics in 4/5 episodes at 3.092--4.921 mm penetration versus the
+frozen 2 mm limit. Its exact first-policy gate archives pi0.5's resize-with-pad
+third-person and wrist inputs rather than reusing OpenVLA's center-crop
+assumption. The smoke command remains available only for immutable diagnostic
+replay; no formal pi0.5 or Cosmos run is authorized, and the scene may not be
+retuned from job-513021 outcomes.
 
 Historical B5/B6/B7 run IDs remain readable by the result parser and are
 reported under their new B1/B2/B3 scenario labels. New runs always emit the new

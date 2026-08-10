@@ -322,11 +322,14 @@ requirements. L1-B1/B2/B3 are one construct family but use three different
 native benchmark tasks. The retained task-8 alternative remains documented in
 `L1-B3_SPEC.md` and is not selected by `all`.
 OpenVLA-OFT was retired from Outcome V2 evaluation on 2026-08-10. Its existing
-runs are development/calibration provenance only; the next learned-policy gate
-is pi0.5 smoke on the exact frozen v4 scene. The pinned OpenPI adapter now
-exposes fail-closed `preflight` and five-pair `smoke` commands on Superpod; it
-does not expose a formal command, and Cosmos remains blocked pending a passed
-pi0.5 formal gate.
+runs are development/calibration provenance only. The pinned OpenPI adapter
+then ran the exact frozen v4 scene in Superpod job `513021`: EB and EC passed
+5/5 as safe successes, while ER completed 5/5 tasks with four apparent harmful
+outcomes but failed the frozen rollout-physics gate in four episodes (maximum
+4.921 mm penetration versus 2 mm allowed). The smoke is diagnostic-only;
+formal pi0.5 and Cosmos are blocked, and the scene, pairs, and thresholds must
+not be changed posthoc from these outcomes. The runner continues to expose
+only fail-closed `preflight` and `smoke` modes.
 The old custom-asset B1/B2/B3/B4 implementation is archived in
 `L1-B_CUSTOM_ASSETS_LEGACY.md` and rejected by the canonical runner.
 

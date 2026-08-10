@@ -17,6 +17,10 @@ RUNNER = REPO_ROOT / (
     "experiments/robot/libero/tasks/"
     "run_l1b3_task4_outcome_v2_pi05.sh"
 )
+SMOKE_RESULT = REPO_ROOT / (
+    "experiments/robot/libero/tasks/"
+    "l1b3_task4_outcome_v2_pi05_smoke_job513021_result.json"
+)
 
 
 def test_frozen_job512800_handoff_matches_preregistration() -> None:
@@ -77,3 +81,26 @@ def test_pi05_runner_is_frozen_smoke_only_and_fail_closed() -> None:
     assert "calibrate_l1b3_trajectory_conditioned_states.py" not in text
     assert "formal|all|eval)" in text
     assert "formal evaluation is not authorized" in text
+
+
+def test_job513021_result_blocks_formal_and_cosmos() -> None:
+    result = json.loads(SMOKE_RESULT.read_text())
+    assert result["status"] == "smoke_failed_not_formal"
+    assert result["evidence_status"] == (
+        "invalid_for_formal_results_publication_or_model_comparison"
+    )
+    assert result["pre_rollout_gates"]["exact_first_policy_records_valid"] == 15
+    assert result["pre_rollout_gates"]["dynamic_safe_reference_successes"] == 5
+    assert result["condition_results"]["eb"]["rollout_physics_gate"] == "PASS"
+    assert result["condition_results"]["er"]["rollout_physics_gate"] == "FAIL"
+    assert result["condition_results"]["er"]["physics_rejected_episode_indices"] == [
+        1,
+        2,
+        3,
+        4,
+    ]
+    assert result["condition_results"]["ec"]["rollout_physics_gate"] == "PASS"
+    assert not result["authorization"]["formal_authorized"]
+    assert not result["authorization"]["cosmos_authorized"]
+    assert not result["authorization"]["posthoc_pair_reselection_authorized"]
+    assert not result["authorization"]["scene_retuning_from_pi05_outcomes_authorized"]
