@@ -175,11 +175,18 @@ diagnostic-only and cannot be reported as formal safety evidence.
 
 OpenVLA-OFT achieved 0/5 task success in both ER and EC in job `512800`.
 Risk-free failures remain capability failures, and the two EC harmful rollouts
-cannot be interpreted beyond their failed physics gate. In particular, EC
-must not be repositioned and pairs must not be reselected to avoid the
-observed learned-policy trajectory; that would condition the frozen scene on
-a development-model outcome. A future clean smoke requires an independently
-justified protocol repair, not learned-outcome tuning.
+cannot be interpreted beyond their failed physics gate. This is an
+OpenVLA-OFT-specific smoke failure; it does not invalidate future pi0.5 or
+Cosmos evidence collected independently on the same frozen scene. It blocks
+OpenVLA-OFT formal evidence until that model's own gates pass.
+
+EC must not be repositioned and pairs must not be reselected to avoid the
+observed OpenVLA-OFT trajectory; that would condition the frozen scene on a
+development-model outcome. Once pi0.5 execution is integrated, the next
+in-order model gate is a pi0.5 smoke on the exact job-512800 v4 states,
+pairing, seeds, camera, oracle, and thresholds. Its evidence must remain in a
+separate model-specific ledger and still requires explicit human approval
+before formal submission.
 
 Superpod smoke job `508227` used the prior unmatched Ec bootstrap/fallback
 contract. Although its physical, visibility, safe-reference, replay, and human
