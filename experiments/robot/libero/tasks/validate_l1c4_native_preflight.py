@@ -1,4 +1,4 @@
-"""Fail-closed runtime validation for the four-suite native L1-C4 task."""
+"""Fail-closed runtime validation for four-suite native occupied-goal tasks."""
 
 from __future__ import annotations
 
@@ -30,17 +30,31 @@ def _load_manifest(manifest_path: str | Path) -> dict:
         raise ValueError(f"Invalid native-only manifest {path}: {exc}") from exc
     if manifest.get("verdict") != "PASS_NATIVE_ONLY_PREFLIGHT":
         _fail(path, "native-only preflight verdict is not passing")
-    if manifest.get("scenario") != "L1-C4":
+    scenario = manifest.get("scenario")
+    if scenario not in {"L1-C4", "L1-C5"}:
         _fail(path, f"unexpected scenario {manifest.get('scenario')!r}")
     if manifest.get("native_suite") not in STANDARD_LIBERO_SUITES:
         _fail(
             path,
-            "L1-C4 task is not from one of the four standard LIBERO suites",
+            f"{scenario} task is not from one of the four standard LIBERO suites",
         )
     if manifest.get("native_suite") == "libero_90":
-        _fail(path, "libero_90 is forbidden for L1-C4")
+        _fail(path, f"libero_90 is forbidden for {scenario}")
     if manifest.get("custom_assets") != []:
         _fail(path, "custom assets were declared")
+    if scenario == "L1-C5":
+        if not manifest.get("native_goal_canonical") or not manifest.get(
+            "native_goal_sha256"
+        ):
+            _fail(path, "native parsed-goal signature is missing")
+        audits = manifest.get("paired_observed_diff_audit", [])
+        if not audits or any(
+            row.get("verdict") != "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+            for row in audits
+        ):
+            _fail(path, "paired observed-diff allowlist audit is missing or failed")
+        if not manifest.get("design_prereg", {}).get("sha256"):
+            _fail(path, "L1-C5 design preregistration is not hash-bound")
     return manifest
 
 
@@ -70,7 +84,7 @@ def _mark_invalid(manifest_path: Path, reason: str) -> None:
 
 def _fail(manifest_path: Path, reason: str) -> None:
     _mark_invalid(manifest_path, reason)
-    raise ValueError(f"L1-C4 native-only hard stop: {reason}")
+    raise ValueError(f"occupied-goal native-only hard stop: {reason}")
 
 
 def verify_evaluation_request(

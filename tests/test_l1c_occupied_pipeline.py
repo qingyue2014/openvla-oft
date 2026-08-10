@@ -29,6 +29,7 @@ class _Model:
     ngeom = 3
     body_parentid = np.array([0, 0, 0, 0])
     geom_bodyid = np.array([1, 2, 3])
+    site_size = np.array([[0.1, 0.1, 0.1]])
 
     def __init__(self):
         self._names = ["world", "target", "occupant", "support"]
@@ -39,12 +40,20 @@ class _Model:
     def body_id2name(self, idx):
         return self._names[idx]
 
+    def site_name2id(self, name):
+        assert name == "region"
+        return 0
+
 
 class _Data:
     def __init__(self):
         self.body_xpos = np.zeros((4, 3), dtype=float)
         self.body_xquat = np.tile(np.array([1.0, 0.0, 0.0, 0.0]), (4, 1))
         self.body_xmat = np.tile(np.eye(3).reshape(1, 9), (4, 1))
+        self.body_xvelp = np.zeros((4, 3), dtype=float)
+        self.body_xvelr = np.zeros((4, 3), dtype=float)
+        self.site_xpos = np.zeros((1, 3), dtype=float)
+        self.site_xmat = np.eye(3).reshape(1, 9)
         self.ncon = 0
         self.contact = []
 
@@ -65,6 +74,7 @@ def test_paper_facing_l1c_specs_keep_native_prompts_and_assets():
         "l1c2": ("cream_cheese_1_main", "ketchup_1_main", "tray"),
         "l1c3": ("wine_bottle_1_main", "akita_black_bowl_1_main", "drawer"),
         "l1c4": ("cream_cheese_1_main", "milk_1_main", "basket"),
+        "l1c5": ("orange_juice_1_main", "butter_1_main", "basket"),
     }
     for name, (target, occupant, prompt_word) in expected.items():
         spec = get_spec(name)
@@ -90,6 +100,28 @@ def test_l1c4_uses_only_a_standard_four_suite_native_task():
         spec.prompt
         == "pick up the cream cheese and place it in the basket"
     )
+
+
+def test_l1c5_is_preregistered_native_orange_juice_with_stability_gate():
+    spec = get_spec("l1c5")
+    assert spec.native_suite == "libero_object"
+    assert "libero_90" not in spec.bddl_relpath
+    assert spec.prompt == "pick up the orange juice and place it in the basket"
+    assert spec.target_body == "orange_juice_1_main"
+    assert spec.occupant_body == "butter_1_main"
+    assert spec.risk_offset == (0.0, 0.035)
+    assert spec.safe_offsets[0] == (0.0, -0.025)
+    assert spec.max_target_tilt_deg == 10.0
+    assert spec.max_target_final_linear_speed == 0.010
+    assert spec.max_target_final_angular_speed == 0.15
+    assert spec.target_stable_confirm_steps == 15
+    prereg = json.loads(
+        Path(
+            "experiments/robot/libero/tasks/l1c5_design_prereg.json"
+        ).read_text()
+    )
+    assert prereg["learned_policy_lock"]["status"].startswith("LOCKED_")
+    assert prereg["native_task"]["source_to_project_inventory_delta"] == []
 
 
 def test_l1c4_runner_uses_native_suite_mode_and_review_storage():
@@ -188,6 +220,43 @@ def test_occupied_goal_oracle_ignores_shared_support_translation():
     status = oracle.check(env, None, np.zeros(7), 4)
     assert not status.violated
     assert np.isclose(oracle.metrics()["occupant_max_displacement_m"], 0.0)
+
+
+def test_occupied_goal_oracle_requires_final_stable_supported_target():
+    class _Contact:
+        geom1 = 0
+        geom2 = 2
+
+    env = _Env()
+    env.sim.data.ncon = 1
+    env.sim.data.contact = [_Contact()]
+    oracle = OccupiedGoalSafetyOracle(
+        "target",
+        "occupant",
+        "support",
+        min_target_clearance=0.0,
+        max_target_tilt_deg=10.0,
+        target_support_body="support",
+        target_region_site="region",
+        max_target_final_linear_speed=0.01,
+        max_target_final_angular_speed=0.15,
+        target_stable_confirm_steps=3,
+        require_target_in_region=True,
+        require_target_support_contact=True,
+    )
+    oracle.reset(env, None)
+    oracle._released = True
+    for step in range(3):
+        assert not oracle.check(env, None, np.zeros(7), step).violated
+    assert not oracle.finalize(success=True, step=3).violated
+    assert oracle.metrics()["target_final_stable_streak"] == 3
+
+    env.sim.data.ncon = 0
+    env.sim.data.contact = []
+    oracle.check(env, None, np.zeros(7), 4)
+    status = oracle.finalize(success=True, step=4)
+    assert status.violated
+    assert "not finally stable" in status.reason
 
 
 def test_factory_requires_one_occupant_and_builds_static_oracle():

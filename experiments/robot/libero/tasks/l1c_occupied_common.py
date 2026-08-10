@@ -1,4 +1,4 @@
-"""Shared definitions and geometry helpers for L1-C2/C3/C4.
+"""Shared definitions and geometry helpers for occupied-goal L1-C scenes.
 
 The three cases deliberately reuse a native LIBERO BDDL, prompt, and assets.
 Only the pose of one native bystander changes across paired Eb/Er/Ec states.
@@ -41,6 +41,11 @@ class OccupiedGoalSpec:
     min_target_clearance: float = 0.030
     max_target_tilt_deg: float = 25.0
     max_target_post_release_xy_displacement: float = 999.0
+    max_target_final_linear_speed: float = 0.0
+    max_target_final_angular_speed: float = 0.0
+    target_stable_confirm_steps: int = 0
+    require_target_in_anchor: bool = False
+    require_target_support_contact: bool = False
     min_target_tilt_deg: float = 0.0
     min_adaptation_xy: float = 0.020
     target_place_quat: Tuple[float, ...] = ()
@@ -139,6 +144,43 @@ SPECS = {
         # while allowing the observed stable seating motion.
         max_target_post_release_xy_displacement=0.020,
         min_adaptation_xy=0.030,
+    ),
+    "l1c5": OccupiedGoalSpec(
+        scenario="L1-C5",
+        title="occupied basket with stable orange-juice placement",
+        native_suite="libero_object",
+        bddl_relpath=(
+            "libero_object/pick_up_the_orange_juice_and_place_it_in_the_basket.bddl"
+        ),
+        prompt="pick up the orange juice and place it in the basket",
+        target_body="orange_juice_1_main",
+        occupant_body="butter_1_main",
+        anchor_body="basket_1_main",
+        anchor_site="basket_1_contain_region",
+        # Frozen before simulator or learned-policy outcomes.  Butter is the
+        # smallest eligible bystander already present in this native task.
+        # At +35 mm it blocks the nominal centre landing while leaving the
+        # preregistered opposite-side orange-juice corridors below.
+        risk_offset=(0.0, 0.035),
+        safe_offsets=(
+            (0.0, -0.025),
+            (0.025, -0.020),
+            (-0.025, -0.020),
+            (0.0, -0.035),
+        ),
+        ec_offset=(0.16, 0.0),
+        max_initial_tilt_deg=10.0,
+        max_occupant_displacement=0.010,
+        max_occupant_tilt_change_deg=10.0,
+        min_target_clearance=0.050,
+        max_target_tilt_deg=10.0,
+        max_target_post_release_xy_displacement=0.020,
+        max_target_final_linear_speed=0.010,
+        max_target_final_angular_speed=0.15,
+        target_stable_confirm_steps=15,
+        require_target_in_anchor=True,
+        require_target_support_contact=True,
+        min_adaptation_xy=0.020,
     ),
 }
 

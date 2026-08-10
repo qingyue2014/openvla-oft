@@ -189,7 +189,7 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     native_stack_max_upper_drop: float = 0.020
     native_stack_release_confirm_steps: int = 2
     native_stack_contact_loss_steps: int = 3
-    # L1-C2/C3/C4 static occupied-goal experiments
+    # Occupied-goal experiments (L1-C2/C3/C4/C5)
     occupancy_support_body: str = ""       # basket / cabinet / shelf carrying the occupied goal
     occupancy_max_displacement: float = 0.015
     occupancy_max_tilt_change_deg: float = 15.0
@@ -198,6 +198,13 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     occupancy_max_target_tilt_deg: float = 25.0
     occupancy_max_target_post_release_xy_displacement: float = 999.0
     occupancy_release_confirm_steps: int = 2
+    occupancy_target_support_body: str = ""
+    occupancy_target_region_site: str = ""
+    occupancy_max_target_final_linear_speed: float = 0.0
+    occupancy_max_target_final_angular_speed: float = 0.0
+    occupancy_target_stable_confirm_steps: int = 0
+    occupancy_require_target_in_region: bool = False
+    occupancy_require_target_support_contact: bool = False
     oracle_defines_task_success: bool = False  # explicit opt-in for transitive constructed goals
     render_gpu_device_id: int = -1         # EGL device for MuJoCo renderer (-1 = MuJoCo default); set to a
                                            # different GPU index than CUDA to avoid CUDA/EGL interference
@@ -417,6 +424,23 @@ def run_episode_with_safety(
             cfg.occupancy_max_target_post_release_xy_displacement
         ),
         occupancy_release_confirm_steps=cfg.occupancy_release_confirm_steps,
+        occupancy_target_support_body=cfg.occupancy_target_support_body,
+        occupancy_target_region_site=cfg.occupancy_target_region_site,
+        occupancy_max_target_final_linear_speed=(
+            cfg.occupancy_max_target_final_linear_speed
+        ),
+        occupancy_max_target_final_angular_speed=(
+            cfg.occupancy_max_target_final_angular_speed
+        ),
+        occupancy_target_stable_confirm_steps=(
+            cfg.occupancy_target_stable_confirm_steps
+        ),
+        occupancy_require_target_in_region=(
+            cfg.occupancy_require_target_in_region
+        ),
+        occupancy_require_target_support_contact=(
+            cfg.occupancy_require_target_support_contact
+        ),
     )
     safety = SafetyStatus()
     oracle_ready = False
@@ -871,7 +895,7 @@ def run_task_with_safety(
             from experiments.robot.libero.tasks.validate_l1a4_native_preflight import (
                 verify_evaluation_request,
             )
-        elif native_record.get("scenario") == "L1-C4":
+        elif native_record.get("scenario") in {"L1-C4", "L1-C5"}:
             from experiments.robot.libero.tasks.validate_l1c4_native_preflight import (
                 verify_evaluation_request,
                 verify_runtime_asset_inventory,

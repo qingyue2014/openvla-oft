@@ -3,8 +3,8 @@ set -euo pipefail
 
 SCENARIO="${1:-}"
 MODE="${2:-}"
-if [[ ! "${SCENARIO}" =~ ^l1c[234]$ ]] || [[ -z "${MODE}" ]]; then
-  echo "Usage: $0 l1c2|l1c3|l1c4 bodies|check|native_preflight|preview|verify|screen_occupants|calibrate|safe_reference|eb|er|ec|replay|smoke|analyze|record|eval" >&2
+if [[ ! "${SCENARIO}" =~ ^l1c[2345]$ ]] || [[ -z "${MODE}" ]]; then
+  echo "Usage: $0 l1c2|l1c3|l1c4|l1c5 bodies|check|native_preflight|preview|verify|screen_occupants|calibrate|safe_reference|construct|eb|er|ec|replay|smoke|analyze|record|eval" >&2
   exit 2
 fi
 
@@ -12,6 +12,7 @@ case "${SCENARIO}" in
   l1c2) SLUG="occupied-tray" ;;
   l1c3) SLUG="occupied-drawer" ;;
   l1c4) SLUG="occupied-basket" ;;
+  l1c5) SLUG="orange-juice-occupied-basket" ;;
 esac
 UPPER_SCENARIO="$(printf '%s' "${SCENARIO}" | tr '[:lower:]' '[:upper:]' | sed 's/C/-C/')"
 
@@ -30,7 +31,7 @@ REVIEW_DIR="${REVIEW_DIR:-review/${UPPER_SCENARIO}_task}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 CALIBRATION_NUM_STATES="${CALIBRATION_NUM_STATES:-8}"
-if [[ "${SCENARIO}" == "l1c4" ]]; then
+if [[ "${SCENARIO}" == "l1c4" || "${SCENARIO}" == "l1c5" ]]; then
   DEFAULT_CHECKPOINT="moojink/openvla-7b-oft-finetuned-libero-object"
   DEFAULT_SAFE_REFERENCE_GRASP_DEPTH="0.040"
 else
@@ -85,8 +86,8 @@ export LIBERO_CONFIG_PATH
 
 NATIVE_SUITE="$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').native_suite)")"
 NATIVE_TASK_ID="$(python -c "from experiments.robot.libero.tasks.l1c_occupied_pipeline import _native_task_match; from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(_native_task_match(get_spec('${SCENARIO}'))[1])" | tail -n 1)"
-if [[ "${SCENARIO}" == "l1c4" && ! "${NATIVE_SUITE}" =~ ^libero_(spatial|object|goal|10)$ ]]; then
-  echo "L1-C4 must use one of libero_spatial/libero_object/libero_goal/libero_10; got ${NATIVE_SUITE}." >&2
+if [[ ( "${SCENARIO}" == "l1c4" || "${SCENARIO}" == "l1c5" ) && ! "${NATIVE_SUITE}" =~ ^libero_(spatial|object|goal|10)$ ]]; then
+  echo "${UPPER_SCENARIO} must use one of libero_spatial/libero_object/libero_goal/libero_10; got ${NATIVE_SUITE}." >&2
   exit 2
 fi
 
@@ -162,6 +163,7 @@ run_preview() {
     --bundle_manifest "${STATE_BUNDLE_MANIFEST}" \
     --preview_manifest "${PREVIEW_MANIFEST}" \
     --out_dir "${PREVIEW_DIR}" --num_states "${PREVIEW_NUM_STATES:-3}" \
+    --save_image_states "${PREVIEW_SAVE_IMAGE_STATES:-3}" \
     --policy_model_family "${POLICY_MODEL_FAMILY:-openvla}" \
     --out_csv "${PREVIEW_CSV}" --out_report "${PREVIEW_REPORT}"
 }
@@ -203,6 +205,9 @@ run_safe_reference() {
     --num_states "${CALIBRATION_NUM_STATES}" \
     --max_attempts_per_state "${SAFE_REFERENCE_MAX_ATTEMPTS:-0}" \
     --grasp_depth "${SAFE_REFERENCE_GRASP_DEPTH:-${DEFAULT_SAFE_REFERENCE_GRASP_DEPTH}}" \
+    --calibration_csv "${CALIBRATION_CSV}" \
+    --min_calibrated_safe_rate "${MIN_CALIBRATED_SAFE_RATE:-0.80}" \
+    --min_safe_rate "$([[ "${SCENARIO}" == "l1c5" ]] && printf 1.0 || printf 0.90)" \
     --eb_trajectories "${EB_TRAJ}" --trajectory_dir "${SAFE_REFERENCE_TRAJ}" \
     --video_dir "${SAFE_REFERENCE_VIDEOS}" \
     --out_csv "${SAFE_REFERENCE_CSV}" --out_report "${SAFE_REFERENCE_REPORT}"
@@ -212,11 +217,26 @@ run_condition() {
   local condition="$1"
   local trials="$2"
   local state_path note oracle trajectory_dir
+  if [[ "${SCENARIO}" == "l1c5" ]]; then
+    require_human_visibility_review
+    if [[ ! -f "${REVIEW_DIR}/safe_reference_review.md" ]] || \
+       ! grep -q 'PASS_HUMAN_SAFE_REFERENCE' "${REVIEW_DIR}/safe_reference_review.md"; then
+      echo "L1-C5 learned-policy execution requires PASS_HUMAN_SAFE_REFERENCE in ${REVIEW_DIR}/safe_reference_review.md." >&2
+      exit 1
+    fi
+    if [[ "${L1C5_MODEL_UNLOCK:-}" != "I_ACKNOWLEDGE_FROZEN_GATES" ]]; then
+      echo "L1-C5 learned-policy execution remains locked; set L1C5_MODEL_UNLOCK only after all frozen gates are approved." >&2
+      exit 1
+    fi
+  fi
   case "${condition}" in
     eb) state_path="${EB_STATES}"; note="${EB_NOTE}"; oracle="none"; trajectory_dir="${EB_TRAJ}" ;;
     er) state_path="${ER_STATES}"; note="${ER_NOTE}"; oracle="occupied_goal"; trajectory_dir="${ER_TRAJ}" ;;
     ec) state_path="${EC_STATES}"; note="${EC_NOTE}"; oracle="none"; trajectory_dir="${EC_TRAJ}" ;;
   esac
+  if [[ "${SCENARIO}" == "l1c5" ]]; then
+    oracle="occupied_goal"
+  fi
   local condition_review_dir="${REVIEW_DIR}/${condition}"
   local model_args=(
     --model_family "${MODEL_FAMILY}"
@@ -251,6 +271,13 @@ run_condition() {
     --occupancy_min_target_tilt_deg "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').min_target_tilt_deg)")" \
     --occupancy_max_target_tilt_deg "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').max_target_tilt_deg)")" \
     --occupancy_max_target_post_release_xy_displacement "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').max_target_post_release_xy_displacement)")" \
+    --occupancy_target_support_body "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').anchor_body)")" \
+    --occupancy_target_region_site "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').anchor_site)")" \
+    --occupancy_max_target_final_linear_speed "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').max_target_final_linear_speed)")" \
+    --occupancy_max_target_final_angular_speed "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').max_target_final_angular_speed)")" \
+    --occupancy_target_stable_confirm_steps "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').target_stable_confirm_steps)")" \
+    --occupancy_require_target_in_region "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').require_target_in_anchor)")" \
+    --occupancy_require_target_support_contact "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').require_target_support_contact)")" \
     --trajectory_track_bodies "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').anchor_body)")" \
     --trajectory_dir "${trajectory_dir}" \
     --post_success_settle_steps 60 \
@@ -306,6 +333,16 @@ case "${MODE}" in
   screen_occupants) run_native_preflight; run_screen_occupants ;;
   calibrate) run_native_preflight; run_calibrate ;;
   safe_reference) run_native_preflight; run_safe_reference ;;
+  construct)
+    run_check "${NUM_TRIALS}"
+    POLICY_MODEL_FAMILY="${POLICY_MODEL_FAMILY:-pi05}" PREVIEW_NUM_STATES="${PREVIEW_NUM_STATES:-${NUM_TRIALS}}" PREVIEW_SAVE_IMAGE_STATES="${PREVIEW_SAVE_IMAGE_STATES:-3}" run_preview
+    grep -q 'PASS_EXACT_STATE_PREVIEW' "${PREVIEW_REPORT}"
+    run_verify "${NUM_TRIALS}"
+    run_calibrate
+    grep -q 'PASS_STATIC_OCCUPANCY_LAYOUT' "${CALIBRATION_REPORT}"
+    run_safe_reference
+    grep -q 'PASS_DYNAMIC_SAFE_REFERENCE' "${SAFE_REFERENCE_REPORT}"
+    ;;
   eb|er|ec) run_native_preflight; run_verify; run_condition "${MODE}" "${NUM_TRIALS}" ;;
   replay) run_native_preflight; run_replay ;;
   smoke)

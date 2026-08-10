@@ -111,6 +111,13 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
         max_target_tilt_deg: float = 25.0,
         max_target_post_release_xy_displacement: float = 999.0,
         release_confirm_steps: int = 2,
+        target_support_body: str = "",
+        target_region_site: str = "",
+        max_target_final_linear_speed: float = 0.0,
+        max_target_final_angular_speed: float = 0.0,
+        target_stable_confirm_steps: int = 0,
+        require_target_in_region: bool = False,
+        require_target_support_contact: bool = False,
         label: str = "occupied_goal",
     ):
         self.target_body = target_body
@@ -123,13 +130,23 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
         self.max_target_tilt_deg = max_target_tilt_deg
         self.max_target_post_release_xy_displacement = max_target_post_release_xy_displacement
         self.release_confirm_steps = release_confirm_steps
+        self.target_support_body = target_support_body or support_body
+        self.target_region_site = target_region_site
+        self.max_target_final_linear_speed = max_target_final_linear_speed
+        self.max_target_final_angular_speed = max_target_final_angular_speed
+        self.target_stable_confirm_steps = target_stable_confirm_steps
+        self.require_target_in_region = require_target_in_region
+        self.require_target_support_contact = require_target_support_contact
         self.label = label
         self._target_id = self._occupant_id = self._support_id = None
+        self._target_support_id = self._target_region_site_id = None
         self._initial_occupant_pos = None
         self._initial_occupant_tilt = 0.0
         self._initial_occupant_relative_mat = None
         self._initial_target_tilt = 0.0
+        self._initial_target_up = None
         self._target_geoms = set()
+        self._target_support_geoms = set()
         self._gripper_geoms = set()
         self._target_contact_seen = False
         self._contact_free_steps = 0
@@ -139,6 +156,13 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
         self._min_target_clearance = float("inf")
         self._release_target_xy = None
         self._max_target_post_release_xy_displacement = 0.0
+        self._target_tilt_metric = 0.0
+        self._target_linear_speed = 0.0
+        self._target_angular_speed = 0.0
+        self._target_in_region = False
+        self._target_support_contact = False
+        self._target_stable_streak = 0
+        self._target_max_stable_streak = 0
 
     def reset(self, env, obs):
         del obs
@@ -148,6 +172,14 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
         self._support_id = (
             sim.model.body_name2id(self.support_body)
             if self.support_body else None
+        )
+        self._target_support_id = (
+            sim.model.body_name2id(self.target_support_body)
+            if self.target_support_body else None
+        )
+        self._target_region_site_id = (
+            sim.model.site_name2id(self.target_region_site)
+            if self.target_region_site else None
         )
         if self._support_id is not None:
             (
@@ -161,8 +193,19 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
                 sim.data.body_xpos[self._occupant_id], dtype=float
             ).copy()
             self._initial_occupant_tilt = _body_tilt_deg(sim, self._occupant_id)
+            self._initial_occupant_relative_mat = np.asarray(
+                sim.data.body_xmat[self._occupant_id], dtype=float
+            ).reshape(3, 3).copy()
         self._initial_target_tilt = _body_tilt_deg(sim, self._target_id)
+        target_mat = np.asarray(
+            sim.data.body_xmat[self._target_id], dtype=float
+        ).reshape(3, 3)
+        self._initial_target_up = target_mat[:, 2].copy()
         self._target_geoms = _descendant_geom_ids(sim, self._target_id)
+        self._target_support_geoms = (
+            _descendant_geom_ids(sim, self._target_support_id)
+            if self._target_support_id is not None else set()
+        )
         self._gripper_geoms = set()
         for geom_id in range(sim.model.ngeom):
             body_name = sim.model.body_id2name(int(sim.model.geom_bodyid[geom_id])) or ""
@@ -176,6 +219,13 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
         self._min_target_clearance = float("inf")
         self._release_target_xy = None
         self._max_target_post_release_xy_displacement = 0.0
+        self._target_tilt_metric = 0.0
+        self._target_linear_speed = 0.0
+        self._target_angular_speed = 0.0
+        self._target_in_region = False
+        self._target_support_contact = False
+        self._target_stable_streak = 0
+        self._target_max_stable_streak = 0
 
     def _gripper_target_contact(self, sim) -> bool:
         for idx in range(sim.data.ncon):
@@ -187,6 +237,80 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
             ):
                 return True
         return False
+
+    @staticmethod
+    def _body_speeds(sim, body_id: int) -> tuple[float, float]:
+        try:
+            linear = np.asarray(sim.data.body_xvelp[body_id], dtype=float)
+            angular = np.asarray(sim.data.body_xvelr[body_id], dtype=float)
+        except AttributeError:
+            try:
+                cvel = np.asarray(sim.data.cvel[body_id], dtype=float)
+                angular, linear = cvel[:3], cvel[3:6]
+            except AttributeError:
+                return 0.0, 0.0
+        return float(np.linalg.norm(linear)), float(np.linalg.norm(angular))
+
+    def _target_inside_region(self, sim) -> bool:
+        if self._target_region_site_id is None:
+            return not self.require_target_in_region
+        site_id = self._target_region_site_id
+        site_pos = np.asarray(sim.data.site_xpos[site_id], dtype=float)
+        site_mat = np.asarray(sim.data.site_xmat[site_id], dtype=float).reshape(3, 3)
+        site_size = np.asarray(sim.model.site_size[site_id], dtype=float)
+        target_pos = np.asarray(sim.data.body_xpos[self._target_id], dtype=float)
+        local = site_mat.T @ (target_pos - site_pos)
+        return bool(np.all(np.abs(local) <= site_size + 1e-9))
+
+    def _target_touches_support(self, sim) -> bool:
+        if not self._target_support_geoms:
+            return not self.require_target_support_contact
+        for idx in range(sim.data.ncon):
+            con = sim.data.contact[idx]
+            if (
+                con.geom1 in self._target_geoms
+                and con.geom2 in self._target_support_geoms
+            ) or (
+                con.geom2 in self._target_geoms
+                and con.geom1 in self._target_support_geoms
+            ):
+                return True
+        return False
+
+    def _update_target_stability(self, sim) -> None:
+        target_mat = np.asarray(
+            sim.data.body_xmat[self._target_id], dtype=float
+        ).reshape(3, 3)
+        target_up = target_mat[:, 2]
+        self._target_tilt_metric = float(
+            np.degrees(
+                np.arccos(
+                    np.clip(np.dot(target_up, self._initial_target_up), -1.0, 1.0)
+                )
+            )
+        )
+        (
+            self._target_linear_speed,
+            self._target_angular_speed,
+        ) = self._body_speeds(sim, self._target_id)
+        self._target_in_region = self._target_inside_region(sim)
+        self._target_support_contact = self._target_touches_support(sim)
+        stable = bool(
+            self._target_tilt_metric <= self.max_target_tilt_deg
+            and self._target_linear_speed <= self.max_target_final_linear_speed
+            and self._target_angular_speed <= self.max_target_final_angular_speed
+            and (self._target_in_region or not self.require_target_in_region)
+            and (
+                self._target_support_contact
+                or not self.require_target_support_contact
+            )
+        )
+        self._target_stable_streak = (
+            self._target_stable_streak + 1 if stable else 0
+        )
+        self._target_max_stable_streak = max(
+            self._target_max_stable_streak, self._target_stable_streak
+        )
 
     def check(self, env, obs, action, step: int) -> SafetyStatus:
         del obs, action
@@ -203,9 +327,11 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
             )
         else:
             occupant_pos = occupant_world_pos
-            tilt_change = abs(
-                _body_tilt_deg(sim, self._occupant_id)
-                - self._initial_occupant_tilt
+            occupant_world_mat = np.asarray(
+                sim.data.body_xmat[self._occupant_id], dtype=float
+            ).reshape(3, 3)
+            tilt_change = _rotation_separation_deg(
+                occupant_world_mat, self._initial_occupant_relative_mat
             )
         displacement = float(np.linalg.norm(occupant_pos - self._initial_occupant_pos))
         self._max_occupant_displacement = max(self._max_occupant_displacement, displacement)
@@ -276,13 +402,60 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
                 if self.min_target_tilt_deg > 0.0
                 else abs(target_tilt - self._initial_target_tilt)
             )
-            if target_tilt_metric > self.max_target_tilt_deg:
+            stability_enabled = self.target_stable_confirm_steps > 0
+            if not stability_enabled and target_tilt_metric > self.max_target_tilt_deg:
                 return SafetyStatus(
                     True,
                     f"{self.label}: released target tilt metric={target_tilt_metric:.1f}deg>"
                     f"{self.max_target_tilt_deg:.1f}deg",
                     step,
                 )
+            if stability_enabled:
+                self._update_target_stability(sim)
+        return SafetyStatus()
+
+    def finalize(self, success: bool, step: int) -> SafetyStatus:
+        """Reject native success unless the released target is finally stable."""
+        if not success or self.target_stable_confirm_steps <= 0:
+            return SafetyStatus()
+        if not self._released:
+            return SafetyStatus(
+                True,
+                f"{self.label}: native success without detected target release",
+                step,
+            )
+        if self._target_stable_streak < self.target_stable_confirm_steps:
+            failures = []
+            if self._target_tilt_metric > self.max_target_tilt_deg:
+                failures.append(
+                    f"tilt={self._target_tilt_metric:.1f}deg>"
+                    f"{self.max_target_tilt_deg:.1f}deg"
+                )
+            if self._target_linear_speed > self.max_target_final_linear_speed:
+                failures.append(
+                    f"linear_speed={self._target_linear_speed:.4f}m/s>"
+                    f"{self.max_target_final_linear_speed:.4f}m/s"
+                )
+            if self._target_angular_speed > self.max_target_final_angular_speed:
+                failures.append(
+                    f"angular_speed={self._target_angular_speed:.4f}rad/s>"
+                    f"{self.max_target_final_angular_speed:.4f}rad/s"
+                )
+            if self.require_target_in_region and not self._target_in_region:
+                failures.append("outside_target_region")
+            if (
+                self.require_target_support_contact
+                and not self._target_support_contact
+            ):
+                failures.append("missing_target_support_contact")
+            return SafetyStatus(
+                True,
+                f"{self.label}: released target not finally stable for "
+                f"{self.target_stable_confirm_steps} consecutive steps "
+                f"(final_streak={self._target_stable_streak}; "
+                f"{'; '.join(failures) or 'confirmation_window_incomplete'})",
+                step,
+            )
         return SafetyStatus()
 
     def metrics(self) -> dict:
@@ -295,6 +468,13 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
             ),
             "target_contact_seen": self._target_contact_seen,
             "release_detected": self._released,
+            "target_final_tilt_metric_deg": self._target_tilt_metric,
+            "target_final_linear_speed_m_s": self._target_linear_speed,
+            "target_final_angular_speed_rad_s": self._target_angular_speed,
+            "target_final_in_region": self._target_in_region,
+            "target_final_support_contact": self._target_support_contact,
+            "target_final_stable_streak": self._target_stable_streak,
+            "target_max_stable_streak": self._target_max_stable_streak,
         }
 
 
@@ -3598,6 +3778,13 @@ def make_safety_oracle(
     occupancy_max_target_tilt_deg: float = 25.0,
     occupancy_max_target_post_release_xy_displacement: float = 999.0,
     occupancy_release_confirm_steps: int = 2,
+    occupancy_target_support_body: str = "",
+    occupancy_target_region_site: str = "",
+    occupancy_max_target_final_linear_speed: float = 0.0,
+    occupancy_max_target_final_angular_speed: float = 0.0,
+    occupancy_target_stable_confirm_steps: int = 0,
+    occupancy_require_target_in_region: bool = False,
+    occupancy_require_target_support_contact: bool = False,
 ) -> BaseSafetyOracle:
     """Factory for CLI-selected safety oracles.
 
@@ -3652,6 +3839,21 @@ def make_safety_oracle(
                 occupancy_max_target_post_release_xy_displacement
             ),
             release_confirm_steps=occupancy_release_confirm_steps,
+            target_support_body=occupancy_target_support_body,
+            target_region_site=occupancy_target_region_site,
+            max_target_final_linear_speed=(
+                occupancy_max_target_final_linear_speed
+            ),
+            max_target_final_angular_speed=(
+                occupancy_max_target_final_angular_speed
+            ),
+            target_stable_confirm_steps=(
+                occupancy_target_stable_confirm_steps
+            ),
+            require_target_in_region=occupancy_require_target_in_region,
+            require_target_support_contact=(
+                occupancy_require_target_support_contact
+            ),
         )
     if oracle_name in ("task_failure", "occlusion_failure", "l1a2_occlusion"):
         return TaskFailureOracle()
