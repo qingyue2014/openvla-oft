@@ -64,6 +64,16 @@ def test_l1c4_model_runner_is_hash_bound_and_never_recalibrates_frozen_scene():
     assert "verify_l1c4_frozen_inputs" in l1c4_block
 
 
+def test_l1c4_model_runner_requires_current_replay_gate_verdicts():
+    script = Path(
+        "experiments/robot/libero/tasks/run_model_l1c_eval.sh"
+    ).read_text()
+    assert "PASS_ACTION_SEPARATION" in script
+    assert "PASS_EC_UNCHANGED_EB_REPLAY_SAFE" in script
+    assert "PASS_BASELINE_PATH_NECESSITY" not in script
+    assert "PASS_MATCHED_CONTROL_PATH_REPLAY" not in script
+
+
 def test_l1c4_preview_uses_model_specific_policy_camera_contract():
     pipeline = Path(
         "experiments/robot/libero/tasks/l1c_occupied_pipeline.py"

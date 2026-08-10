@@ -341,8 +341,8 @@ elif [[ "${SCENARIO}" == "l1c4" ]]; then
   bash "${TASKS_DIR}/run_l1c_occupied.sh" l1c4 verify
   bash "${TASKS_DIR}/run_l1c_occupied.sh" l1c4 eb
   bash "${TASKS_DIR}/run_l1c_occupied.sh" l1c4 replay
-  grep -Fq 'PASS_BASELINE_PATH_NECESSITY' "${MODEL_GATE_LOG_DIR}/l1c4_eb_to_er_replay.md"
-  grep -Fq 'PASS_MATCHED_CONTROL_PATH_REPLAY' "${MODEL_GATE_LOG_DIR}/l1c4_eb_to_ec_replay.md"
+  grep -Fq 'PASS_ACTION_SEPARATION' "${MODEL_GATE_LOG_DIR}/l1c4_eb_to_er_replay.md"
+  grep -Fq 'PASS_EC_UNCHANGED_EB_REPLAY_SAFE' "${MODEL_GATE_LOG_DIR}/l1c4_eb_to_ec_replay.md"
   bash "${TASKS_DIR}/run_l1c_occupied.sh" l1c4 er
   bash "${TASKS_DIR}/run_l1c_occupied.sh" l1c4 ec
   bash "${TASKS_DIR}/run_l1c_occupied.sh" l1c4 analyze
