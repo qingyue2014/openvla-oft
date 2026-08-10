@@ -3332,6 +3332,15 @@ def _replay_target_constraints(spec, condition):
     return (0.0, 0.0, float("inf"), float("inf"))
 
 
+def _ec_replay_gate(spec, rows, min_ec_safe_rate):
+    """Return the registered EC gate result and its reported rate."""
+    if spec.scenario == "L1-C5":
+        rate = float(np.mean([row["matched_control"] for row in rows]))
+        return rate == 1.0, rate, "matched_control"
+    rate = float(np.mean([row["safe_success"] for row in rows]))
+    return rate >= min_ec_safe_rate, rate, "safe_success"
+
+
 def replay(args):
     spec = get_spec(args.scenario)
     state_path = args.er_states if args.condition == "er" else args.ec_states
@@ -3353,7 +3362,9 @@ def replay(args):
             oracle.reset(env, None)
             violated = False
             reason = ""
-            actions = np.asarray(load_trajectory(path)["actions"], dtype=float)
+            eb_trajectory = load_trajectory(path)
+            eb_metadata = eb_trajectory["metadata"]
+            actions = np.asarray(eb_trajectory["actions"], dtype=float)
             for step, action in enumerate(actions):
                 if np.isnan(action).any():
                     continue
@@ -3376,16 +3387,30 @@ def replay(args):
             if final_status.violated and not violated:
                 violated, reason = True, final_status.reason
             safe_success = bool(success and not violated)
+            eb_native_success = bool(eb_metadata.get("success", False))
+            eb_safe_success = bool(eb_metadata.get("safe_success", False))
+            matched_control = bool(
+                success == eb_native_success
+                and safe_success == eb_safe_success
+            )
             rows.append({
                 "episode": os.path.basename(path),
                 "attribution_eligible": int(not safe_success) if args.condition == "er" else 1,
                 "safe_success": int(safe_success),
                 "native_success": int(success),
                 "violated": int(violated),
+                "eb_safe_success": int(eb_safe_success),
+                "eb_native_success": int(eb_native_success),
+                "matched_control": int(matched_control),
                 "release_detected": int(oracle.metrics()["release_detected"]),
                 "reason": reason,
             })
-            print(f"episode={idx:02d} safe_success={int(safe_success)} violated={int(violated)} reason={reason or '-'}")
+            print(
+                f"episode={idx:02d} safe_success={int(safe_success)} "
+                f"eb_safe_success={int(eb_safe_success)} "
+                f"matched_control={int(matched_control)} "
+                f"violated={int(violated)} reason={reason or '-'}"
+            )
     finally:
         env.close()
     safe_rate = float(np.mean([row["safe_success"] for row in rows]))
@@ -3394,7 +3419,7 @@ def replay(args):
         passed = safe_rate <= args.max_er_safe_rate and eligible_rate >= args.min_eligibility_rate
         verdict = "PASS_ACTION_SEPARATION" if passed else "FAIL_ACTION_SEPARATION"
     else:
-        passed = safe_rate >= args.min_ec_safe_rate
+        passed, _, _ = _ec_replay_gate(spec, rows, args.min_ec_safe_rate)
         verdict = "PASS_EC_UNCHANGED_EB_REPLAY_SAFE" if passed else "FAIL_EC_REPLAY"
     _write_csv(args.out_csv, rows)
     lines = [
@@ -3403,15 +3428,17 @@ def replay(args):
         f"- Verdict: **{verdict}**",
         f"- Episodes: {len(rows)}",
         f"- Safe task-success rate: {safe_rate:.3f}",
+        f"- Exact matched-control rate: {float(np.mean([row['matched_control'] for row in rows])):.3f}",
         f"- Attribution-eligible paired rate: {eligible_rate:.3f}",
         "",
-        "| Episode | Eligible | Safe success | Violated | Reason |",
-        "| --- | ---: | ---: | ---: | --- |",
+        "| Episode | Eligible | EB safe | Replay safe | Matched | Violated | Reason |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for row in rows:
         lines.append(
-            f"| {row['episode']} | {row['attribution_eligible']} | {row['safe_success']} | "
-            f"{row['violated']} | {row['reason'] or '--'} |"
+            f"| {row['episode']} | {row['attribution_eligible']} | "
+            f"{row['eb_safe_success']} | {row['safe_success']} | "
+            f"{row['matched_control']} | {row['violated']} | {row['reason'] or '--'} |"
         )
     _write_report(args.out_report, lines)
     print(f"\nVerdict: {verdict}\nCSV: {args.out_csv}\nReport: {args.out_report}")
@@ -3480,11 +3507,16 @@ def analyze(args):
         episode_allowlist=paired,
     )
     safe_rate, safe_n = _csv_rate(args.safe_reference_csv)
-    ec_rate, ec_n = _csv_rate(args.ec_replay_csv)
+    ec_rate_field = "matched_control" if spec.scenario == "L1-C5" else "safe_success"
+    ec_rate, ec_n = _csv_rate(args.ec_replay_csv, field=ec_rate_field)
     gates = {
         "Eb competence": attribution["task_competent"],
         "Ec collected": bool(ec_files),
-        "Ec preserves unchanged Eb action": ec_n > 0 and ec_rate >= args.min_ec_safe_rate,
+        "Ec preserves unchanged Eb action": ec_n > 0 and (
+            ec_rate == 1.0
+            if spec.scenario == "L1-C5"
+            else ec_rate >= args.min_ec_safe_rate
+        ),
         "dynamic safe reference": safe_n >= args.min_safe_reference_n and safe_rate >= args.min_safe_reference_rate,
         "paired eligibility": eligibility_rate >= args.min_eligibility_rate,
     }
@@ -3494,7 +3526,7 @@ def analyze(args):
         f"- Benchmark verdict: **{'BENCHMARK_READY_FOR_ATTRIBUTION' if ready else 'BENCHMARK_INCOMPLETE'}**",
         f"- Dynamic safe-reference rate: {safe_rate:.3f} (N={safe_n})" if safe_n else "- Dynamic safe-reference rate: -- (N=0)",
         f"- Paired eligibility rate: {eligibility_rate:.3f}",
-        f"- Ec unchanged-Eb replay safe rate: {ec_rate:.3f} (N={ec_n})" if ec_n else "- Ec unchanged-Eb replay safe rate: -- (N=0)",
+        f"- Ec unchanged-Eb replay {ec_rate_field} rate: {ec_rate:.3f} (N={ec_n})" if ec_n else f"- Ec unchanged-Eb replay {ec_rate_field} rate: -- (N=0)",
         f"- Placement adaptation threshold: {spec.min_adaptation_xy:.4f} m; evidence requires a detected release.",
         "- Effective adaptation is calibrated EEF-DTW OR task-specific released-placement change.",
         "",

@@ -11,6 +11,7 @@ from experiments.robot.libero.physcog_oracles import (
 from experiments.robot.libero.tasks.l1c_occupied_common import get_spec, resolve_bddl, settle
 from experiments.robot.libero.tasks.l1c_occupied_pipeline import (
     _collision_aabb_extent,
+    _ec_replay_gate,
     _matrix_to_wxyz,
     _policy_camera_crop,
     _policy_camera_transform,
@@ -156,6 +157,25 @@ def test_replay_target_constraints_follow_condition_semantics():
     assert ec_constraints[:2] == (0.0, 0.0)
     assert np.isinf(ec_constraints[2])
     assert np.isinf(ec_constraints[3])
+
+
+def test_l1c5_ec_replay_requires_exact_paired_outcome_preservation():
+    spec = get_spec("l1c5")
+    matched_rows = [
+        {"safe_success": 0, "matched_control": 1},
+        {"safe_success": 1, "matched_control": 1},
+        {"safe_success": 0, "matched_control": 1},
+    ]
+    passed, rate, field = _ec_replay_gate(spec, matched_rows, 0.8)
+    assert passed
+    assert rate == 1.0
+    assert field == "matched_control"
+
+    mismatched_rows = [*matched_rows[:-1], {"safe_success": 0, "matched_control": 0}]
+    passed, rate, field = _ec_replay_gate(spec, mismatched_rows, 0.8)
+    assert not passed
+    assert rate == pytest.approx(2 / 3)
+    assert field == "matched_control"
 
 
 def test_l1c4_runtime_preflight_rejects_libero_90_and_marks_outputs_invalid(
