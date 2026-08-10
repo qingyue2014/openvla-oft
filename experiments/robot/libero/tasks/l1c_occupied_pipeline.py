@@ -347,6 +347,37 @@ def _paired_non_occupant_error(env, native_state, variant_state, occupant_body):
     )
 
 
+def _paired_state_diff_audit(env, baseline_state, variant_state, occupant_body):
+    """Audit qpos, qvel, time, actuator state, and user state explicitly."""
+    qpos_error, qvel_error = _paired_non_occupant_error(
+        env, baseline_state, variant_state, occupant_body
+    )
+    env.set_init_state(baseline_state)
+    baseline = env.sim.get_state()
+    env.set_init_state(variant_state)
+    variant = env.sim.get_state()
+    baseline_act = np.asarray(
+        [] if baseline.act is None else baseline.act, dtype=float
+    )
+    variant_act = np.asarray(
+        [] if variant.act is None else variant.act, dtype=float
+    )
+    act_shape_match = baseline_act.shape == variant_act.shape
+    act_error = (
+        float(np.max(np.abs(variant_act - baseline_act)))
+        if act_shape_match and baseline_act.size else 0.0
+    )
+    udd_match = repr(baseline.udd_state) == repr(variant.udd_state)
+    return {
+        "max_non_occupant_qpos_abs_diff": qpos_error,
+        "max_non_occupant_qvel_abs_diff": qvel_error,
+        "time_abs_diff": abs(float(variant.time) - float(baseline.time)),
+        "act_shape_match": act_shape_match,
+        "max_act_abs_diff": act_error,
+        "udd_state_match": udd_match,
+    }
+
+
 def _file_sha256(path):
     digest = hashlib.sha256()
     with open(path, "rb") as handle:
@@ -779,10 +810,20 @@ def native_preflight(args):
             )
         ):
             for condition, state in (("er", er_state), ("ec", ec_state)):
-                qpos_error, qvel_error = _paired_non_occupant_error(
+                diff_record = _paired_state_diff_audit(
                     env, eb_state, state, spec.occupant_body
                 )
-                if max(qpos_error, qvel_error) > 1e-10:
+                numeric_errors = (
+                    diff_record["max_non_occupant_qpos_abs_diff"],
+                    diff_record["max_non_occupant_qvel_abs_diff"],
+                    diff_record["time_abs_diff"],
+                    diff_record["max_act_abs_diff"],
+                )
+                if (
+                    max(numeric_errors) > 1e-10
+                    or not diff_record["act_shape_match"]
+                    or not diff_record["udd_state_match"]
+                ):
                     raise RuntimeError(
                         f"{condition.upper()} episode {episode_idx} contains "
                         "a non-allowlisted state difference"
@@ -791,8 +832,7 @@ def native_preflight(args):
                     {
                         "episode": episode_idx,
                         "comparison": f"eb_to_{condition}",
-                        "max_non_occupant_qpos_abs_diff": qpos_error,
-                        "max_non_occupant_qvel_abs_diff": qvel_error,
+                        **diff_record,
                         "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY",
                     }
                 )
