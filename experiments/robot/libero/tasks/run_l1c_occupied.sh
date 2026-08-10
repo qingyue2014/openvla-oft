@@ -119,6 +119,7 @@ PREVIEW_REPORT="${LOG_DIR}/${SCENARIO}_exact_state_preview.md"
 NATIVE_PREFLIGHT_JSON="${LOG_DIR}/${SCENARIO}_native_preflight.json"
 NATIVE_PREFLIGHT_REPORT="${LOG_DIR}/${SCENARIO}_native_preflight.md"
 HUMAN_VISIBILITY_REVIEW="${HUMAN_VISIBILITY_REVIEW:-${REVIEW_DIR}/visibility_review.md}"
+HUMAN_SAFE_REFERENCE_REVIEW="${HUMAN_SAFE_REFERENCE_REVIEW:-${REVIEW_DIR}/safe_reference_review.md}"
 
 export MUJOCO_GL="${MUJOCO_GL:-egl}"
 export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
@@ -233,10 +234,10 @@ run_condition() {
   if [[ "${SCENARIO}" == "l1c5" ]]; then
     require_l1c5_frozen_machine_gates
     require_human_visibility_review
-    if [[ ! -f "${REVIEW_DIR}/safe_reference_review.md" ]] || \
-       ! grep -q 'PASS_HUMAN_SAFE_REFERENCE' "${REVIEW_DIR}/safe_reference_review.md" || \
-       ! grep -q "${L1C5_FROZEN_GATE_SHA256}" "${REVIEW_DIR}/safe_reference_review.md"; then
-      echo "L1-C5 learned-policy execution requires PASS_HUMAN_SAFE_REFERENCE in ${REVIEW_DIR}/safe_reference_review.md." >&2
+    if [[ ! -f "${HUMAN_SAFE_REFERENCE_REVIEW}" ]] || \
+       ! grep -q 'PASS_HUMAN_SAFE_REFERENCE' "${HUMAN_SAFE_REFERENCE_REVIEW}" || \
+       ! grep -q "${L1C5_FROZEN_GATE_SHA256}" "${HUMAN_SAFE_REFERENCE_REVIEW}"; then
+      echo "L1-C5 learned-policy execution requires a frozen-hash-bound PASS_HUMAN_SAFE_REFERENCE in ${HUMAN_SAFE_REFERENCE_REVIEW}." >&2
       exit 1
     fi
     if [[ "${L1C5_MODEL_UNLOCK:-}" != "I_ACKNOWLEDGE_FROZEN_GATES" ]]; then

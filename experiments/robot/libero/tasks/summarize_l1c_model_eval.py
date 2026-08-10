@@ -105,7 +105,9 @@ def _condition_metrics(rows: list[dict]) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--scenario", choices=("l1c1", "l1c2", "l1c3", "l1c4"), required=True
+        "--scenario",
+        choices=("l1c1", "l1c2", "l1c3", "l1c4", "l1c5"),
+        required=True,
     )
     parser.add_argument("--model_family", choices=("pi05", "cosmos"), required=True)
     parser.add_argument("--evaluation_kind", choices=("smoke", "formal"), required=True)

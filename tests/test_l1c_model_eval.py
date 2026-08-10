@@ -74,6 +74,26 @@ def test_l1c4_model_runner_requires_current_replay_gate_verdicts():
     assert "PASS_MATCHED_CONTROL_PATH_REPLAY" not in script
 
 
+def test_l1c5_model_runner_reuses_hash_frozen_scene_and_human_gates():
+    script = Path(
+        "experiments/robot/libero/tasks/run_model_l1c_eval.sh"
+    ).read_text()
+    assert "l1c5) ;;" in script
+    assert "verify_l1c5_frozen_inputs" in script
+    assert "verify_l1c5_frozen_gate.py" in script
+    assert "PASS_HUMAN_SAFE_REFERENCE" in script
+    assert "PASS_HUMAN_VISIBILITY" in script
+    assert "L1C5_MODEL_UNLOCK=I_ACKNOWLEDGE_FROZEN_GATES" in script
+    l1c5_block = script.split(
+        'elif [[ "${SCENARIO}" == "l1c5" ]]', 1
+    )[1].split("\nelse\n", 1)[0]
+    assert 'run_l1c5_orange_juice_basket.sh" eb' in l1c5_block
+    assert 'run_l1c5_orange_juice_basket.sh" er' in l1c5_block
+    assert 'run_l1c5_orange_juice_basket.sh" ec' in l1c5_block
+    assert 'run_l1c5_orange_juice_basket.sh" calibrate' not in l1c5_block
+    assert 'run_l1c5_orange_juice_basket.sh" safe_reference' not in l1c5_block
+
+
 def test_l1c4_preview_uses_model_specific_policy_camera_contract():
     pipeline = Path(
         "experiments/robot/libero/tasks/l1c_occupied_pipeline.py"

@@ -115,6 +115,31 @@ def test_l1c4_registry_separates_native_gates_from_model_smoke():
     assert "review/L1-C4_task" not in formal.artifacts
 
 
+def test_l1c5_registry_exposes_only_registered_model_smoke_and_formal_runs():
+    phases = {phase for scenario, phase in PHASES if scenario == "l1c5"}
+    assert phases == {
+        "pi05_smoke",
+        "pi05_formal",
+        "cosmos_smoke",
+        "cosmos_formal",
+    }
+    runner = "experiments/robot/libero/tasks/run_model_l1c_eval.sh"
+    for model in ("pi05", "cosmos"):
+        for kind, count_env in (
+            ("smoke", "L1C_SMOKE_TRIALS"),
+            ("formal", "L1C_FORMAL_TRIALS"),
+        ):
+            spec = PHASES[("l1c5", f"{model}_{kind}")]
+            assert runner in spec.command
+            assert spec.command[-3:] == (model, "l1c5", kind)
+            assert spec.count_env == count_env
+            assert any("L1-C5_task" in path for path in spec.artifacts)
+            assert any(
+                "rollouts/libero_object/L1-C5-orange-juice" in path
+                for path in spec.artifacts
+            )
+
+
 def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():
     assert set(phase for scenario, phase in PHASES if scenario == "l1a2") == {
         "check",

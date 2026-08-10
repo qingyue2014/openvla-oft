@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MODEL="${1:?usage: run_model_l1c_eval.sh pi05|cosmos l1c4 preview|smoke|formal}"
-SCENARIO="${2:?usage: run_model_l1c_eval.sh pi05|cosmos l1c4 preview|smoke|formal}"
-RUN_KIND="${3:?usage: run_model_l1c_eval.sh pi05|cosmos l1c4 preview|smoke|formal}"
+MODEL="${1:?usage: run_model_l1c_eval.sh pi05|cosmos l1c4|l1c5 preview|smoke|formal}"
+SCENARIO="${2:?usage: run_model_l1c_eval.sh pi05|cosmos l1c4|l1c5 preview|smoke|formal}"
+RUN_KIND="${3:?usage: run_model_l1c_eval.sh pi05|cosmos l1c4|l1c5 preview|smoke|formal}"
 case "${MODEL}" in
   pi05|cosmos) ;;
   *) echo "Unsupported model: ${MODEL}" >&2; exit 2 ;;
 esac
 case "${SCENARIO}" in
   l1c4) ;;
+  l1c5) ;;
   *) echo "Unsupported scenario: ${SCENARIO}" >&2; exit 2 ;;
 esac
 case "${RUN_KIND}" in
@@ -27,8 +28,8 @@ case "${RUN_KIND}" in
     ;;
   *) echo "Unsupported evaluation kind: ${RUN_KIND}" >&2; exit 2 ;;
 esac
-if [[ "${RUN_KIND}" == "preview" && ( "${SCENARIO}" != "l1c4" || "${COUNT}" -ne 5 ) ]]; then
-  echo "Registered model-specific preview is restricted to exactly 5 L1-C4 states." >&2
+if [[ "${RUN_KIND}" == "preview" && "${COUNT}" -ne 5 ]]; then
+  echo "Registered model-specific preview requires exactly 5 states." >&2
   exit 2
 fi
 if [[ "${RUN_KIND}" == "smoke" && "${COUNT}" -ne 5 ]]; then
@@ -137,6 +138,14 @@ verify_l1c4_frozen_inputs() {
   grep -Fq 'PASS_HUMAN_VISIBILITY' "${L1C4_FROZEN_ROOT}/review/visibility_review.md"
 }
 
+L1C5_FROZEN_MANIFEST="${TASKS_DIR}/l1c5_frozen_gate_manifest.json"
+
+verify_l1c5_frozen_inputs() {
+  python "${TASKS_DIR}/verify_l1c5_frozen_gate.py"
+  test -s "${L1C5_FROZEN_MANIFEST}"
+  test ! -e "${TASKS_DIR}/l1c5_state_bundle.invalid.json"
+}
+
 require_bound_human_review() {
   local review_path="$1"
   local token="$2"
@@ -174,8 +183,47 @@ run_l1c4_model_preview() {
   printf 'Review manifest SHA-256: %s\n' "$(sha256sum "${artifact_manifest}" | awk '{print $1}')"
 }
 
+run_l1c5_model_preview() {
+  verify_l1c5_frozen_inputs
+  local gate_log_dir="${RESULT_PREFIX}_gate"
+  local preview_dir="review/L1-C5_task/${MODEL}_preview"
+  local preview_state_dir="${gate_log_dir}/state_bundle"
+  if [[ -e "${gate_log_dir}" || -e "${preview_dir}" ]]; then
+    echo "Refusing to overwrite an existing L1-C5 model preview: ${gate_log_dir} or ${preview_dir}" >&2
+    exit 2
+  fi
+  mkdir -p "${preview_state_dir}" "${preview_dir}"
+  cp "${TASKS_DIR}/l1c5_eb_states.hdf5" "${preview_state_dir}/"
+  cp "${TASKS_DIR}/l1c5_er_states.hdf5" "${preview_state_dir}/"
+  cp "${TASKS_DIR}/l1c5_ec_states.hdf5" "${preview_state_dir}/"
+  cp "${TASKS_DIR}/l1c5_source_indices.json" "${preview_state_dir}/"
+  cp "${TASKS_DIR}/l1c5_state_bundle.json" "${preview_state_dir}/"
+  STATE_DIR="${preview_state_dir}" \
+  PREVIEW_DIR="${preview_dir}" \
+  LOG_DIR="${gate_log_dir}" \
+  PREVIEW_NUM_STATES="${COUNT}" \
+  PREVIEW_SAVE_IMAGE_STATES="${COUNT}" \
+  POLICY_MODEL_FAMILY="${MODEL}" \
+    bash "${TASKS_DIR}/run_l1c5_orange_juice_basket.sh" preview
+  local artifact_manifest="${RESULT_PREFIX}_review_artifacts.sha256"
+  {
+    sha256sum "${gate_log_dir}/l1c5_native_preflight.json"
+    sha256sum "${gate_log_dir}/l1c5_native_preflight.md"
+    sha256sum "${gate_log_dir}/l1c5_exact_state_preview.csv"
+    sha256sum "${gate_log_dir}/l1c5_exact_state_preview.md"
+    find "${preview_dir}" -maxdepth 1 -type f -print0 | sort -z | xargs -0 sha256sum
+  } > "${artifact_manifest}"
+  printf 'PASS_MODEL_SPECIFIC_POLICY_VIEW_PREVIEW\n'
+  printf 'Review artifacts: %s\n' "${preview_dir}"
+  printf 'Review manifest SHA-256: %s\n' "$(sha256sum "${artifact_manifest}" | awk '{print $1}')"
+}
+
 if [[ "${SCENARIO}" == "l1c4" && "${RUN_KIND}" == "preview" ]]; then
   run_l1c4_model_preview
+  exit 0
+fi
+if [[ "${SCENARIO}" == "l1c5" && "${RUN_KIND}" == "preview" ]]; then
+  run_l1c5_model_preview
   exit 0
 fi
 
@@ -195,6 +243,37 @@ if [[ "${SCENARIO}" == "l1c4" ]]; then
       "review/L1-C4_task/pi05_formal/review.md" \
       "PASS_HUMAN_PI05_FORMAL" \
       "experiments/logs/l1c4_pi05-formal_review_artifacts.sha256"
+  fi
+fi
+
+if [[ "${SCENARIO}" == "l1c5" ]]; then
+  verify_l1c5_frozen_inputs
+  require_bound_human_review \
+    "review/L1-C5_task/safe_reference_review.md" \
+    "PASS_HUMAN_SAFE_REFERENCE" \
+    "${L1C5_FROZEN_MANIFEST}"
+  if [[ "${MODEL}" == "pi05" ]]; then
+    require_bound_human_review \
+      "review/L1-C5_task/visibility_review.md" \
+      "PASS_HUMAN_VISIBILITY" \
+      "${L1C5_FROZEN_MANIFEST}"
+  else
+    require_bound_human_review \
+      "review/L1-C5_task/${MODEL}_preview/review.md" \
+      "PASS_HUMAN_${MODEL^^}_POLICY_VIEW" \
+      "experiments/logs/l1c5_${MODEL}-preview_review_artifacts.sha256"
+  fi
+  if [[ "${RUN_KIND}" == "formal" ]]; then
+    require_bound_human_review \
+      "review/L1-C5_task/${MODEL}_smoke/review.md" \
+      "PASS_HUMAN_${MODEL^^}_SMOKE" \
+      "experiments/logs/l1c5_${MODEL}-smoke_review_artifacts.sha256"
+  fi
+  if [[ "${MODEL}" == "cosmos" ]]; then
+    require_bound_human_review \
+      "review/L1-C5_task/pi05_formal/review.md" \
+      "PASS_HUMAN_PI05_FORMAL" \
+      "experiments/logs/l1c5_pi05-formal_review_artifacts.sha256"
   fi
 fi
 
@@ -365,6 +444,51 @@ elif [[ "${SCENARIO}" == "l1c4" ]]; then
     "L1-C4-occupied-basket-risk-${RUN_SUFFIX}"
     "L1-C4-occupied-basket-ec-${RUN_SUFFIX}"
   )
+elif [[ "${SCENARIO}" == "l1c5" ]]; then
+  verify_l1c5_frozen_inputs
+  MODEL_GATE_LOG_DIR="${RESULT_PREFIX}_gate"
+  MODEL_REVIEW_DIR="review/L1-C5_task/${MODEL}_${RUN_KIND}"
+  if [[ -e "${MODEL_GATE_LOG_DIR}" || -e "${MODEL_REVIEW_DIR}" || \
+        -e "${RESULTS_JSON}" || -e "${RESULTS_REPORT}" || -e "${MANIFEST_PATH}" ]]; then
+    echo "Refusing to overwrite existing L1-C5 ${MODEL} ${RUN_KIND} evidence." >&2
+    exit 2
+  fi
+  mkdir -p "${MODEL_GATE_LOG_DIR}" "${MODEL_REVIEW_DIR}"
+  cp "${LOG_DIR}/l1c5_calibration.csv" "${MODEL_GATE_LOG_DIR}/l1c5_calibration.csv"
+  cp "${LOG_DIR}/l1c5_calibration.md" "${MODEL_GATE_LOG_DIR}/l1c5_calibration.md"
+  cp "${LOG_DIR}/l1c5_safe_reference.csv" "${MODEL_GATE_LOG_DIR}/l1c5_safe_reference.csv"
+  cp "${LOG_DIR}/l1c5_safe_reference.md" "${MODEL_GATE_LOG_DIR}/l1c5_safe_reference.md"
+  cp "${LOG_DIR}/l1c5_native_preflight.json" "${MODEL_GATE_LOG_DIR}/l1c5_native_preflight.json"
+  cp "${LOG_DIR}/l1c5_native_preflight.md" "${MODEL_GATE_LOG_DIR}/l1c5_native_preflight.md"
+  export STATE_DIR="${TASKS_DIR}"
+  export PREVIEW_DIR="${TASKS_DIR}/l1c5_preview"
+  export LOG_DIR="${MODEL_GATE_LOG_DIR}"
+  export REVIEW_DIR="${MODEL_REVIEW_DIR}"
+  export HUMAN_VISIBILITY_REVIEW="review/L1-C5_task/visibility_review.md"
+  export HUMAN_SAFE_REFERENCE_REVIEW="review/L1-C5_task/safe_reference_review.md"
+  export POLICY_MODEL_FAMILY="${MODEL}"
+  export L1C5_MODEL_UNLOCK=I_ACKNOWLEDGE_FROZEN_GATES
+  bash "${TASKS_DIR}/run_l1c5_orange_juice_basket.sh" eb
+  bash "${TASKS_DIR}/run_l1c5_orange_juice_basket.sh" replay
+  grep -Fq 'PASS_ACTION_SEPARATION' "${MODEL_GATE_LOG_DIR}/l1c5_eb_to_er_replay.md"
+  grep -Fq 'PASS_EC_UNCHANGED_EB_REPLAY_SAFE' "${MODEL_GATE_LOG_DIR}/l1c5_eb_to_ec_replay.md"
+  bash "${TASKS_DIR}/run_l1c5_orange_juice_basket.sh" er
+  bash "${TASKS_DIR}/run_l1c5_orange_juice_basket.sh" ec
+  bash "${TASKS_DIR}/run_l1c5_orange_juice_basket.sh" analyze
+  cp "${MODEL_GATE_LOG_DIR}/l1c5_native_preflight.json" "${NATIVE_PREFLIGHT_JSON}"
+  cp "${MODEL_GATE_LOG_DIR}/l1c5_native_preflight.md" "${NATIVE_PREFLIGHT_REPORT}"
+  STATE_EB="${TASKS_DIR}/l1c5_eb_states.hdf5"
+  STATE_ER="${TASKS_DIR}/l1c5_er_states.hdf5"
+  STATE_EC="${TASKS_DIR}/l1c5_ec_states.hdf5"
+  CALIBRATION_REPORT="${MODEL_GATE_LOG_DIR}/l1c5_calibration.md"
+  SAFE_REFERENCE_REPORT="${MODEL_GATE_LOG_DIR}/l1c5_safe_reference.md"
+  ATTRIBUTION_REPORT="${MODEL_GATE_LOG_DIR}/l1c5_attribution.md"
+  ROLLOUT_ROOT="rollouts/libero_object"
+  NOTES=(
+    "L1-C5-orange-juice-occupied-basket-eb-${RUN_SUFFIX}"
+    "L1-C5-orange-juice-occupied-basket-risk-${RUN_SUFFIX}"
+    "L1-C5-orange-juice-occupied-basket-ec-${RUN_SUFFIX}"
+  )
 else
   bash "${TASKS_DIR}/run_l1c_occupied.sh" "${SCENARIO}" "${RUN_MODE}"
   STATE_EB="${TASKS_DIR}/${SCENARIO}_eb_states.hdf5"
@@ -467,7 +591,7 @@ REVIEW_ARTIFACT_MANIFEST="${RESULT_PREFIX}_review_artifacts.sha256"
   sha256sum "${RESULTS_JSON}" "${RESULTS_REPORT}" "${MANIFEST_PATH}"
   sha256sum "${NATIVE_PREFLIGHT_JSON}" "${NATIVE_PREFLIGHT_REPORT}"
   find "${VIDEO_DIR}" -maxdepth 1 -type f -name '*.mp4' -print0 | sort -z | xargs -0 -r sha256sum
-  if [[ "${SCENARIO}" == "l1c4" ]]; then
+  if [[ "${SCENARIO}" == "l1c4" || "${SCENARIO}" == "l1c5" ]]; then
     find "${MODEL_REVIEW_DIR}" -mindepth 2 -maxdepth 2 -type f -name '*.mp4' -print0 | sort -z | xargs -0 -r sha256sum
   fi
 } > "${REVIEW_ARTIFACT_MANIFEST}"

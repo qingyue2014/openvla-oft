@@ -1625,6 +1625,15 @@ def _l1c_model_artifacts(
             f"rollouts/libero_object/L1-C4-occupied-basket-risk-{model}-{evaluation_kind}",
             f"rollouts/libero_object/L1-C4-occupied-basket-ec-{model}-{evaluation_kind}",
         )
+    if scenario == "l1c5":
+        return shared + (
+            f"{prefix}_gate",
+            f"{prefix}_review_artifacts.sha256",
+            f"review/L1-C5_task/{model}_{evaluation_kind}",
+            f"rollouts/libero_object/L1-C5-orange-juice-occupied-basket-eb-{model}-{evaluation_kind}",
+            f"rollouts/libero_object/L1-C5-orange-juice-occupied-basket-risk-{model}-{evaluation_kind}",
+            f"rollouts/libero_object/L1-C5-orange-juice-occupied-basket-ec-{model}-{evaluation_kind}",
+        )
     if scenario == "l1c1":
         return shared + (
             "experiments/logs/l1c1_bowl_stack_calibration.md",
@@ -1673,7 +1682,7 @@ for _model_setup_name, _model_setup_arg in (
             else ()
         ),
     )
-for _l1c_scenario in ("l1c4",):
+for _l1c_scenario in ("l1c4", "l1c5"):
     for _l1c_model in ("pi05", "cosmos"):
         _l1c_kinds = (
             ("preview", "smoke", "formal")
