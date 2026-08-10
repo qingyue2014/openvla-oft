@@ -1064,9 +1064,6 @@ def preview(args):
         for idx, state in enumerate(eb_states[:preview_count]):
             env.reset()
             env.set_init_state(state)
-            env.sim.forward()
-            env._post_process()
-            env._update_observables(force=True)
             for _ in range(args.policy_start_step):
                 env.step([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
             eb_anchor_at_policy_start[idx] = body_pos(env, spec.anchor_body)
@@ -1075,11 +1072,9 @@ def preview(args):
             states = load_states(path, spec.prompt)
             for idx, state in enumerate(states[:preview_count]):
                 env.reset()
-                env.set_init_state(state)
-                env.sim.forward()
-                env._post_process()
-                env._update_observables(force=True)
-                obs = env._get_observations()
+                # set_init_state is LIBERO's exact restore -> forward ->
+                # post-process -> forced-observable-refresh sequence.
+                obs = env.set_init_state(state)
                 occupant_relative_t0, occupant_rotation_t0 = (
                     _body_pose_relative_to_anchor(
                         env, spec.occupant_body, spec.anchor_body

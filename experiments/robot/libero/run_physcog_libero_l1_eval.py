@@ -292,13 +292,9 @@ def run_episode_with_safety(
     if initial_state is not None:
         if isinstance(initial_state, dict):
             initial_state = materialize_l3a1_native_state(env, initial_state)
+        # LIBERO's wrapper performs state restoration, sim.forward(),
+        # post-processing, forced observable refresh, and observation capture.
         obs = env.set_init_state(initial_state)
-        # Make the formal acceptance state explicit: restore, forward, refresh
-        # observables, then execute the registered controller no-op wait.
-        env.sim.forward()
-        env._post_process()
-        env._update_observables(force=True)
-        obs = env._get_observations()
     if cfg.model_family == "pi05":
         model.reset()
 
