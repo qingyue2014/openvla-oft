@@ -1,0 +1,174 @@
+Loading nvhpc-hpcx-cuda12/23.11
+  Loading requirement: hpcx
+[robosuite WARNING] No private macro file found! (macros.py:53)
+[robosuite WARNING] It is recommended to use a private macro file (macros.py:54)
+[robosuite WARNING] To setup, run: python /home/drwqyhappy/.conda/envs/openvla_oft/lib/python3.10/site-packages/robosuite/scripts/setup_macros.py (macros.py:55)
+Gym has been unmaintained since 2022 and does not support NumPy 2.0 amongst other critical functionality.
+Please upgrade to Gymnasium, the maintained drop-in replacement of Gym, or contact the authors of your software and request that they upgrade.
+Users of this version of Gym should be able to simply replace 'import gym' with 'import gymnasium as gym' in the vast majority of cases.
+See the migration guide at https://gymnasium.farama.org/introduction/migration_guide/ for additional information.
+[info] using task orders [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+Verdict: PASS_NATIVE_ONLY_PREFLIGHT
+JSON: experiments/logs/l1c5_native_preflight.json
+Report: experiments/logs/l1c5_native_preflight.md
+[robosuite WARNING] No private macro file found! (macros.py:53)
+[robosuite WARNING] It is recommended to use a private macro file (macros.py:54)
+[robosuite WARNING] To setup, run: python /home/drwqyhappy/.conda/envs/openvla_oft/lib/python3.10/site-packages/robosuite/scripts/setup_macros.py (macros.py:55)
+Gym has been unmaintained since 2022 and does not support NumPy 2.0 amongst other critical functionality.
+Please upgrade to Gymnasium, the maintained drop-in replacement of Gym, or contact the authors of your software and request that they upgrade.
+Users of this version of Gym should be able to simply replace 'import gym' with 'import gymnasium as gym' in the vast majority of cases.
+See the migration guide at https://gymnasium.farama.org/introduction/migration_guide/ for additional information.
+eb[00] visible=573/573px anchor=2374/2281px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[01] visible=573/573px anchor=2341/2234px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[02] visible=573/573px anchor=2411/2316px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[03] visible=573/573px anchor=2410/2320px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[04] visible=573/573px anchor=2446/2325px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[05] visible=573/573px anchor=2429/2313px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[06] visible=573/573px anchor=2341/2250px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[07] visible=573/573px anchor=2452/2336px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[08] visible=573/573px anchor=2394/2315px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[09] visible=573/573px anchor=2454/2352px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[10] visible=573/573px anchor=2369/2282px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[11] visible=573/573px anchor=2413/2323px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[12] visible=573/573px anchor=2448/2338px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[13] visible=573/573px anchor=2408/2284px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[14] visible=573/573px anchor=2408/2313px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[15] visible=573/573px anchor=2349/2243px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[16] visible=573/573px anchor=2434/2336px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[17] visible=573/573px anchor=2468/2334px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[18] visible=573/573px anchor=2383/2278px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[19] visible=573/573px anchor=2351/2258px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[20] visible=573/573px anchor=2432/2330px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[21] visible=573/573px anchor=2372/2288px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[22] visible=573/573px anchor=2324/2234px target=405/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[23] visible=573/573px anchor=2444/2361px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[24] visible=573/573px anchor=2371/2290px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[25] visible=573/573px anchor=2371/2276px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[26] visible=573/573px anchor=2437/2346px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[27] visible=573/573px anchor=2449/2336px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[28] visible=573/573px anchor=2373/2277px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[29] visible=573/573px anchor=2433/2321px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[30] visible=573/573px anchor=2442/2350px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[31] visible=573/573px anchor=2377/2267px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[32] visible=573/573px anchor=2402/2300px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[33] visible=573/573px anchor=2412/2287px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[34] visible=573/573px anchor=2340/2248px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[35] visible=573/573px anchor=2416/2324px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[36] visible=573/573px anchor=2377/2305px target=405/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[37] visible=573/573px anchor=2341/2252px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[38] visible=573/573px anchor=2403/2306px target=404/531px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[39] visible=573/573px anchor=2360/2241px target=404/532px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[40] visible=573/573px anchor=2377/2288px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[41] visible=573/573px anchor=2390/2313px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[42] visible=573/573px anchor=2421/2313px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[43] visible=573/573px anchor=2451/2343px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[44] visible=573/573px anchor=2486/2392px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[45] visible=573/573px anchor=2358/2270px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[46] visible=573/573px anchor=2417/2326px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[47] visible=573/573px anchor=2374/2273px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[48] visible=573/573px anchor=2471/2340px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+eb[49] visible=573/573px anchor=2331/2242px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+er[00] visible=179/179px anchor=2195/2101px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[01] visible=175/179px anchor=2164/2055px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[02] visible=188/180px anchor=2223/2136px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[03] visible=181/192px anchor=2229/2128px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[04] visible=184/193px anchor=2262/2132px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[05] visible=190/177px anchor=2239/2135px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[06] visible=184/167px anchor=2157/2083px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[07] visible=177/200px anchor=2275/2136px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[08] visible=190/178px anchor=2204/2137px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[09] visible=183/197px anchor=2270/2155px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[10] visible=184/173px anchor=2185/2110px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[11] visible=182/190px anchor=2231/2133px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[12] visible=183/190px anchor=2265/2148px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[13] visible=185/173px anchor=2223/2111px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[14] visible=188/169px anchor=2220/2144px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[15] visible=181/171px anchor=2168/2072px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[16] visible=171/177px anchor=2263/2160px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[17] visible=185/196px anchor=2283/2138px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[18] visible=186/171px anchor=2197/2108px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[19] visible=190/169px anchor=2161/2089px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[20] visible=168/179px anchor=2264/2151px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[21] visible=193/187px anchor=2178/2101px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[22] visible=177/182px anchor=2147/2052px target=405/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[23] visible=178/199px anchor=2266/2160px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[24] visible=179/168px anchor=2192/2122px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[25] visible=181/171px anchor=2190/2104px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[26] visible=176/186px anchor=2261/2160px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[27] visible=181/190px anchor=2268/2146px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[28] visible=180/172px anchor=2192/2105px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[29] visible=189/181px anchor=2244/2138px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[30] visible=172/190px anchor=2270/2160px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[31] visible=194/187px anchor=2183/2080px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[32] visible=178/176px anchor=2224/2124px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[33] visible=187/176px anchor=2225/2111px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[34] visible=183/172px anchor=2156/2077px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[35] visible=167/185px anchor=2249/2139px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[36] visible=187/177px anchor=2189/2128px target=405/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[37] visible=176/174px anchor=2165/2078px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[38] visible=177/183px anchor=2225/2123px target=404/531px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[39] visible=190/178px anchor=2170/2063px target=404/532px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[40] visible=191/177px anchor=2186/2111px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[41] visible=191/179px anchor=2199/2134px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[42] visible=190/179px anchor=2231/2134px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[43] visible=177/185px anchor=2274/2155px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[44] visible=179/203px anchor=2307/2189px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[45] visible=181/180px anchor=2177/2090px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[46] visible=171/178px anchor=2246/2148px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[47] visible=182/165px anchor=2191/2108px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[48] visible=185/200px anchor=2286/2140px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+er[49] visible=174/177px anchor=2156/2064px target=404/530px in_goal=1 world_drift=0.0398m relative_drift=0.0000m gate_rotation=0.04deg anchor_excess=0.0000m contacts=0 pass=1
+ec[00] visible=605/605px anchor=2374/2281px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[01] visible=605/605px anchor=2341/2234px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[02] visible=605/605px anchor=2411/2316px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[03] visible=605/605px anchor=2410/2320px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[04] visible=605/605px anchor=2446/2325px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[05] visible=605/605px anchor=2429/2313px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[06] visible=605/605px anchor=2341/2250px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[07] visible=605/605px anchor=2452/2336px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[08] visible=605/605px anchor=2394/2315px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[09] visible=605/605px anchor=2454/2352px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[10] visible=605/605px anchor=2369/2282px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[11] visible=605/605px anchor=2413/2323px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[12] visible=605/605px anchor=2448/2338px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[13] visible=605/605px anchor=2408/2284px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[14] visible=605/605px anchor=2408/2313px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[15] visible=605/605px anchor=2349/2243px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[16] visible=605/605px anchor=2434/2336px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[17] visible=605/605px anchor=2468/2334px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[18] visible=605/605px anchor=2383/2278px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[19] visible=605/605px anchor=2351/2258px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[20] visible=605/605px anchor=2432/2330px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[21] visible=605/605px anchor=2372/2288px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[22] visible=605/605px anchor=2324/2234px target=405/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[23] visible=605/605px anchor=2444/2361px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[24] visible=605/605px anchor=2371/2290px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[25] visible=605/605px anchor=2371/2276px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[26] visible=605/605px anchor=2437/2346px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[27] visible=605/605px anchor=2449/2336px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[28] visible=605/605px anchor=2373/2277px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[29] visible=605/605px anchor=2433/2321px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[30] visible=605/605px anchor=2442/2350px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[31] visible=605/605px anchor=2377/2267px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[32] visible=605/605px anchor=2402/2300px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[33] visible=605/605px anchor=2412/2287px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[34] visible=605/605px anchor=2340/2248px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[35] visible=605/605px anchor=2416/2324px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[36] visible=605/605px anchor=2377/2305px target=405/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[37] visible=605/605px anchor=2341/2252px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[38] visible=605/605px anchor=2403/2306px target=404/531px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[39] visible=605/605px anchor=2360/2241px target=404/532px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[40] visible=605/605px anchor=2377/2288px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[41] visible=605/605px anchor=2390/2313px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[42] visible=605/605px anchor=2421/2313px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[43] visible=605/605px anchor=2451/2343px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[44] visible=605/605px anchor=2486/2392px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[45] visible=605/605px anchor=2358/2270px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0384m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[46] visible=605/605px anchor=2417/2326px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[47] visible=605/605px anchor=2374/2273px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[48] visible=605/605px anchor=2471/2340px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+ec[49] visible=605/605px anchor=2331/2242px target=404/530px in_goal=0 world_drift=0.0000m relative_drift=0.0385m gate_rotation=0.00deg anchor_excess=0.0000m contacts=0 pass=1
+Preview written to experiments/robot/libero/tasks/l1c5_preview
+Verdict: PASS_EXACT_STATE_PREVIEW
+Report: experiments/logs/l1c5_exact_state_preview.md
+Manifest: experiments/robot/libero/tasks/l1c5_preview/manifest.json

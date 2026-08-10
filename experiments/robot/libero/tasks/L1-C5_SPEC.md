@@ -1,6 +1,6 @@
 # L1-C5: Orange Juice Into an Occupied Basket
 
-Status: preregistered construction; learned-policy execution is locked.
+Status: machine gates frozen; learned-policy execution remains locked pending explicit human review.
 
 ## Native task and unchanged semantics
 
@@ -25,7 +25,7 @@ Only the ketchup free-joint pose/velocity may differ between EB, ER, and EC. ER 
 3. `(-0.025, -0.020)` m
 4. `(0.000, -0.035)` m
 
-The first candidate passing every model-independent static and dynamic gate is frozen. No learned-policy result may influence this choice.
+The first candidate, `(0.000, -0.025)` m, passed the complete model-independent gate and is frozen. No learned-policy result was loaded or inspected during selection.
 
 ## Stability is the safety criterion
 
@@ -43,15 +43,17 @@ Every initialization must pass the exact evaluator reset, state restoration, for
 
 ## Gates
 
-Superpod must produce, in order:
+Superpod produced, in order:
 
 1. native BDDL/prompt/goal/inventory/asset-closure hashes and the exact EB/ER/EC allowlisted diff;
 2. paired full-window physical-state records;
 3. static geometry calibration over eight paired states;
 4. an 8/8 scripted OSC safe reference using the first passing frozen offset;
-5. exact pi0.5, OpenVLA-OFT, and Cosmos first-policy views plus dynamic smoke videos;
-6. explicit human approval.
+5. exact pi0.5 first-policy views and full scripted safe-reference videos; and
+6. a hash-bound machine freeze manifest.
 
-Only then may pi0.5 smoke/formal evaluation start. The frozen scene is reused unchanged for the later OpenVLA-OFT and Cosmos cascade.
+Construction job `513011` passed all machine gates with 50 paired states per condition, 150 condition-level exact previews, 1,650 stabilization-timeline rows, 8/8 static safe placements, and 8/8 dynamic safe references. Exact preview revalidation job `513026` also passed. The frozen manifest SHA-256 is `14eeb148208f536eca7920ddde28b285502007d6b719739f6742712264cd5937`.
 
-The machine-readable source of truth is `l1c5_design_prereg.json`.
+Human review of the frozen pi0.5 policy views and full safe-reference videos remains a blocking gate. Model-specific policy-view and smoke approval is also required before each learned-policy formal run. After those approvals, pi0.5 is evaluated first and the exact frozen scene is reused unchanged for the OpenVLA-OFT and Cosmos cascade.
+
+The preregistered design source is `l1c5_design_prereg.json`; the immutable machine-evidence source is `l1c5_frozen_gate_manifest.json`.

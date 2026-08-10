@@ -17,6 +17,8 @@ esac
 UPPER_SCENARIO="$(printf '%s' "${SCENARIO}" | tr '[:lower:]' '[:upper:]' | sed 's/C/-C/')"
 
 PIPELINE="experiments/robot/libero/tasks/l1c_occupied_pipeline.py"
+L1C5_FREEZE_VERIFIER="experiments/robot/libero/tasks/verify_l1c5_frozen_gate.py"
+L1C5_FROZEN_GATE_SHA256="14eeb148208f536eca7920ddde28b285502007d6b719739f6742712264cd5937"
 STATE_DIR="${STATE_DIR:-experiments/robot/libero/tasks}"
 LOG_DIR="${LOG_DIR:-experiments/logs}"
 EB_STATES="${EB_STATES:-${STATE_DIR}/${SCENARIO}_eb_states.hdf5}"
@@ -182,6 +184,17 @@ require_human_visibility_review() {
     echo "Formal evaluation requires a manual policy-view verdict at ${HUMAN_VISIBILITY_REVIEW} containing PASS_HUMAN_VISIBILITY." >&2
     exit 1
   fi
+  if [[ "${SCENARIO}" == "l1c5" ]] && \
+     ! grep -q "${L1C5_FROZEN_GATE_SHA256}" "${HUMAN_VISIBILITY_REVIEW}"; then
+    echo "L1-C5 visibility approval must bind frozen gate ${L1C5_FROZEN_GATE_SHA256}." >&2
+    exit 1
+  fi
+}
+
+require_l1c5_frozen_machine_gates() {
+  if [[ "${SCENARIO}" == "l1c5" ]]; then
+    python "${L1C5_FREEZE_VERIFIER}"
+  fi
 }
 
 run_screen_occupants() {
@@ -218,9 +231,11 @@ run_condition() {
   local trials="$2"
   local state_path note oracle trajectory_dir
   if [[ "${SCENARIO}" == "l1c5" ]]; then
+    require_l1c5_frozen_machine_gates
     require_human_visibility_review
     if [[ ! -f "${REVIEW_DIR}/safe_reference_review.md" ]] || \
-       ! grep -q 'PASS_HUMAN_SAFE_REFERENCE' "${REVIEW_DIR}/safe_reference_review.md"; then
+       ! grep -q 'PASS_HUMAN_SAFE_REFERENCE' "${REVIEW_DIR}/safe_reference_review.md" || \
+       ! grep -q "${L1C5_FROZEN_GATE_SHA256}" "${REVIEW_DIR}/safe_reference_review.md"; then
       echo "L1-C5 learned-policy execution requires PASS_HUMAN_SAFE_REFERENCE in ${REVIEW_DIR}/safe_reference_review.md." >&2
       exit 1
     fi
@@ -343,18 +358,34 @@ case "${MODE}" in
     run_safe_reference
     grep -q 'PASS_DYNAMIC_SAFE_REFERENCE' "${SAFE_REFERENCE_REPORT}"
     ;;
-  eb|er|ec) run_native_preflight; run_verify; run_condition "${MODE}" "${NUM_TRIALS}" ;;
+  eb|er|ec)
+    if [[ "${SCENARIO}" == "l1c5" ]]; then
+      require_l1c5_frozen_machine_gates
+      run_verify
+    else
+      run_native_preflight
+      run_verify
+    fi
+    run_condition "${MODE}" "${NUM_TRIALS}"
+    ;;
   replay) run_native_preflight; run_replay ;;
   smoke)
-    run_check "${SMOKE_TRIALS}"
-    PREVIEW_NUM_STATES="${SMOKE_TRIALS}" run_preview
-    grep -q 'PASS_EXACT_STATE_PREVIEW' "${PREVIEW_REPORT}"
-    run_verify "${SMOKE_TRIALS}"
-    run_calibrate
-    grep -q 'PASS_STATIC_OCCUPANCY_LAYOUT' "${CALIBRATION_REPORT}"
+    if [[ "${SCENARIO}" == "l1c5" ]]; then
+      require_l1c5_frozen_machine_gates
+      run_verify "${SMOKE_TRIALS}"
+    else
+      run_check "${SMOKE_TRIALS}"
+      PREVIEW_NUM_STATES="${SMOKE_TRIALS}" run_preview
+      grep -q 'PASS_EXACT_STATE_PREVIEW' "${PREVIEW_REPORT}"
+      run_verify "${SMOKE_TRIALS}"
+      run_calibrate
+      grep -q 'PASS_STATIC_OCCUPANCY_LAYOUT' "${CALIBRATION_REPORT}"
+    fi
     run_condition eb "${SMOKE_TRIALS}"
-    run_safe_reference
-    grep -q 'PASS_DYNAMIC_SAFE_REFERENCE' "${SAFE_REFERENCE_REPORT}"
+    if [[ "${SCENARIO}" != "l1c5" ]]; then
+      run_safe_reference
+      grep -q 'PASS_DYNAMIC_SAFE_REFERENCE' "${SAFE_REFERENCE_REPORT}"
+    fi
     run_condition er "${SMOKE_TRIALS}"
     run_condition ec "${SMOKE_TRIALS}"
     run_replay
@@ -363,16 +394,23 @@ case "${MODE}" in
   analyze) run_analyze ;;
   record) run_record ;;
   eval)
-    run_check "${NUM_TRIALS}"
-    PREVIEW_NUM_STATES="${PREVIEW_NUM_STATES:-3}" run_preview
-    grep -q 'PASS_EXACT_STATE_PREVIEW' "${PREVIEW_REPORT}"
-    run_verify "${NUM_TRIALS}"
+    if [[ "${SCENARIO}" == "l1c5" ]]; then
+      require_l1c5_frozen_machine_gates
+      run_verify "${NUM_TRIALS}"
+    else
+      run_check "${NUM_TRIALS}"
+      PREVIEW_NUM_STATES="${PREVIEW_NUM_STATES:-3}" run_preview
+      grep -q 'PASS_EXACT_STATE_PREVIEW' "${PREVIEW_REPORT}"
+      run_verify "${NUM_TRIALS}"
+      run_calibrate
+      grep -q 'PASS_STATIC_OCCUPANCY_LAYOUT' "${CALIBRATION_REPORT}"
+    fi
     require_human_visibility_review
-    run_calibrate
-    grep -q 'PASS_STATIC_OCCUPANCY_LAYOUT' "${CALIBRATION_REPORT}"
     run_condition eb "${NUM_TRIALS}"
-    run_safe_reference
-    grep -q 'PASS_DYNAMIC_SAFE_REFERENCE' "${SAFE_REFERENCE_REPORT}"
+    if [[ "${SCENARIO}" != "l1c5" ]]; then
+      run_safe_reference
+      grep -q 'PASS_DYNAMIC_SAFE_REFERENCE' "${SAFE_REFERENCE_REPORT}"
+    fi
     run_condition er "${NUM_TRIALS}"
     run_condition ec "${NUM_TRIALS}"
     run_replay
