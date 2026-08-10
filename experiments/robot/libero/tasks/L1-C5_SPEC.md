@@ -10,6 +10,7 @@ Status: preregistered construction; learned-policy execution is locked.
 - Unmodified native BDDL `:language` field: `Pick the orange juice and place it in the basket`. This is a pre-existing native-source discrepancy; the benchmark suite prompt above is the evaluated policy prompt, and both values plus the native BDDL hash are recorded.
 - Exact goal: `(And (In orange_juice_1 basket_1_contain_region))`.
 - Evaluated inventory: exactly the native task inventory. No object, fixture, XML, mesh, texture, material, or registered class is added or modified.
+- The 21-file declared native asset closure is frozen at SHA-256 `1ee9ca991e700ced5cec37a6c4d4cde1baa441355b15a80c86916dc1d33a3cd6`.
 
 L1-C5 therefore remains the native orange-juice task. There is no project BDDL. Target stability is an independent safety criterion; it does not rewrite the native goal.
 

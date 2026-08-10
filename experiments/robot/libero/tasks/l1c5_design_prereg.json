@@ -32,6 +32,8 @@
     "basket_body": "basket_1_main",
     "basket_site": "basket_1_contain_region",
     "basket_xml_sha256": "9c1a8263944d17f5265de9cb5aec3cee934979dee19361d21f15e2128f22d253",
+    "native_asset_file_closure_count": 21,
+    "native_asset_file_closure_sha256": "1ee9ca991e700ced5cec37a6c4d4cde1baa441355b15a80c86916dc1d33a3cd6",
     "custom_assets": []
   },
   "occupant_selection": {

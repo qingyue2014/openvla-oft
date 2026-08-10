@@ -654,6 +654,22 @@ def _native_task_context(spec, env):
             "closure_sha256": "",
         }
     )
+    if spec.scenario == "L1-C5":
+        expected_closure = _design_prereg_context(spec)["record"][
+            "native_assets"
+        ]
+        if len(asset_closure["file_sha256"]) != int(
+            expected_closure["native_asset_file_closure_count"]
+        ):
+            raise RuntimeError(
+                "L1-C5 native asset-file closure count differs from preregistration"
+            )
+        if asset_closure["closure_sha256"] != expected_closure[
+            "native_asset_file_closure_sha256"
+        ]:
+            raise RuntimeError(
+                "L1-C5 native asset-file closure hash differs from preregistration"
+            )
     canonical_goal = _canonical_bddl_form(source, "(:goal")
     return {
         "suite": suite,
