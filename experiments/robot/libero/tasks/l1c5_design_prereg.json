@@ -87,6 +87,7 @@
   "frozen_thresholds": {
     "formal_pre_policy_wait_steps": 10,
     "initial_full_window": {
+      "measurement_frame": "ER occupant translation, rotation, linear speed, and angular speed are measured relative to basket_1; EB/EC are measured in world coordinates. Basket motion is separately paired against EB at every step.",
       "max_translation_m": 0.006,
       "max_rotation_deg": 10.0,
       "max_linear_speed_m_s": 0.015,

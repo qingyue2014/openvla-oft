@@ -1524,6 +1524,12 @@ def preview(args):
 
                 policy_start_obs = obs
                 condition_timeline = []
+                previous_relative_pos = occupant_relative_t0.copy()
+                previous_relative_mat = occupant_rotation_t0.copy()
+                inner_env = getattr(env, "env", env)
+                control_dt = float(
+                    getattr(inner_env, "control_timestep", 0.05)
+                )
                 for timeline_step in range(args.policy_start_step + 1):
                     if timeline_step > 0:
                         policy_start_obs, _, _, _ = env.step(
@@ -1565,6 +1571,33 @@ def preview(args):
                     )
                     step_linear_speed, step_angular_speed = body_speeds(
                         env, spec.occupant_body
+                    )
+                    if timeline_step == 0:
+                        relative_linear_speed = 0.0
+                        relative_angular_speed = 0.0
+                    else:
+                        relative_linear_speed = float(
+                            np.linalg.norm(
+                                current_relative_pos - previous_relative_pos
+                            ) / control_dt
+                        )
+                        relative_angular_speed = float(
+                            np.radians(
+                                _rotation_matrix_separation_deg(
+                                    current_relative_mat,
+                                    previous_relative_mat,
+                                )
+                            ) / control_dt
+                        )
+                    previous_relative_pos = current_relative_pos.copy()
+                    previous_relative_mat = current_relative_mat.copy()
+                    gate_linear_speed = (
+                        relative_linear_speed
+                        if condition == "er" else step_linear_speed
+                    )
+                    gate_angular_speed = (
+                        relative_angular_speed
+                        if condition == "er" else step_angular_speed
                     )
                     step_in_goal = body_in_anchor_region(
                         env, spec, spec.occupant_body
@@ -1609,9 +1642,9 @@ def preview(args):
                             args.max_occupant_tilt_change_deg,
                             spec.max_initial_tilt_deg,
                         )
-                        and step_linear_speed
+                        and gate_linear_speed
                         <= spec.max_initial_linear_speed
-                        and step_angular_speed
+                        and gate_angular_speed
                         <= spec.max_initial_angular_speed
                         and step_anchor_excess <= args.max_anchor_excess
                         and step_placement_ok
@@ -1629,8 +1662,12 @@ def preview(args):
                         "world_rotation_deg": world_step_rotation,
                         "relative_drift_m": relative_step_drift,
                         "relative_rotation_deg": relative_step_rotation,
-                        "linear_speed_m_s": step_linear_speed,
-                        "angular_speed_rad_s": step_angular_speed,
+                        "linear_speed_m_s": gate_linear_speed,
+                        "angular_speed_rad_s": gate_angular_speed,
+                        "world_linear_speed_m_s": step_linear_speed,
+                        "world_angular_speed_rad_s": step_angular_speed,
+                        "relative_linear_speed_m_s": relative_linear_speed,
+                        "relative_angular_speed_rad_s": relative_angular_speed,
                         "anchor_excess_vs_eb_m": step_anchor_excess,
                         "occupant_in_goal": int(step_in_goal),
                         "support_contact": int(step_support_contact),
@@ -1752,6 +1789,12 @@ def preview(args):
                 linear_speed, angular_speed = body_speeds(
                     env, spec.occupant_body
                 )
+                gate_max_linear_speed = max(
+                    row["linear_speed_m_s"] for row in condition_timeline
+                )
+                gate_max_angular_speed = max(
+                    row["angular_speed_rad_s"] for row in condition_timeline
+                )
                 in_goal = body_in_anchor_region(
                     env, spec, spec.occupant_body
                 )
@@ -1830,8 +1873,10 @@ def preview(args):
                     "gate_drift_m": gate_drift,
                     "gate_rotation_deg": gate_rotation,
                     "anchor_excess_vs_eb_m": anchor_excess,
-                    "linear_speed_m_s": linear_speed,
-                    "angular_speed_rad_s": angular_speed,
+                    "linear_speed_m_s": gate_max_linear_speed,
+                    "angular_speed_rad_s": gate_max_angular_speed,
+                    "final_world_linear_speed_m_s": linear_speed,
+                    "final_world_angular_speed_rad_s": angular_speed,
                     "target_contact": int(
                         target_contact_t0 or target_contact_start
                     ),

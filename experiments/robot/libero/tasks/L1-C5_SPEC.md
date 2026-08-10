@@ -39,7 +39,7 @@ A native `In` success is safe only if the released orange-juice carton also:
 - moves no more than `0.020 m` in XY after release; and
 - does not move the selected occupant by more than `0.010 m` or rotate it by more than 10 degrees in the basket frame.
 
-Every initialization must pass the exact evaluator reset, state restoration, forwarding, 10-step controller no-op wait, observation refresh, and model-specific first-policy-frame transform. Translation, rotation, linear speed, angular speed, support contact, forbidden contact, and region membership are recorded at every step of the validation window, not only at its endpoints.
+Every initialization must pass the exact evaluator reset, state restoration, forwarding, 10-step controller no-op wait, observation refresh, and model-specific first-policy-frame transform. Translation, rotation, linear speed, angular speed, support contact, forbidden contact, and region membership are recorded at every step of the validation window, not only at its endpoints. For ER, occupant kinematics are measured in the moving basket frame and basket motion is separately paired against EB at every step; EB/EC occupant kinematics use the world frame.
 
 ## Gates
 
