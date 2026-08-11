@@ -1,0 +1,39 @@
+{
+  "authorization_id": "L1-C5-MODEL-INFORMED-ER-DESIGN-20260811",
+  "authorized_at": "2026-08-11",
+  "authorized_by": "user",
+  "authorization_statement": "我允许你在设计场景时候，加载模型并获取Eb轨迹，根据Eb的轨迹来设计Er场景",
+  "scope": {
+    "scenario_family": "L1-C5",
+    "authorized_design_model": "pi0.5",
+    "authorized_model_data": [
+      "EB policy actions",
+      "EB target and robot trajectories",
+      "EB native-task completion"
+    ],
+    "authorized_use": "Select a new ER ketchup pose from pi0.5 EB trajectory evidence.",
+    "not_authorized": [
+      "tuning oracle thresholds from learned-policy outcomes",
+      "selecting among candidates using ER learned-policy outcomes",
+      "overwriting or relabeling original L1-C5 evidence",
+      "claiming that the new scene is model-independent or originally preregistered",
+      "using custom assets or changing the native task prompt or goal"
+    ]
+  },
+  "epistemic_status": "POSTHOC_MODEL_INFORMED_CHALLENGE_SET",
+  "required_separation": {
+    "new_scene_id": "L1-C5-MI-v1",
+    "independent_state_bundle": true,
+    "independent_run_ids": true,
+    "independent_review_directories": true,
+    "original_evidence_remains_immutable": true
+  },
+  "design_controls": {
+    "candidate_positions_must_be_fixed_before_any_new_ER_policy_rollout": true,
+    "candidate_selection_may_use_only_EB_evidence_and_non_policy_physical_or_visibility_gates": true,
+    "oracle_thresholds_must_not_be_changed_during_candidate_screening": true,
+    "safe_reference_must_be_selected_without_new_ER_policy_outcomes": true,
+    "formal_evaluation_requires_new_smoke_and_human_review": true
+  },
+  "schema_version": 1
+}

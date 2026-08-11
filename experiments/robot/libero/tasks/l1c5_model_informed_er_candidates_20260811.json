@@ -1,0 +1,90 @@
+{
+  "candidate_set_id": "L1-C5-MI-v1-PI05-EB-CANDIDATES-20260811",
+  "authorization": {
+    "id": "L1-C5-MODEL-INFORMED-ER-DESIGN-20260811",
+    "path": "experiments/robot/libero/tasks/l1c5_model_informed_er_authorization_20260811.json",
+    "sha256": "15d636be1ed64437be5920cc730a753d665a3b2187c6136f1b65bf7f9486f165"
+  },
+  "design_evidence": {
+    "model_family": "pi05",
+    "model_revision": "pi05_libero",
+    "openpi_source_revision": "15a9616a00943ada6c20a0f158e3adb39df2ccac",
+    "checkpoint": "/project/trllmout/models/openpi-assets/checkpoints/pi05_libero",
+    "condition": "EB",
+    "trajectory_directory": "rollouts/libero_object/L1-C5-orange-juice-occupied-basket-eb-pi05-formal/trajectories",
+    "trajectory_file_count": 50,
+    "trajectory_closure_sha256": "dd417cc306772d5ba5ca786d9a53156ee21ff141bae2be9bcd283d1efc70a82c",
+    "index_sha256": "9fa8929842ecd3ee057d09586cdfbbe528a41191ab0052b3aef9630d46bd13a6",
+    "episodes_with_native_task_success": 49,
+    "learned_ER_or_EC_outcomes_used": false
+  },
+  "terminal_target_xy_relative_to_basket_m": {
+    "mean": [
+      -0.00704505,
+      -0.00325024
+    ],
+    "median": [
+      -0.00856401,
+      -0.00516987
+    ],
+    "standard_deviation": [
+      0.01815004,
+      0.01530468
+    ]
+  },
+  "candidate_generation": {
+    "coordinate_frame": "basket_1_main-relative XY",
+    "grid_bounds_m": [
+      -0.04,
+      0.04
+    ],
+    "grid_spacing_m": 0.005,
+    "coverage_radius_m": 0.05,
+    "coverage_radius_source": "unchanged frozen target/occupant minimum center clearance",
+    "ranking_rule": [
+      "maximize fraction of successful EB terminal target positions within the coverage radius",
+      "maximize fraction of successful EB final-60-step paths entering the coverage radius",
+      "minimize distance to the successful-EB terminal median",
+      "break remaining ties by candidate list order"
+    ]
+  },
+  "ordered_candidates_for_superpod_physical_screen": [
+    {
+      "offset_xy_m": [-0.005, -0.005],
+      "terminal_coverage_rate": 1.0,
+      "final_60_step_path_coverage_rate": 1.0,
+      "distance_to_terminal_median_m": 0.003568
+    },
+    {
+      "offset_xy_m": [-0.01, 0.0],
+      "terminal_coverage_rate": 1.0,
+      "final_60_step_path_coverage_rate": 1.0,
+      "distance_to_terminal_median_m": 0.005365
+    },
+    {
+      "offset_xy_m": [-0.005, -0.01],
+      "terminal_coverage_rate": 1.0,
+      "final_60_step_path_coverage_rate": 1.0,
+      "distance_to_terminal_median_m": 0.005997
+    },
+    {
+      "offset_xy_m": [-0.005, 0.0],
+      "terminal_coverage_rate": 1.0,
+      "final_60_step_path_coverage_rate": 1.0,
+      "distance_to_terminal_median_m": 0.00628
+    },
+    {
+      "offset_xy_m": [0.0, -0.005],
+      "terminal_coverage_rate": 1.0,
+      "final_60_step_path_coverage_rate": 1.0,
+      "distance_to_terminal_median_m": 0.008566
+    }
+  ],
+  "selection_status": "PENDING_SUPERPOD_PHYSICAL_VISIBILITY_AND_SAFE_REFERENCE_SCREEN",
+  "selection_rule": "Choose the first ordered candidate that passes every non-policy physical, exact-policy-view visibility, paired-state, and scripted safe-reference gate; do not run or inspect a new ER policy rollout during selection.",
+  "oracle_contract": {
+    "post_release_xy_displacement_limit_enabled": false,
+    "all_other_oracle_fields_unchanged_during_candidate_screening": true
+  },
+  "schema_version": 1
+}
