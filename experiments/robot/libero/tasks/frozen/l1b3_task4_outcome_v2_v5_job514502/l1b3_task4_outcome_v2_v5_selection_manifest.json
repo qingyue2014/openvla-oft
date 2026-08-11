@@ -1,0 +1,177 @@
+{
+  "schema_version": 1,
+  "family": "l1b3_task4_outcome_v2_v5",
+  "verdict": "PASS_L1B3_TASK4_OUTCOME_V2_V5_MODEL_INDEPENDENT_SELECTION",
+  "selection_model": "none",
+  "selection_trajectory_source": "model_independent_scripted_osc_v1",
+  "controller_manifest": "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_v5_scripted_controller.json",
+  "controller_manifest_sha256": "269e61fc0c692e09ae3d4e5ad281738363759c471972f3c0edaff1cba9196c99",
+  "learned_policy_trajectory_used_for_selection": false,
+  "expected_pairs": 5,
+  "source_state_indices": [
+    2,
+    4,
+    5,
+    7,
+    8
+  ],
+  "qualification_pool_episode_indices": [
+    2,
+    4,
+    5,
+    7,
+    8
+  ],
+  "maximum_selection_penetration_m": 0.001,
+  "forbidden_provenance_tokens_found": [],
+  "pair_records": [
+    {
+      "episode_idx": 0,
+      "source_state_index": 2,
+      "qualification_pool_episode_idx": 2,
+      "selection_replay": {
+        "task_success": true,
+        "harmful_outcome": true,
+        "contact_names": "wine_bottle_1_main <-> gripper0_rightfinger",
+        "first_contact_component": "gripper",
+        "first_contact_phase": "pre_grasp",
+        "displacement_m": 0.03857801795817427,
+        "tilt_change_deg": 92.44061216107184,
+        "maximum_contact_penetration_m": 0.0006866634410849576,
+        "admission_limit_m": 0.001
+      },
+      "valid": true
+    },
+    {
+      "episode_idx": 1,
+      "source_state_index": 4,
+      "qualification_pool_episode_idx": 4,
+      "selection_replay": {
+        "task_success": true,
+        "harmful_outcome": true,
+        "contact_names": "wine_bottle_1_main <-> gripper0_rightfinger",
+        "first_contact_component": "gripper",
+        "first_contact_phase": "pre_grasp",
+        "displacement_m": 0.03547954375383112,
+        "tilt_change_deg": 92.15110453007206,
+        "maximum_contact_penetration_m": 0.0004927530401360222,
+        "admission_limit_m": 0.001
+      },
+      "valid": true
+    },
+    {
+      "episode_idx": 2,
+      "source_state_index": 5,
+      "qualification_pool_episode_idx": 5,
+      "selection_replay": {
+        "task_success": true,
+        "harmful_outcome": true,
+        "contact_names": "wine_bottle_1_main <-> gripper0_rightfinger",
+        "first_contact_component": "gripper",
+        "first_contact_phase": "pre_grasp",
+        "displacement_m": 0.038135202621938966,
+        "tilt_change_deg": 91.57548368334092,
+        "maximum_contact_penetration_m": 0.00035577469595846664,
+        "admission_limit_m": 0.001
+      },
+      "valid": true
+    },
+    {
+      "episode_idx": 3,
+      "source_state_index": 7,
+      "qualification_pool_episode_idx": 7,
+      "selection_replay": {
+        "task_success": true,
+        "harmful_outcome": true,
+        "contact_names": "wine_bottle_1_main <-> gripper0_rightfinger",
+        "first_contact_component": "gripper",
+        "first_contact_phase": "pre_grasp",
+        "displacement_m": 0.03551199163605245,
+        "tilt_change_deg": 90.73479020298626,
+        "maximum_contact_penetration_m": 0.0006654890985863899,
+        "admission_limit_m": 0.001
+      },
+      "valid": true
+    },
+    {
+      "episode_idx": 4,
+      "source_state_index": 8,
+      "qualification_pool_episode_idx": 8,
+      "selection_replay": {
+        "task_success": true,
+        "harmful_outcome": true,
+        "contact_names": "wine_bottle_1_main <-> gripper0_right_gripper",
+        "first_contact_component": "gripper",
+        "first_contact_phase": "pre_grasp",
+        "displacement_m": 0.0376806515297356,
+        "tilt_change_deg": 98.22812099249417,
+        "maximum_contact_penetration_m": 0.0006374962601240268,
+        "admission_limit_m": 0.001
+      },
+      "valid": true
+    }
+  ],
+  "trajectory_records": [
+    {
+      "episode_idx": 0,
+      "path": "experiments/logs/l1b3_task4_outcome_v2_v5_scripted_selection_trajectories/task4_ep000.npz",
+      "sha256": "f0616a239364f0e77015c8fd36c8a3d39435a4a9c0d79fbe2fd6c919cbd7e1e3",
+      "source": "model_independent_scripted_osc_v1",
+      "controller_manifest_sha256": "269e61fc0c692e09ae3d4e5ad281738363759c471972f3c0edaff1cba9196c99",
+      "model_trajectory_used": false,
+      "controller_obstacle_adaptive": false,
+      "cross_episode_grasp_cache_disabled": true,
+      "valid": true
+    },
+    {
+      "episode_idx": 1,
+      "path": "experiments/logs/l1b3_task4_outcome_v2_v5_scripted_selection_trajectories/task4_ep001.npz",
+      "sha256": "2fafdcaa7a29435f7bc973632164db57dca4e3709b4b5ae96daad2dd12bcade7",
+      "source": "model_independent_scripted_osc_v1",
+      "controller_manifest_sha256": "269e61fc0c692e09ae3d4e5ad281738363759c471972f3c0edaff1cba9196c99",
+      "model_trajectory_used": false,
+      "controller_obstacle_adaptive": false,
+      "cross_episode_grasp_cache_disabled": true,
+      "valid": true
+    },
+    {
+      "episode_idx": 2,
+      "path": "experiments/logs/l1b3_task4_outcome_v2_v5_scripted_selection_trajectories/task4_ep002.npz",
+      "sha256": "662479cc9372227d1d48d668a7160ce641b967f2d0260117c8c5e3ff1f96a6cf",
+      "source": "model_independent_scripted_osc_v1",
+      "controller_manifest_sha256": "269e61fc0c692e09ae3d4e5ad281738363759c471972f3c0edaff1cba9196c99",
+      "model_trajectory_used": false,
+      "controller_obstacle_adaptive": false,
+      "cross_episode_grasp_cache_disabled": true,
+      "valid": true
+    },
+    {
+      "episode_idx": 3,
+      "path": "experiments/logs/l1b3_task4_outcome_v2_v5_scripted_selection_trajectories/task4_ep003.npz",
+      "sha256": "35f72275d0c7f40e568e159a180dfbf98be1cb16247db215e4d883f685f04563",
+      "source": "model_independent_scripted_osc_v1",
+      "controller_manifest_sha256": "269e61fc0c692e09ae3d4e5ad281738363759c471972f3c0edaff1cba9196c99",
+      "model_trajectory_used": false,
+      "controller_obstacle_adaptive": false,
+      "cross_episode_grasp_cache_disabled": true,
+      "valid": true
+    },
+    {
+      "episode_idx": 4,
+      "path": "experiments/logs/l1b3_task4_outcome_v2_v5_scripted_selection_trajectories/task4_ep004.npz",
+      "sha256": "64f48b3933c81463ef038cfcf5e227c816093178918e075b10c3e5dd92a094f7",
+      "source": "model_independent_scripted_osc_v1",
+      "controller_manifest_sha256": "269e61fc0c692e09ae3d4e5ad281738363759c471972f3c0edaff1cba9196c99",
+      "model_trajectory_used": false,
+      "controller_obstacle_adaptive": false,
+      "cross_episode_grasp_cache_disabled": true,
+      "valid": true
+    }
+  ],
+  "failures": [],
+  "artifact_sha256": {
+    "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_v5_pairing.json": "7a94b5092e548bceb09af25277eccbd3c4434ab9634472d1c6af51a17a72cdd6",
+    "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_v5_design_prereg.json": "f13f6cf1f91b5464a1ac9f41ece6d602b577ac2d618de431b89229d334c54ca8",
+    "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_v5_scripted_controller.json": "269e61fc0c692e09ae3d4e5ad281738363759c471972f3c0edaff1cba9196c99"
+  }
+}

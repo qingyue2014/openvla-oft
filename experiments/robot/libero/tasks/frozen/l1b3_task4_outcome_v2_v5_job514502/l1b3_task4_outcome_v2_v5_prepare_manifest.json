@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "family": "l1b3_task4_outcome_v2_v5",
+  "status": "prepared_awaiting_explicit_human_review",
+  "created_at_utc": "2026-08-11T05:44:32.469414+00:00",
+  "selection_model": "none",
+  "selection_trajectory_source": "model_independent_scripted_osc_v1",
+  "learned_policy_executed": false,
+  "pi0_5_replan_steps_frozen_for_future_smoke": 1,
+  "openvla_oft_retired": true,
+  "human_review_approved": false,
+  "formal_authorized": false,
+  "cosmos_authorized": false,
+  "artifact_sha256": {
+    "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_v5_native_preflight.json": "a31848199b03510e157cd68ab6dcdddf30dc7d13ed88ba975f201a35f705cd76",
+    "experiments/logs/l1b3_task4_outcome_v2_v5_selection_manifest.json": "2b9c945274d89d1b7ca53860ed85c687fdb3e5c6126563020ce6d1b76af51593",
+    "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_v5_pairing.json": "7a94b5092e548bceb09af25277eccbd3c4434ab9634472d1c6af51a17a72cdd6",
+    "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_v5_native_source_states.hdf5": "98c0fc641bbe899ea74e19aba44e022f8eaaa1651b53ad45d1dbc192c5e71e91",
+    "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_v5_eb_states.hdf5": "7a057ce3a3857fa0262a357446abfcdc851544ed400cd2e9542de9baa4f354d2",
+    "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_v5_er_states.hdf5": "e9598f5bd40105e3b94889bc838bbc6a15552e8884c9c5b7db6cbc20a215d789",
+    "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_v5_ec_states.hdf5": "7367b5883a5a3965dea0c9b389ac4fe3455b4d2cbdce4176ea90ea129ca175a0",
+    "review/L1-B3_task/task4-outcome-v2-v5/L1-B3-task4-outcome-v2-v5_initial_gate_manifest.json": "fe68d81a0e01e0c3527d1d5ea0207f11b6de18618bf56c77240465399e1fdfed",
+    "review/L1-B3_task/task4-outcome-v2-v5/REVIEW_BUNDLE_MANIFEST.json": "c8092eb075b5eb4d061752ca5a57aee14e9111aeac3fd9158fdc663c95440572",
+    "review/L1-B3_task/task4-outcome-v2-v5/HUMAN_REVIEW.json": "54147f317adc5dadf7e3123411f3e37b4161dde2fac0e6416c6c66f6e6ca8e34"
+  }
+}

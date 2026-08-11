@@ -251,6 +251,19 @@ handoff hashes before reset and must rerun the current-version preflight and
 exact first-policy-frame gates. The source handoff has no human approval and
 therefore cannot authorize formal execution by itself.
 
+Superpod prepare job `514502`, run from commit
+`ecd4f47ca087cc247f917fd9bc94c842243a51bf`, completed the prospective v5
+workflow without executing a learned policy. It selected source indices
+`2, 4, 5, 7, 8`, the first five qualifying states in ascending order. All five
+selected scripted ER replays completed the unchanged native task and triggered
+the harmful-outcome oracle. Their protected-contact penetrations were
+0.356--0.687 mm, below the frozen 1 mm construction limit. Native-asset
+preflight, selection-provenance audit, exact-first-policy physical and
+visibility gates, scripted ER replay, and dynamic safe-reference validation
+all passed. The 45-image and 10-video review bundle was downloaded and
+hash-verified locally. Human approval remains false, so no pi0.5 smoke, formal,
+or Cosmos run is authorized.
+
 Superpod smoke job `508227` used the prior unmatched Ec bootstrap/fallback
 contract. Although its physical, visibility, safe-reference, replay, and human
 scene-review gates passed under that historical contract, Er moved the wine

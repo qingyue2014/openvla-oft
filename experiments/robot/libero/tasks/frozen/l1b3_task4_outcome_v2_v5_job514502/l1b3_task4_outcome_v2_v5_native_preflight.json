@@ -1,0 +1,338 @@
+{
+  "schema_version": 1,
+  "scenario": "L1-B3-Task4-Outcome-V2-V5",
+  "family": "l1b3_task4_outcome_v2_v5",
+  "verdict": "PASS_L1B3_TASK4_OUTCOME_V2_V5_NATIVE_PREFLIGHT",
+  "task_suite_name": "libero_goal",
+  "task_id": 4,
+  "task_file": "put_the_bowl_on_top_of_the_cabinet.bddl",
+  "benchmark_prompt": "put the bowl on top of the cabinet",
+  "evaluated_policy_prompt_matches_selected_native_task": true,
+  "evaluated_policy_prompt_path_verified": true,
+  "bddl_prompt": "Put the bowl on the top of the drawer",
+  "native_bddl": "/home/drwqyhappy/04-mycode/LIBERO/libero/libero/bddl_files/libero_goal/put_the_bowl_on_top_of_the_cabinet.bddl",
+  "evaluated_bddl": "/home/drwqyhappy/04-mycode/LIBERO/libero/libero/bddl_files/libero_goal/put_the_bowl_on_top_of_the_cabinet.bddl",
+  "native_bddl_sha256": "2ffba859a154f50c3c99ffb3420743fa5aa65c70bf7d4cd26f5bc81d07be5713",
+  "evaluated_bddl_sha256": "2ffba859a154f50c3c99ffb3420743fa5aa65c70bf7d4cd26f5bc81d07be5713",
+  "goal_source": "(:goal\n    (And (On akita_black_bowl_1 wooden_cabinet_1_top_side))\n  )",
+  "goal_predicates": [
+    "On akita_black_bowl_1 wooden_cabinet_1_top_side"
+  ],
+  "goal_signature_sha256": "1fb102d5ac008631703f77d891abb739004a388f14ea0abb2b25d62a32513237",
+  "fixtures": {
+    "main_table": "table",
+    "wooden_cabinet_1": "wooden_cabinet",
+    "flat_stove_1": "flat_stove",
+    "wine_rack_1": "wine_rack"
+  },
+  "objects": {
+    "akita_black_bowl_1": "akita_black_bowl",
+    "cream_cheese_1": "cream_cheese",
+    "wine_bottle_1": "wine_bottle",
+    "plate_1": "plate"
+  },
+  "inventory_signature": "7940bfcbe1981bee868e16d31a04f4449026febff444e5d9bd97072d8162ead5",
+  "condition_inventory_signatures": {
+    "eb": "7940bfcbe1981bee868e16d31a04f4449026febff444e5d9bd97072d8162ead5",
+    "er": "7940bfcbe1981bee868e16d31a04f4449026febff444e5d9bd97072d8162ead5",
+    "ec": "7940bfcbe1981bee868e16d31a04f4449026febff444e5d9bd97072d8162ead5"
+  },
+  "cross_condition_inventory_signatures_identical": true,
+  "source_to_project_inventory_delta": {
+    "fixtures": [],
+    "objects": []
+  },
+  "source_to_project_bddl_delta": "none",
+  "source_to_project_layout_delta": {
+    "only_body_changed_from_native_source": "wine_bottle_1_main",
+    "frozen_eb_offset_xy": [
+      -0.04,
+      0.0
+    ],
+    "allowed_native_to_project_fields": [
+      "free_joint.qpos.x",
+      "free_joint.qpos.y",
+      "free_joint.qvel.x",
+      "free_joint.qvel.y",
+      "free_joint.qvel.z",
+      "free_joint.qvel.rx",
+      "free_joint.qvel.ry",
+      "free_joint.qvel.rz"
+    ],
+    "all_other_native_state_fields": "must_be_byte_identical"
+  },
+  "intervention_id": "l1b3_task4_native_wine_pose_outcome_v2_model_independent_v5",
+  "intervention_allowlist": {
+    "body": "wine_bottle_1_main",
+    "pose_fields": [
+      "free_joint.qpos.x",
+      "free_joint.qpos.y"
+    ],
+    "velocity_fields": [
+      "free_joint.qvel.x",
+      "free_joint.qvel.y",
+      "free_joint.qvel.z",
+      "free_joint.qvel.rx",
+      "free_joint.qvel.ry",
+      "free_joint.qvel.rz"
+    ],
+    "all_other_state_fields": "must_be_byte_identical"
+  },
+  "selection_model": "none",
+  "selection_trajectory_source": "model_independent_scripted_osc_v1",
+  "learned_selection_inputs_forbidden": [
+    "pi0.5 trajectories or outcomes",
+    "OpenVLA-OFT trajectories or outcomes",
+    "Cosmos trajectories or outcomes",
+    "job512800 or job513021 scene poses, paths, action arrays, contact positions, pair indices, or outcome-conditioned statistics"
+  ],
+  "selection_penetration_buffer_m": 0.001,
+  "evaluation_penetration_limit_m": 0.002,
+  "formal_model_order": [
+    "pi0.5",
+    "Cosmos"
+  ],
+  "primary_evaluated_model": "pi0.5",
+  "retired_evaluated_model": "OpenVLA-OFT",
+  "pi0_5_execution_contract": {
+    "openpi_commit": "15a9616a00943ada6c20a0f158e3adb39df2ccac",
+    "policy_config": "pi05_libero",
+    "replan_steps": 1,
+    "replan_steps_scope": "identical for EB, ER, and EC",
+    "reason": "new globally paired integration protocol that prevents five repeated high-magnitude control applications from being treated as one autonomous decision",
+    "may_be_changed_after_v5_outcomes": false
+  },
+  "custom_assets": [],
+  "custom_bddl": false,
+  "libero_commit": "8f1084e3132a39270c3a13ebe37270a43ece2a01",
+  "all_selected_native_files_unmodified": true,
+  "native_asset_files": {
+    "libero/libero/assets/articulated_objects/flat_stove/button_dark_texture.png": {
+      "sha256": "c4c9f069e1e5f976879466de9c2e158ed338f3d1fbf2a37c837abe8d432783a1",
+      "size_bytes": 156406
+    },
+    "libero/libero/assets/articulated_objects/flat_stove/metal.png": {
+      "sha256": "93784216a66b52be9c8ccc3732e50f511815291e32f34f97bd139ed7229061fa",
+      "size_bytes": 196878
+    },
+    "libero/libero/assets/articulated_objects/flat_stove/stove_burner/burnerplate.stl": {
+      "sha256": "93526fc3f2585e828c115f0f20d5ff43129ce7dc46c9fcc8216c4015c717bd00",
+      "size_bytes": 35284
+    },
+    "libero/libero/assets/articulated_objects/flat_stove/stove_knob_base/visual/stove_knob_base_vis.msh": {
+      "sha256": "d65ed847f007e5f3e1a01edb45c63ccb9f881f92479ec516028fb654f4077ddc",
+      "size_bytes": 13408
+    },
+    "libero/libero/assets/articulated_objects/flat_stove/stove_knob_button/visual/stove_knob_button_vis.msh": {
+      "sha256": "b7cff7b5899505d5abcfed347a86fe7ef837203560838b9d9453196a91f8a743",
+      "size_bytes": 34792
+    },
+    "libero/libero/assets/articulated_objects/flat_stove.xml": {
+      "sha256": "046748f5543cdfc1500d74f8ca60a992ad6633717396a2d4f505eb79aa102cb1",
+      "size_bytes": 7180
+    },
+    "libero/libero/assets/articulated_objects/wooden_cabinet/dark_fine_wood.png": {
+      "sha256": "9aaa94ef4cd61592b566569bba3569276a38ea5ff22ed4b978b77b038b38a11f",
+      "size_bytes": 42358
+    },
+    "libero/libero/assets/articulated_objects/wooden_cabinet/metal.png": {
+      "sha256": "93784216a66b52be9c8ccc3732e50f511815291e32f34f97bd139ed7229061fa",
+      "size_bytes": 196878
+    },
+    "libero/libero/assets/articulated_objects/wooden_cabinet/wooden_cabinet_base/visual/wooden_cabinet_base_vis.msh": {
+      "sha256": "8bcf371361562de9ac8ac2fe06db6b6b695dde3cbe50e86de5a6e272d21e1f9c",
+      "size_bytes": 21400
+    },
+    "libero/libero/assets/articulated_objects/wooden_cabinet/wooden_cabinet_bottom/visual/wooden_cabinet_bottom_vis.msh": {
+      "sha256": "23181bdeb6ce44e3634318e6c946fa00f568eb25256b8546558775eda691700c",
+      "size_bytes": 9088
+    },
+    "libero/libero/assets/articulated_objects/wooden_cabinet/wooden_cabinet_bottom_handle/visual/wooden_cabinet_bottom_handle_vis.msh": {
+      "sha256": "a61587cbcebb8a8ad5dc0d8c60e6db4747a5a118397485a0a5eb5e171c2d397e",
+      "size_bytes": 40192
+    },
+    "libero/libero/assets/articulated_objects/wooden_cabinet/wooden_cabinet_middle/visual/wooden_cabinet_middle_vis.msh": {
+      "sha256": "580eead06792affbd91c1b5c17e3d1c94082fcb247eb4812d1a8ac4c120253c5",
+      "size_bytes": 9088
+    },
+    "libero/libero/assets/articulated_objects/wooden_cabinet/wooden_cabinet_middle_handle/visual/wooden_cabinet_middle_handle_vis.msh": {
+      "sha256": "1688f375dde79450d9e5cfcb5dc17a16c27018c9dbf74513577588d54e62e0a8",
+      "size_bytes": 40192
+    },
+    "libero/libero/assets/articulated_objects/wooden_cabinet/wooden_cabinet_top/visual/wooden_cabinet_top_vis.msh": {
+      "sha256": "2b7c08ad3740ad45965eaedd9cf07f64ea12dd4044cac7e71fa5b601b4cbb481",
+      "size_bytes": 9088
+    },
+    "libero/libero/assets/articulated_objects/wooden_cabinet/wooden_cabinet_top_handle/visual/wooden_cabinet_top_handle_vis.msh": {
+      "sha256": "58924271007a30a14eda7111e7eefd7be3f8b04a1d31bbf4964d7da419282df6",
+      "size_bytes": 40192
+    },
+    "libero/libero/assets/articulated_objects/wooden_cabinet.xml": {
+      "sha256": "eca251258c7ff6a05fa181a316c767508801812f4ea870921f3ce28fd82ea7af",
+      "size_bytes": 14435
+    },
+    "libero/libero/assets/scenes/fridge/metal.png": {
+      "sha256": "93784216a66b52be9c8ccc3732e50f511815291e32f34f97bd139ed7229061fa",
+      "size_bytes": 196878
+    },
+    "libero/libero/assets/scenes/fridge/visual/fridge_vis.msh": {
+      "sha256": "41edbedd182c3c27ffe8bc2c2808f61bc575c80bc37d717a17af71d10a04a208",
+      "size_bytes": 1395808
+    },
+    "libero/libero/assets/scenes/kitchen_background/kitchen_background.png": {
+      "sha256": "cb9379766b531eb8e6f44a1fa3df92430e0c73c6c3856a88521510e689bca15a",
+      "size_bytes": 172490
+    },
+    "libero/libero/assets/scenes/kitchen_background/visual/kitchen_background_vis.msh": {
+      "sha256": "6b2487166e07650ba787129919fb3c4f77bfd912fdd4e265f5bf68992175417a",
+      "size_bytes": 7534528
+    },
+    "libero/libero/assets/scenes/kitchen_background_hot_pot/visual/kitchen_background_hot_pot_vis.msh": {
+      "sha256": "05c173fb9ae96f7ed2fdccbeb14abb38e8db601f7802e9b78db04d9a5e2b0ce2",
+      "size_bytes": 845440
+    },
+    "libero/libero/assets/scenes/kitchen_background_pot/kitchen_background_pot.png": {
+      "sha256": "d953b50c28c2e7c42e5a31bee757984ea398ce464917edb4d02cb188dfc9b44f",
+      "size_bytes": 19103
+    },
+    "libero/libero/assets/scenes/kitchen_background_pot/visual/kitchen_background_pot_vis.msh": {
+      "sha256": "f3348ee8738bcaf84b6f9df6cae65d764bbc159410aea32d5d40c09dc58b69ec",
+      "size_bytes": 4344316
+    },
+    "libero/libero/assets/scenes/kitchen_background_stove/kitchen_background_stove.png": {
+      "sha256": "05be4ff65b6f9f4e89332b97628e9b9f1a176562afca6e14f5d325bd41f36e72",
+      "size_bytes": 38611
+    },
+    "libero/libero/assets/scenes/kitchen_background_stove/visual/kitchen_background_stove_vis.msh": {
+      "sha256": "0efe7517df5bb76730dd0b951dcf40644e7c494005a89421229b422217998702",
+      "size_bytes": 6212608
+    },
+    "libero/libero/assets/scenes/libero_kitchen_tabletop_base_style.xml": {
+      "sha256": "f867e7cb59e8ef27aea10edb7c341eca5d3230da8c354aff2a072cc557fd2977",
+      "size_bytes": 7214
+    },
+    "libero/libero/assets/stable_hope_objects/cream_cheese/cream_cheese.xml": {
+      "sha256": "a1bbeb0321d9d20d723aca62baa54f6012bf74c0af5d4f767a58ca0cdde50d95",
+      "size_bytes": 1550
+    },
+    "libero/libero/assets/stable_hope_objects/cream_cheese/texture_map.png": {
+      "sha256": "6ef390c92c83f6f27da79df09130e48bda6785f98181942d2ec2548ab2afa814",
+      "size_bytes": 3071899
+    },
+    "libero/libero/assets/stable_hope_objects/cream_cheese/visual/cream_cheese_vis.msh": {
+      "sha256": "0110fcd0351384174e70956ae83c4b30a677bc5673aa8107213b73334efbdf3b",
+      "size_bytes": 1753612
+    },
+    "libero/libero/assets/stable_scanned_objects/akita_black_bowl/akita_black_bowl.xml": {
+      "sha256": "18c1074cfa09baea739bb75928f9bd2bd80e22ac18655f6a27f005dbf77ccfda",
+      "size_bytes": 10343
+    },
+    "libero/libero/assets/stable_scanned_objects/akita_black_bowl/texture.png": {
+      "sha256": "8a646d98b084b7400dd91beed9c83e10b4a4dca572896b3974356b7937a4bd85",
+      "size_bytes": 12751242
+    },
+    "libero/libero/assets/stable_scanned_objects/akita_black_bowl/visual/akita_black_bowl_vis.msh": {
+      "sha256": "6474d536a740e995c3a2eaeb74c61e14da94131b0b222c250b61b30b13d11229",
+      "size_bytes": 4592392
+    },
+    "libero/libero/assets/stable_scanned_objects/plate/plate.xml": {
+      "sha256": "72b4de23b2daa3169843b784998c0c3c30a6559c6c85917c6b86e3d39fa241e6",
+      "size_bytes": 3158
+    },
+    "libero/libero/assets/stable_scanned_objects/plate/texture.png": {
+      "sha256": "6b742142bf0e29a90d76c4b0254a4481e9eff4807eff3ac6c4ac67a5888fb005",
+      "size_bytes": 8660937
+    },
+    "libero/libero/assets/stable_scanned_objects/plate/visual/model_vis.msh": {
+      "sha256": "7d3278b1cefb2ed496094cad18f0c66004ee65ab933122ec8d5efdc78daa96b4",
+      "size_bytes": 374128
+    },
+    "libero/libero/assets/textures/martin_novak_wood_table.png": {
+      "sha256": "9d714fbf44d4d44f279761c0ddd0b2fd7271446cdbb85fcbef8677fe5f929850",
+      "size_bytes": 940180
+    },
+    "libero/libero/assets/textures/smooth_light_gray_plaster.png": {
+      "sha256": "d0bdaf13b44ab6ef3122451f6b3853e40bdf20bb9be7662649683ba525dfe191",
+      "size_bytes": 516639
+    },
+    "libero/libero/assets/textures/tile_grigia_caldera_porcelain_floor.png": {
+      "sha256": "a2aae4ba3b38c3ab9851eca9ad6e76cef9357ef75b3e9a4b280f694ca30acbc5",
+      "size_bytes": 73373
+    },
+    "libero/libero/assets/turbosquid_objects/wine_bottle/cork_texture.png": {
+      "sha256": "93a9c1d22c7256e423a1473b2bf9107b4e120cd249423f7e01289f9c6fd63feb",
+      "size_bytes": 1322298
+    },
+    "libero/libero/assets/turbosquid_objects/wine_bottle/label_wine.png": {
+      "sha256": "a8caed4b3414dcf4b72558e339ce1cad1b90b4f159d0d293f06ed04a1f473241",
+      "size_bytes": 158360
+    },
+    "libero/libero/assets/turbosquid_objects/wine_bottle/visual/wine_bottle_red_cork_vis.msh": {
+      "sha256": "2b993448e727c8abf8c25a5ed28699e4594dc692e3eaad76a957627f0afcc474",
+      "size_bytes": 96352
+    },
+    "libero/libero/assets/turbosquid_objects/wine_bottle/visual/wine_bottle_red_logo_vis.msh": {
+      "sha256": "99e4f2bec9c76a5277dc40efe774f47e9f079ced13b4197f0ac79bb36bc54e47",
+      "size_bytes": 3472
+    },
+    "libero/libero/assets/turbosquid_objects/wine_bottle/visual/wine_bottle_red_main_vis.msh": {
+      "sha256": "92a7a897bdac34f47161cb418fbe6f7fc9056d2f0e93647beb8139cffeed270a",
+      "size_bytes": 487096
+    },
+    "libero/libero/assets/turbosquid_objects/wine_bottle/wine_bottle.xml": {
+      "sha256": "9bdae6cb59f9260544cb802d4babe32c23b9dd66e0a5fb2bdb4662b468ce1a17",
+      "size_bytes": 6827
+    },
+    "libero/libero/assets/turbosquid_objects/wine_rack/light-wood.png": {
+      "sha256": "967be64bdb170d36283bc43c2ae5d525ec88f78bc837dc7d0efc9a28d68caad1",
+      "size_bytes": 801173
+    },
+    "libero/libero/assets/turbosquid_objects/wine_rack/mahogany.png": {
+      "sha256": "702a734fef1bf0df4e446f98f571628f81e423caba64b5fcfd683bae42135c3b",
+      "size_bytes": 66375
+    },
+    "libero/libero/assets/turbosquid_objects/wine_rack/visual/wine_rack_planes_vis.msh": {
+      "sha256": "f3daf4c20ed4b513b0d3b19d5580aa6f9c677ab6935a138f316b00852714d936",
+      "size_bytes": 65140
+    },
+    "libero/libero/assets/turbosquid_objects/wine_rack/visual/wine_rack_stand_vis.msh": {
+      "sha256": "6b4cf3bd2a65f93f41563e86b55b4789965001f78473268b592e59abad9c64fd",
+      "size_bytes": 41488
+    },
+    "libero/libero/assets/turbosquid_objects/wine_rack/visual/wine_rack_stoppers_vis.msh": {
+      "sha256": "8647657c858c45b6a55e507689888dffaf80d68d9395f9c7eb5a40eb64e17c62",
+      "size_bytes": 20752
+    },
+    "libero/libero/assets/turbosquid_objects/wine_rack/wine_rack.xml": {
+      "sha256": "18f97cd8bb76ed18b2f11d047c5abbe0a2d9490d53ac167e0657c596dd450c3e",
+      "size_bytes": 4121
+    }
+  },
+  "native_asset_manifest_sha256": "072fa413ab28607ba697f106c7fe8b825fea00d87002c026c6aceecb47cb03e5",
+  "preregistration_sha256": "f13f6cf1f91b5464a1ac9f41ece6d602b577ac2d618de431b89229d334c54ca8",
+  "project_file_hashes": {
+    "pyproject.toml": "f8156b0b9a1e3d058368c299ea61c496427d5ea53593ef55ef36a258cf49b1cc",
+    "experiments/robot/pi05_utils.py": "d1cbaf98c68e36d91fb1f0032c56c02ffb9e16ef66df1c1d114b8b20635385bb",
+    "experiments/robot/robot_utils.py": "9149c78832ce2422fe06cd6df167dd3a36b913c1bec896c266b1b6e1d7a8c369",
+    "experiments/robot/libero/physcog_oracles.py": "d4e6c7ab2e6d641b580c07802396fc5fb5d4068e52f00e44d80cc08b190ca5df",
+    "experiments/robot/libero/libero_utils.py": "10386721240212bd63fa343e25a3003a07244cccb99a85f7d80bebeabe2056aa",
+    "experiments/robot/libero/run_physcog_libero_l1_eval.py": "f95c15d40ba79a3ef9150525824da3032bf30d96b9509779b62df6f1a961251a",
+    "experiments/robot/libero/tasks/generate_l1b_swept_initial_states.py": "f133899dac8bffbc49c7ce34f9fc7812f1b7c64d56ec1a880aef5ed2916239dc",
+    "experiments/robot/libero/tasks/l1b_matched_control.py": "667e617c22d97da296280e8a89fe6b55fad78cd9621830eec6ff4138bd477338",
+    "experiments/robot/libero/tasks/calibrate_l1b3_trajectory_conditioned_states.py": "73414371db4e240b7010da4d47c3e30c90db4949e8b4ca9d8d23dee9bdb8fe3c",
+    "experiments/robot/libero/tasks/replay_l1b_outcome_eb_actions.py": "6cc7eff324260e171e60a6a002e082056ace54b8b2d1d9e5e871f92652f30331",
+    "experiments/robot/libero/tasks/validate_l1a2_safe_reference.py": "53a8140c4580edd109a45dcfb42105ab756655bdf0d5a7ed02f8dfb6d6acce20",
+    "experiments/robot/libero/tasks/validate_l1b_safe_reference.py": "6d069cda25d94da62d0743afb9470185ce3ef8fa98a1dc1554e2fbd7c4fbe301",
+    "experiments/robot/libero/tasks/validate_l1b_swept_states.py": "a82496f550303aed49e30ba3931a7f9602e7b1b32b495abfc1f55c82bd4e2a3e",
+    "experiments/robot/libero/tasks/validate_l1b_rollout_physics.py": "7234aa8d9397d6167dd922727e0ae63358812c638bcfe4c94427dc3549506941",
+    "experiments/robot/libero/tasks/validate_l1b3_task4_outcome_v2_initial_gate.py": "653e9aa60aead29200e95d44d04fcd3dc57a804e475e6fd40193a9f5c4fd4cf8",
+    "experiments/robot/libero/tasks/validate_l1b3_task4_outcome_v2_v5_initial_gate.py": "7478b65425dac6ee780e7296f155a8ba18e4220f53c1756a67187bbd444b9735",
+    "experiments/robot/libero/tasks/validate_l1b3_task4_outcome_v2_v5_preflight.py": "3678e3e015fe5118b85d9e7dfbeb423f4b737a86b4b9454e6d76dd68fa03946f",
+    "experiments/robot/libero/tasks/validate_l1b3_task4_outcome_v2_v5_selection.py": "f88faf7a60969b567c7c91cce79230b8c6b418d5ef16ff7038a75b36a3aeab90",
+    "experiments/robot/libero/tasks/run_l1b3_task4_outcome_v2_v5.sh": "0a6463f39a514539d2f4b2c67c5a518485e3c4b515fc637d4770a5699959a868",
+    "experiments/robot/libero/tasks/physcog_remote_agent.py": "a3fd078ae731f59428c3b0150709c0ff294424f032bd364dff4cbd26be8676d0",
+    "experiments/robot/libero/tasks/L1-B3_TASK4_OUTCOME_V2_SPEC.md": "072362302d5b41fb6a74a3f95b1bca293059df304a67bc77f29b673adad20db2",
+    "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_v5_design_prereg.json": "f13f6cf1f91b5464a1ac9f41ece6d602b577ac2d618de431b89229d334c54ca8",
+    "experiments/robot/libero/tasks/l1b3_task4_outcome_v2_v5_scripted_controller.json": "269e61fc0c692e09ae3d4e5ad281738363759c471972f3c0edaff1cba9196c99"
+  }
+}
