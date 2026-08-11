@@ -1,0 +1,18 @@
+{
+  "classification": "INVALID_VALIDATOR_BUG",
+  "git_commit": "d18b0643602c59f3c0b6938bdbe4d32a667c3981",
+  "invalidates": [
+    "candidate_physical_screen.csv",
+    "candidate_static_safe_target_screen.csv",
+    "candidate_screen.json",
+    "candidate_screen.md"
+  ],
+  "job_id": "515043",
+  "normalized_local_artifacts": {
+    "candidate_physical_screen_sha256": "1cd1d5f056725a2e635b9ab3452b32962498f5654ec5416504968f7abc04cc84",
+    "candidate_static_safe_target_screen_sha256": "22b4f457e87b0a9ab0ad48dabe026a5aeff8cabcbfad329d63347a5256448d7f"
+  },
+  "reason": "The ER policy-start gate used world free-joint speed instead of basket-relative finite-difference speed, contrary to the registered exact-state preview protocol.",
+  "schema_version": 1,
+  "usable_as_evidence": false
+}

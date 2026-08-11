@@ -153,6 +153,8 @@ def test_l1c5_model_informed_screen_is_non_policy_and_fail_closed_locally():
     assert "NUMBA_CACHE_DIR" in runner
     assert "wait_max_relative_linear_speed" in screen
     assert "control_timestep" in screen
+    assert "target_max_tilt_metric_deg" in screen
+    assert "target_native_up" in screen
     assert "WebsocketClientPolicy" not in screen
     assert "run_physcog_libero_l1_eval" not in screen
 
@@ -176,6 +178,13 @@ def test_l1c5_model_informed_candidates_are_authorized_and_pre_er():
         "post_release_xy_displacement_limit_enabled"
     ] is False
     assert candidates["selection_status"].startswith("PENDING_SUPERPOD_")
+    assert candidates["candidate_set_id"].endswith("R2-20260811")
+    assert candidates["revision_2_non_policy_calibration_evidence"][
+        "learned_ER_or_EC_outcomes_used"
+    ] is False
+    assert candidates["ordered_candidates_for_superpod_physical_screen"][0][
+        "paired_safe_offset_xy_m"
+    ] == [0.0, -0.035]
 
 
 @pytest.mark.parametrize(

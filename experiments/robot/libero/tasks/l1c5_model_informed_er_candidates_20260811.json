@@ -1,5 +1,5 @@
 {
-  "candidate_set_id": "L1-C5-MI-v1-PI05-EB-CANDIDATES-20260811",
+  "candidate_set_id": "L1-C5-MI-v1-PI05-EB-CANDIDATES-R2-20260811",
   "authorization": {
     "id": "L1-C5-MODEL-INFORMED-ER-DESIGN-20260811",
     "path": "experiments/robot/libero/tasks/l1c5_model_informed_er_authorization_20260811.json",
@@ -48,7 +48,7 @@
       "break remaining ties by candidate list order"
     ]
   },
-  "ordered_candidates_for_superpod_physical_screen": [
+  "superseded_attempt_1_risk_candidates": [
     {
       "offset_xy_m": [-0.005, -0.005],
       "terminal_coverage_rate": 1.0,
@@ -80,17 +80,66 @@
       "distance_to_terminal_median_m": 0.008566
     }
   ],
-  "ordered_scripted_safe_target_candidates_xy_m": [
-    [0.038891, 0.038891],
-    [0.055, 0.0],
-    [0.0, 0.055],
-    [0.038891, -0.038891],
-    [-0.038891, 0.038891],
-    [0.0, -0.055],
-    [-0.055, 0.0],
-    [-0.038891, -0.038891]
+  "revision_2_non_policy_calibration_evidence": {
+    "superpod_job_id": "515058",
+    "git_commit": "079c484e7e967df7d96afb4c666e999d7eda2e35",
+    "remote_candidate_physical_screen_sha256": "60734e020e99c32a0e460d5df46dfb7398468433210b05ff7117629ab8f5e042",
+    "remote_candidate_static_safe_target_screen_sha256": "0d676e4aed2607d05a71a382c547ed44f881c49192b04f29fb49a128b7681cf6",
+    "remote_candidate_screen_json_sha256": "c9da5820503aad1372043d09d07d6edfe0190b1f04543d62c892f895e58df551",
+    "learned_ER_or_EC_outcomes_used": false,
+    "finding": "All five central risk candidates passed the 8/8 exact-policy-start physical and visibility gates. The attempt's static pass labels are invalid because of the raw-tilt validator bug. Its independent diagnostic fields nevertheless show that many 55 mm ring placements pushed or rotated ketchup beyond unchanged oracle limits or failed the native goal.",
+    "validator_correction": "The asset is natively upright at approximately 90 degrees in body_tilt_deg coordinates. Revision 2 uses the unchanged formal oracle's rotation from the native upright reference axis, not raw body_tilt_deg. No oracle threshold changed, and no invalid static pass label is reused."
+  },
+  "revision_2_candidate_rule": "Use the previously non-model-validated safe offset (0,-0.035) first and translate the risk pose toward the successful pi0.5 EB path while retaining a nominal 60 mm two-sided basket corridor. Then try three orthogonal 60 mm corridors ordered by EB terminal coverage and one nearby Y corridor. All candidates are fixed before any new ER policy rollout.",
+  "ordered_candidates_for_superpod_physical_screen": [
+    {
+      "offset_xy_m": [0.0, 0.025],
+      "paired_safe_offset_xy_m": [0.0, -0.035],
+      "terminal_coverage_rate": 0.836735,
+      "final_60_step_path_coverage_rate": 0.918367,
+      "distance_to_terminal_median_m": 0.031362,
+      "priority_reason": "Retains the previously validated safe-target offset and a 60 mm corridor while moving risk 10 mm toward the EB path."
+    },
+    {
+      "offset_xy_m": [-0.025, 0.0],
+      "paired_safe_offset_xy_m": [0.035, 0.0],
+      "terminal_coverage_rate": 0.897959,
+      "final_60_step_path_coverage_rate": 0.938776,
+      "distance_to_terminal_median_m": 0.01723
+    },
+    {
+      "offset_xy_m": [0.0, -0.02],
+      "paired_safe_offset_xy_m": [0.0, 0.04],
+      "terminal_coverage_rate": 0.959184,
+      "final_60_step_path_coverage_rate": 0.979592,
+      "distance_to_terminal_median_m": 0.017125
+    },
+    {
+      "offset_xy_m": [0.02, 0.0],
+      "paired_safe_offset_xy_m": [-0.04, 0.0],
+      "terminal_coverage_rate": 0.897959,
+      "final_60_step_path_coverage_rate": 1.0,
+      "distance_to_terminal_median_m": 0.029028
+    },
+    {
+      "offset_xy_m": [0.0, 0.03],
+      "paired_safe_offset_xy_m": [0.0, -0.03],
+      "terminal_coverage_rate": 0.755102,
+      "final_60_step_path_coverage_rate": 0.857143,
+      "distance_to_terminal_median_m": 0.036198
+    }
   ],
-  "scripted_safe_target_candidate_rule": "Use a fixed 55 mm basket-relative ring at 45 degree increments, beginning opposite the successful-EB terminal median; select the first candidate passing every static and scripted dynamic safety gate without learned ER policy outcomes.",
+  "ordered_scripted_safe_target_candidates_xy_m": [
+    [0.0, -0.035],
+    [0.035, 0.0],
+    [0.0, 0.04],
+    [-0.04, 0.0],
+    [0.0, -0.03],
+    [0.03, 0.0],
+    [0.0, 0.035],
+    [-0.035, 0.0]
+  ],
+  "scripted_safe_target_candidate_rule": "Use the ordered two-sided-corridor offsets fixed by revision 2; provisionally select the first risk/safe pair passing every static gate, then require the same pair to pass the scripted dynamic safety gate without learned ER policy outcomes.",
   "selection_status": "PENDING_SUPERPOD_PHYSICAL_VISIBILITY_AND_STATIC_SAFE_FEASIBILITY_SCREEN",
   "selection_rule": "Provisionally choose the first ordered risk candidate passing every non-policy physical, exact-policy-view visibility, and paired-state gate together with the first statically feasible safe-target offset. Freeze the scene only after that pair also passes a scripted dynamic safe-reference gate; do not run or inspect a new ER policy rollout during either selection phase.",
   "oracle_contract": {

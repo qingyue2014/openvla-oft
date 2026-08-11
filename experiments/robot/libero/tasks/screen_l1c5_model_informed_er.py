@@ -43,7 +43,7 @@ EXPECTED_AUTHORIZATION_SHA256 = (
     "15d636be1ed64437be5920cc730a753d665a3b2187c6136f1b65bf7f9486f165"
 )
 EXPECTED_CANDIDATE_SET_SHA256 = (
-    "79778ddd9532fab8adece094a4c862dcb30de7f67a3e83600126f24e4dfc7094"
+    "1ab9bd9349b1ea3fcc6e894f2f15395f22f093bdcccee45bab7922bf326bcde5"
 )
 
 
@@ -307,6 +307,10 @@ def _static_safe_target(env, variant_state, spec, safe_offset, args):
     occupant_relative0, occupant_rotation0 = _body_pose_relative_to_anchor(
         env, spec.occupant_body, spec.anchor_body
     )
+    target_body_id = env.sim.model.body_name2id(spec.target_body)
+    target_native_up = np.asarray(
+        env.sim.data.body_xmat[target_body_id], dtype=float
+    ).reshape(3, 3)[:, 2].copy()
     place_at_anchor(env, spec, spec.target_body, safe_offset)
     max_occupant_drift = 0.0
     max_occupant_rotation = 0.0
@@ -325,7 +329,8 @@ def _static_safe_target(env, variant_state, spec, safe_offset, args):
         )
 
     stable_window = 0
-    max_target_tilt = 0.0
+    max_target_tilt_metric = 0.0
+    max_target_raw_tilt = 0.0
     max_target_linear_speed = 0.0
     max_target_angular_speed = 0.0
     min_clearance = float("inf")
@@ -348,7 +353,21 @@ def _static_safe_target(env, variant_state, spec, safe_offset, args):
                 occupant_rotation, occupant_rotation0
             ),
         )
-        target_tilt = body_tilt_deg(env, spec.target_body)
+        target_raw_tilt = body_tilt_deg(env, spec.target_body)
+        target_mat = np.asarray(
+            env.sim.data.body_xmat[target_body_id], dtype=float
+        ).reshape(3, 3)
+        target_tilt_metric = float(
+            np.degrees(
+                np.arccos(
+                    np.clip(
+                        np.dot(target_mat[:, 2], target_native_up),
+                        -1.0,
+                        1.0,
+                    )
+                )
+            )
+        )
         linear_speed, angular_speed = body_speeds(env, spec.target_body)
         clearance = float(
             np.linalg.norm(
@@ -358,7 +377,10 @@ def _static_safe_target(env, variant_state, spec, safe_offset, args):
         )
         in_goal = body_in_anchor_region(env, spec, spec.target_body)
         support = _body_contact(env, spec.target_body, spec.anchor_body)
-        max_target_tilt = max(max_target_tilt, target_tilt)
+        max_target_tilt_metric = max(
+            max_target_tilt_metric, target_tilt_metric
+        )
+        max_target_raw_tilt = max(max_target_raw_tilt, target_raw_tilt)
         max_target_linear_speed = max(max_target_linear_speed, linear_speed)
         max_target_angular_speed = max(
             max_target_angular_speed, angular_speed
@@ -367,7 +389,7 @@ def _static_safe_target(env, variant_state, spec, safe_offset, args):
         full_window_inside &= in_goal
         full_window_support &= support
         stable_now = bool(
-            target_tilt <= spec.max_target_tilt_deg
+            target_tilt_metric <= spec.max_target_tilt_deg
             and linear_speed <= spec.max_target_final_linear_speed
             and angular_speed <= spec.max_target_final_angular_speed
             and in_goal
@@ -381,7 +403,7 @@ def _static_safe_target(env, variant_state, spec, safe_offset, args):
         and max_occupant_drift <= spec.max_occupant_displacement
         and max_occupant_rotation <= spec.max_occupant_tilt_change_deg
         and min_clearance >= spec.min_target_clearance
-        and max_target_tilt <= spec.max_target_tilt_deg
+        and max_target_tilt_metric <= spec.max_target_tilt_deg
         and max_target_linear_speed <= spec.max_target_final_linear_speed
         and max_target_angular_speed <= spec.max_target_final_angular_speed
         and full_window_inside
@@ -396,7 +418,8 @@ def _static_safe_target(env, variant_state, spec, safe_offset, args):
         "occupant_max_relative_drift_m": max_occupant_drift,
         "occupant_max_relative_rotation_deg": max_occupant_rotation,
         "target_min_occupant_clearance_m": min_clearance,
-        "target_max_tilt_deg": max_target_tilt,
+        "target_max_tilt_metric_deg": max_target_tilt_metric,
+        "target_max_raw_body_tilt_deg": max_target_raw_tilt,
         "target_max_linear_speed_m_s": max_target_linear_speed,
         "target_max_angular_speed_rad_s": max_target_angular_speed,
         "target_full_window_inside": int(full_window_inside),
@@ -462,9 +485,12 @@ def main() -> None:
     ):
         raise RuntimeError("Candidate set is not pending the registered screen")
 
+    risk_candidates = candidates_record[
+        "ordered_candidates_for_superpod_physical_screen"
+    ]
     risk_offsets = [
         tuple(float(v) for v in row["offset_xy_m"])
-        for row in candidates_record["ordered_candidates_for_superpod_physical_screen"]
+        for row in risk_candidates
     ]
     safe_offsets = [
         tuple(float(v) for v in row)
@@ -526,7 +552,22 @@ def main() -> None:
             physical_pass = all(row["passed"] for row in candidate_rows)
             selected_safe_offset = None
             if physical_pass:
-                for safe_index, safe_offset in enumerate(safe_offsets):
+                paired_safe_offset = tuple(
+                    float(v)
+                    for v in risk_candidates[candidate_index][
+                        "paired_safe_offset_xy_m"
+                    ]
+                )
+                candidate_safe_offsets = [
+                    paired_safe_offset,
+                    *(
+                        offset
+                        for offset in safe_offsets
+                        if offset != paired_safe_offset
+                    ),
+                ]
+                for safe_offset in candidate_safe_offsets:
+                    safe_index = safe_offsets.index(safe_offset)
                     offset_rows = []
                     for episode_idx, variant_state in enumerate(variant_states):
                         row = _static_safe_target(

@@ -1,0 +1,18 @@
+{
+  "classification": "INVALID_STATIC_ORACLE_METRIC",
+  "git_commit": "079c484e7e967df7d96afb4c666e999d7eda2e35",
+  "job_id": "515058",
+  "physical_screen": {
+    "normalized_local_sha256": "8bf6f87ffc233b4ef6b96e8e0291ff4066279e1a2d5fd7c0183973784c4a77d8",
+    "remote_sha256": "60734e020e99c32a0e460d5df46dfb7398468433210b05ff7117629ab8f5e042",
+    "status": "VALID_NON_POLICY_CALIBRATION_ONLY"
+  },
+  "reason": "The static target gate compared raw body_tilt_deg to 10 degrees even though the orange-juice asset's native upright reference is approximately 90 degrees in that coordinate. Static pass labels, the aggregate verdict, and the review images are invalid. Non-tilt diagnostics may be used only as explicitly disclosed non-policy calibration evidence.",
+  "schema_version": 1,
+  "static_screen": {
+    "normalized_local_sha256": "dd2be3ddb8b961c48f943a444d5c274800aeb5d757300a316b761ff88f0e96d1",
+    "remote_sha256": "0d676e4aed2607d05a71a382c547ed44f881c49192b04f29fb49a128b7681cf6",
+    "status": "INVALID_PASS_LABELS_DIAGNOSTICS_ONLY"
+  },
+  "usable_as_formal_evidence": false
+}
