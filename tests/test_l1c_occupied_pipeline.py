@@ -178,6 +178,21 @@ def test_l1c5_ec_replay_requires_exact_paired_outcome_preservation():
     assert rate == pytest.approx(2 / 3)
     assert field == "matched_control"
 
+    amended_rows = [
+        {"safe_success": 0, "matched_control": int(idx != 17)}
+        for idx in range(50)
+    ]
+    passed, rate, field = _ec_replay_gate(spec, amended_rows, 0.98)
+    assert passed
+    assert rate == pytest.approx(0.98)
+    assert field == "matched_control"
+
+    amended_rows[18]["matched_control"] = 0
+    passed, rate, field = _ec_replay_gate(spec, amended_rows, 0.98)
+    assert not passed
+    assert rate == pytest.approx(0.96)
+    assert field == "matched_control"
+
 
 def test_l1c4_runtime_preflight_rejects_libero_90_and_marks_outputs_invalid(
     tmp_path,

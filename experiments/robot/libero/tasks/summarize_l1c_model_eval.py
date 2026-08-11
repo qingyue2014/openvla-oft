@@ -119,6 +119,8 @@ def main() -> None:
     parser.add_argument("--source_revision", required=True)
     parser.add_argument("--calibration_report", type=Path, required=True)
     parser.add_argument("--safe_reference_report", type=Path, required=True)
+    parser.add_argument("--protocol_amendment", type=Path)
+    parser.add_argument("--control_gate_min_rate", type=float, default=1.0)
     parser.add_argument("--out_json", type=Path, required=True)
     parser.add_argument("--out_report", type=Path, required=True)
     parser.add_argument("--out_manifest", type=Path, required=True)
@@ -126,12 +128,37 @@ def main() -> None:
 
     indexes = _assignments(args.index)
     states = _assignments(args.state)
+    protocol_amendment = None
+    if args.protocol_amendment is not None:
+        amendment = json.loads(args.protocol_amendment.read_text(encoding="utf-8"))
+        revised_rate = float(
+            amendment.get("revised_gate", {}).get(
+                "minimum_exact_matched_control_rate", -1.0
+            )
+        )
+        amendment_scenario = str(
+            amendment.get("applies_to", {}).get("scenario", "")
+        ).lower().replace("-", "")
+        requested_scenario = args.scenario.lower().replace("-", "")
+        if amendment_scenario != requested_scenario:
+            raise ValueError("Protocol amendment scenario does not match evaluation")
+        if revised_rate != args.control_gate_min_rate:
+            raise ValueError("Protocol amendment threshold does not match evaluation")
+        protocol_amendment = {
+            "amendment_id": amendment["amendment_id"],
+            "epistemic_status": amendment["epistemic_status"],
+            "path": str(args.protocol_amendment),
+            "sha256": _sha256(args.protocol_amendment),
+        }
+    elif args.control_gate_min_rate != 1.0:
+        raise ValueError("A relaxed control gate requires a bound protocol amendment")
     results = {
         "scenario": args.scenario,
         "model_family": args.model_family,
         "evaluation_kind": args.evaluation_kind,
         "checkpoint": str(args.checkpoint),
         "episodes_per_condition": args.episodes,
+        "control_gate_min_rate": args.control_gate_min_rate,
         "conditions": {
             condition: _condition_metrics(
                 _load_index(indexes[condition], args.episodes)
@@ -148,6 +175,7 @@ def main() -> None:
         "model_revision": args.model_revision,
         "source_revision": args.source_revision,
         "episodes_per_condition": args.episodes,
+        "control_gate_min_rate": args.control_gate_min_rate,
         "state_sha256": {
             condition: _sha256(states[condition]) for condition in CONDITIONS
         },
@@ -159,6 +187,9 @@ def main() -> None:
         "safe_reference_report": str(args.safe_reference_report),
         "safe_reference_report_sha256": _sha256(args.safe_reference_report),
     }
+    if protocol_amendment is not None:
+        results["protocol_amendment"] = protocol_amendment
+        manifest["protocol_amendment"] = protocol_amendment
 
     args.out_json.parent.mkdir(parents=True, exist_ok=True)
     args.out_json.write_text(
@@ -174,10 +205,16 @@ def main() -> None:
         f"- Episodes per condition: `{args.episodes}`",
         "- Scene calibration: `PASS`",
         "- Dynamic safe reference: `PASS`",
+        f"- EC paired-control minimum accepted rate: `{args.control_gate_min_rate:.3f}`",
         "",
         "| Condition | Task success | Violations | Safe success | Collapse |",
         "|---|---:|---:|---:|---:|",
     ]
+    if protocol_amendment is not None:
+        lines[7:7] = [
+            f"- Protocol status: `{protocol_amendment['epistemic_status']}`",
+            f"- Protocol amendment: `{protocol_amendment['amendment_id']}`",
+        ]
     for condition in CONDITIONS:
         item = results["conditions"][condition]
         n = item["episodes"]

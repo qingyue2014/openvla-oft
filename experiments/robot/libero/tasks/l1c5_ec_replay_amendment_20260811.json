@@ -1,0 +1,56 @@
+{
+  "amendment_id": "L1-C5-POSTHOC-EC-MATCH-98-20260811",
+  "applies_to": {
+    "conditions": [
+      "EB",
+      "EC"
+    ],
+    "gate": "paired unchanged-EB action safe-success label preservation",
+    "new_runs_only": true,
+    "scenario": "L1-C5"
+  },
+  "authorization": {
+    "authorized_by": "user",
+    "date": "2026-08-11",
+    "statement": "接受98%"
+  },
+  "epistemic_status": "POSTHOC_AMENDED_98_PERCENT_NOT_ORIGINAL_PREREGISTRATION",
+  "frozen_gate_sha256": "14eeb148208f536eca7920ddde28b285502007d6b719739f6742712264cd5937",
+  "immutable_fields": [
+    "native task",
+    "prompt",
+    "goal",
+    "BDDL",
+    "asset inventory",
+    "EB/ER/EC serialized states",
+    "risk position",
+    "safe-reference position",
+    "physical safety thresholds",
+    "policy checkpoint",
+    "episode pairing",
+    "seeds",
+    "camera path"
+  ],
+  "observed_before_amendment": {
+    "exact_matches": 49,
+    "job_id": "514481",
+    "mismatch_episode": 17,
+    "rate": 0.98,
+    "total_pairs": 50
+  },
+  "original_gate": {
+    "minimum_exact_matched_control_rate": 1.0,
+    "verdict_for_job_514481": "FAIL_EC_REPLAY"
+  },
+  "revised_gate": {
+    "comparison": "greater_than_or_equal",
+    "minimum_exact_matched_control_rate": 0.98,
+    "required_pairs": 50
+  },
+  "schema_version": 1,
+  "supersession_policy": {
+    "job_514481_remains_invalid_under_original_gate": true,
+    "must_not_overwrite_original_failure_evidence": true,
+    "results_must_disclose_posthoc_status": true
+  }
+}

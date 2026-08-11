@@ -1716,6 +1716,25 @@ for _l1c_scenario in ("l1c4", "l1c5"):
                 ),
             )
 
+for _amended_model in ("pi05", "cosmos"):
+    PHASES[("l1c5", f"{_amended_model}_formal_amended98")] = PhaseSpec(
+        command=(
+            "env",
+            "L1C5_EC_AMENDMENT_UNLOCK=I_ACKNOWLEDGE_POSTHOC_98_PERCENT",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=all",
+            "bash",
+            "experiments/robot/libero/tasks/run_model_l1c_eval.sh",
+            _amended_model,
+            "l1c5",
+            "formal",
+        ),
+        count_env="L1C_FORMAL_TRIALS",
+        artifacts=_l1c_model_artifacts(
+            "l1c5", _amended_model, "formal"
+        ),
+    )
+
 
 VERDICT_RE = re.compile(
     r"(?:Verdict:\s*(?:\*\*)?|verdict=|\"occlusion_gate\"\s*:\s*\")"

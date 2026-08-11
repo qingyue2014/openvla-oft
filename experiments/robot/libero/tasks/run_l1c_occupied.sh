@@ -19,6 +19,9 @@ UPPER_SCENARIO="$(printf '%s' "${SCENARIO}" | tr '[:lower:]' '[:upper:]' | sed '
 PIPELINE="experiments/robot/libero/tasks/l1c_occupied_pipeline.py"
 L1C5_FREEZE_VERIFIER="experiments/robot/libero/tasks/verify_l1c5_frozen_gate.py"
 L1C5_FROZEN_GATE_SHA256="14eeb148208f536eca7920ddde28b285502007d6b719739f6742712264cd5937"
+L1C5_EC_AMENDMENT="experiments/robot/libero/tasks/l1c5_ec_replay_amendment_20260811.json"
+L1C5_EC_AMENDMENT_SHA256="bb8beab2c573635742e2bdc2357962596e9873cf64f7c2fed1f968e9f698ded0"
+L1C5_EC_MATCH_MIN_RATE="${L1C5_EC_MATCH_MIN_RATE:-1.0}"
 STATE_DIR="${STATE_DIR:-experiments/robot/libero/tasks}"
 LOG_DIR="${LOG_DIR:-experiments/logs}"
 EB_STATES="${EB_STATES:-${STATE_DIR}/${SCENARIO}_eb_states.hdf5}"
@@ -91,6 +94,20 @@ NATIVE_TASK_ID="$(python -c "from experiments.robot.libero.tasks.l1c_occupied_pi
 if [[ ( "${SCENARIO}" == "l1c4" || "${SCENARIO}" == "l1c5" ) && ! "${NATIVE_SUITE}" =~ ^libero_(spatial|object|goal|10)$ ]]; then
   echo "${UPPER_SCENARIO} must use one of libero_spatial/libero_object/libero_goal/libero_10; got ${NATIVE_SUITE}." >&2
   exit 2
+fi
+if [[ "${SCENARIO}" == "l1c5" && "${L1C5_EC_MATCH_MIN_RATE}" != "1.0" ]]; then
+  if [[ "${L1C5_EC_MATCH_MIN_RATE}" != "0.98" || \
+        "${L1C5_EC_AMENDMENT_UNLOCK:-}" != "I_ACKNOWLEDGE_POSTHOC_98_PERCENT" ]]; then
+    echo "L1-C5 EC replay relaxation requires the explicit post-hoc 98% amendment unlock." >&2
+    exit 2
+  fi
+  test -s "${L1C5_EC_AMENDMENT}"
+  observed_amendment_sha="$(sha256sum "${L1C5_EC_AMENDMENT}" | awk '{print $1}')"
+  if [[ "${observed_amendment_sha}" != "${L1C5_EC_AMENDMENT_SHA256}" ]]; then
+    echo "L1-C5 EC replay amendment hash mismatch." >&2
+    exit 2
+  fi
+  grep -Fq 'POSTHOC_AMENDED_98_PERCENT_NOT_ORIGINAL_PREREGISTRATION' "${L1C5_EC_AMENDMENT}"
 fi
 
 RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"
@@ -318,9 +335,11 @@ run_condition() {
 run_replay() {
   python "${PIPELINE}" replay "${common_state_args[@]}" \
     --condition er --eb_trajectories "${EB_TRAJ}" \
+    --min_ec_safe_rate "${L1C5_EC_MATCH_MIN_RATE}" \
     --out_csv "${ER_REPLAY_CSV}" --out_report "${ER_REPLAY_REPORT}"
   python "${PIPELINE}" replay "${common_state_args[@]}" \
     --condition ec --eb_trajectories "${EB_TRAJ}" \
+    --min_ec_safe_rate "${L1C5_EC_MATCH_MIN_RATE}" \
     --out_csv "${EC_REPLAY_CSV}" --out_report "${EC_REPLAY_REPORT}"
 }
 
@@ -330,6 +349,7 @@ run_analyze() {
     --er_replay_csv "${ER_REPLAY_CSV}" \
     --ec_replay_csv "${EC_REPLAY_CSV}" \
     --safe_reference_csv "${SAFE_REFERENCE_CSV}" \
+    --min_ec_safe_rate "${L1C5_EC_MATCH_MIN_RATE}" \
     --out_csv "${ATTRIBUTION_CSV}" --out_report "${ATTRIBUTION_REPORT}"
   python experiments/robot/libero/tasks/record_experiment_results.py --log_dir "${LOG_DIR}"
   python experiments/robot/libero/tasks/generate_result_tables.py --log_dir "${LOG_DIR}"

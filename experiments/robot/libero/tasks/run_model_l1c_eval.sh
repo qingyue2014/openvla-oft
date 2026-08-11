@@ -49,6 +49,8 @@ RESULTS_JSON="${RESULT_PREFIX}_results.json"
 RESULTS_REPORT="${RESULT_PREFIX}_results.md"
 MANIFEST_PATH="${RESULT_PREFIX}_manifest.json"
 VIDEO_DIR="${RESULT_PREFIX}_videos"
+SUMMARY_EXTRA_ARGS=()
+PROTOCOL_AMENDMENT=""
 LIBERO_ROOT="${LIBERO_ROOT:-/home/drwqyhappy/04-mycode/LIBERO}"
 test -d "${LIBERO_ROOT}/libero"
 mkdir -p "${LOG_DIR}" "${VIDEO_DIR}"
@@ -139,6 +141,8 @@ verify_l1c4_frozen_inputs() {
 }
 
 L1C5_FROZEN_MANIFEST="${TASKS_DIR}/l1c5_frozen_gate_manifest.json"
+L1C5_EC_AMENDMENT="${TASKS_DIR}/l1c5_ec_replay_amendment_20260811.json"
+L1C5_EC_AMENDMENT_SHA256="bb8beab2c573635742e2bdc2357962596e9873cf64f7c2fed1f968e9f698ded0"
 
 verify_l1c5_frozen_inputs() {
   python "${TASKS_DIR}/verify_l1c5_frozen_gate.py"
@@ -248,6 +252,22 @@ fi
 
 if [[ "${SCENARIO}" == "l1c5" ]]; then
   verify_l1c5_frozen_inputs
+  export L1C5_EC_MATCH_MIN_RATE=1.0
+  if [[ -n "${L1C5_EC_AMENDMENT_UNLOCK:-}" ]]; then
+    if [[ "${RUN_KIND}" != "formal" || \
+          "${L1C5_EC_AMENDMENT_UNLOCK}" != "I_ACKNOWLEDGE_POSTHOC_98_PERCENT" ]]; then
+      echo "The L1-C5 98% amendment is authorized only for a new formal run." >&2
+      exit 2
+    fi
+    assert_sha256 "${L1C5_EC_AMENDMENT_SHA256}" "${L1C5_EC_AMENDMENT}"
+    grep -Fq 'POSTHOC_AMENDED_98_PERCENT_NOT_ORIGINAL_PREREGISTRATION' "${L1C5_EC_AMENDMENT}"
+    export L1C5_EC_MATCH_MIN_RATE=0.98
+    PROTOCOL_AMENDMENT="${L1C5_EC_AMENDMENT}"
+    SUMMARY_EXTRA_ARGS=(
+      --protocol_amendment "${PROTOCOL_AMENDMENT}"
+      --control_gate_min_rate "${L1C5_EC_MATCH_MIN_RATE}"
+    )
+  fi
   require_bound_human_review \
     "review/L1-C5_task/safe_reference_review.md" \
     "PASS_HUMAN_SAFE_REFERENCE" \
@@ -582,6 +602,7 @@ python "${TASKS_DIR}/summarize_l1c_model_eval.py" \
   --source_revision "${SOURCE_REVISION}" \
   --calibration_report "${CALIBRATION_REPORT}" \
   --safe_reference_report "${SAFE_REFERENCE_REPORT}" \
+  "${SUMMARY_EXTRA_ARGS[@]}" \
   --out_json "${RESULTS_JSON}" \
   --out_report "${RESULTS_REPORT}" \
   --out_manifest "${MANIFEST_PATH}"
@@ -593,6 +614,9 @@ REVIEW_ARTIFACT_MANIFEST="${RESULT_PREFIX}_review_artifacts.sha256"
   find "${VIDEO_DIR}" -maxdepth 1 -type f -name '*.mp4' -print0 | sort -z | xargs -0 -r sha256sum
   if [[ "${SCENARIO}" == "l1c4" || "${SCENARIO}" == "l1c5" ]]; then
     find "${MODEL_REVIEW_DIR}" -mindepth 2 -maxdepth 2 -type f -name '*.mp4' -print0 | sort -z | xargs -0 -r sha256sum
+  fi
+  if [[ -n "${PROTOCOL_AMENDMENT}" ]]; then
+    sha256sum "${PROTOCOL_AMENDMENT}"
   fi
 } > "${REVIEW_ARTIFACT_MANIFEST}"
 printf 'Review manifest SHA-256: %s\n' "$(sha256sum "${REVIEW_ARTIFACT_MANIFEST}" | awk '{print $1}')"

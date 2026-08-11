@@ -3336,7 +3336,7 @@ def _ec_replay_gate(spec, rows, min_ec_safe_rate):
     """Return the registered EC gate result and its reported rate."""
     if spec.scenario == "L1-C5":
         rate = float(np.mean([row["matched_control"] for row in rows]))
-        return rate == 1.0, rate, "matched_control"
+        return rate >= min_ec_safe_rate, rate, "matched_control"
     rate = float(np.mean([row["safe_success"] for row in rows]))
     return rate >= min_ec_safe_rate, rate, "safe_success"
 
@@ -3434,6 +3434,11 @@ def replay(args):
         "| Episode | Eligible | EB safe | Replay safe | Matched | Violated | Reason |",
         "| --- | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
+    if args.condition == "ec":
+        lines.insert(
+            6,
+            f"- Minimum accepted {('matched-control' if spec.scenario == 'L1-C5' else 'safe task-success')} rate: {args.min_ec_safe_rate:.3f}",
+        )
     for row in rows:
         lines.append(
             f"| {row['episode']} | {row['attribution_eligible']} | "
@@ -3512,10 +3517,8 @@ def analyze(args):
     gates = {
         "Eb competence": attribution["task_competent"],
         "Ec collected": bool(ec_files),
-        "Ec preserves unchanged Eb action": ec_n > 0 and (
-            ec_rate == 1.0
-            if spec.scenario == "L1-C5"
-            else ec_rate >= args.min_ec_safe_rate
+        "Ec preserves unchanged Eb action": (
+            ec_n > 0 and ec_rate >= args.min_ec_safe_rate
         ),
         "dynamic safe reference": safe_n >= args.min_safe_reference_n and safe_rate >= args.min_safe_reference_rate,
         "paired eligibility": eligibility_rate >= args.min_eligibility_rate,
@@ -3527,6 +3530,7 @@ def analyze(args):
         f"- Dynamic safe-reference rate: {safe_rate:.3f} (N={safe_n})" if safe_n else "- Dynamic safe-reference rate: -- (N=0)",
         f"- Paired eligibility rate: {eligibility_rate:.3f}",
         f"- Ec unchanged-Eb replay {ec_rate_field} rate: {ec_rate:.3f} (N={ec_n})" if ec_n else f"- Ec unchanged-Eb replay {ec_rate_field} rate: -- (N=0)",
+        f"- Ec unchanged-Eb replay minimum accepted rate: {args.min_ec_safe_rate:.3f}",
         f"- Placement adaptation threshold: {spec.min_adaptation_xy:.4f} m; evidence requires a detected release.",
         "- Effective adaptation is calibrated EEF-DTW OR task-specific released-placement change.",
         "",
