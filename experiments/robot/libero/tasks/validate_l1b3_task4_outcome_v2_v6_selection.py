@@ -22,7 +22,7 @@ PROFILES = (CANONICAL, *STRESS, *HOLDOUT)
 PASS_VERDICT = "PASS_L1B3_TASK4_OUTCOME_V2_V6_ENSEMBLE_SELECTION"
 FAIL_VERDICT = "FAIL_L1B3_TASK4_OUTCOME_V2_V6_ENSEMBLE_SELECTION"
 MAX_SELECTION_PENETRATION_M = 0.001
-MIN_GRASP_OFFSET_SEPARATION_M = 0.010
+MIN_LINK6_PATH_SEPARATION_M = 0.025
 COARSE_RADII = [0.012, 0.014, 0.016, 0.018, 0.02, 0.024, 0.028, 0.032, 0.036, 0.04]
 COARSE_ANGLES = [
     0.0, 22.5, 45.0, 67.5, 90.0, 112.5, 135.0, 157.5,
@@ -124,8 +124,8 @@ def validate(args: argparse.Namespace) -> dict:
         and selection.get("source_level_holdout_profiles") == list(HOLDOUT)
         and selection.get("scene_selection_penetration_buffer_m")
         == MAX_SELECTION_PENETRATION_M
-        and selection.get("minimum_pairwise_successful_grasp_offset_separation_m")
-        == MIN_GRASP_OFFSET_SEPARATION_M
+        and selection.get("minimum_pairwise_link6_path_separation_m")
+        == MIN_LINK6_PATH_SEPARATION_M
     ):
         failures.append("preregistration_selection_contract_mismatch")
     if not (
@@ -137,6 +137,23 @@ def validate(args: argparse.Namespace) -> dict:
         and controller.get("construction_gate_profiles")
         == [CANONICAL, *STRESS]
         and controller.get("source_level_holdout_profiles") == list(HOLDOUT)
+        and {
+            profile: controller.get("profiles", {})
+            .get(profile, {})
+            .get("pregrasp_target_offset_xy_m")
+            for profile in PROFILES
+        }
+        == {
+            "canonical_center": [0.0, 0.0],
+            "stress_x_plus": [0.06, 0.0],
+            "stress_x_minus": [-0.06, 0.0],
+            "holdout_y_plus": [0.0, 0.06],
+            "holdout_y_minus": [0.0, -0.06],
+        }
+        and controller.get("diversity_gate", {}).get(
+            "minimum_pairwise_path_separation_m"
+        )
+        == MIN_LINK6_PATH_SEPARATION_M
     ):
         failures.append("controller_ensemble_contract_mismatch")
     conditioning = pairing.get("trajectory_conditioning", {})
@@ -233,7 +250,7 @@ def validate(args: argparse.Namespace) -> dict:
 
     controller_hash = _sha256(controller_path)
     trajectory_records = []
-    offsets_by_episode: dict[int, list[tuple[str, np.ndarray]]] = {
+    paths_by_episode: dict[int, list[tuple[str, np.ndarray]]] = {
         episode: [] for episode in range(len(pairs))
     }
     for profile in PROFILES:
@@ -248,6 +265,9 @@ def validate(args: argparse.Namespace) -> dict:
             offset = np.asarray(
                 metadata.get("grasp_xy_offset_m", (np.nan, np.nan)), dtype=float
             )
+            link6_path = np.asarray(
+                trajectory.get("body_pos__robot0_link6", ()), dtype=float
+            )
             valid = bool(
                 metadata.get("trajectory_source_label") == SOURCE
                 and metadata.get("trajectory_profile_id") == profile
@@ -259,11 +279,23 @@ def validate(args: argparse.Namespace) -> dict:
                 and metadata.get("success") is True
                 and offset.shape == (2,)
                 and np.isfinite(offset).all()
+                and link6_path.ndim == 2
+                and link6_path.shape[0] >= 2
+                and link6_path.shape[1] >= 2
+                and np.isfinite(link6_path[:, :2]).all()
             )
             if not valid:
                 failures.append(f"trajectory_{profile}_{episode:03d}_provenance")
             else:
-                offsets_by_episode[episode].append((profile, offset))
+                samples = np.linspace(0.0, 1.0, num=128)
+                source = np.linspace(0.0, 1.0, num=link6_path.shape[0])
+                resampled = np.column_stack(
+                    [
+                        np.interp(samples, source, link6_path[:, axis])
+                        for axis in (0, 1)
+                    ]
+                )
+                paths_by_episode[episode].append((profile, resampled))
             trajectory_records.append(
                 {
                     "profile": profile,
@@ -275,29 +307,31 @@ def validate(args: argparse.Namespace) -> dict:
                 }
             )
     diversity_records = []
-    for episode, profile_offsets in offsets_by_episode.items():
+    for episode, profile_paths in paths_by_episode.items():
         minimum = float("inf")
-        for left in range(len(profile_offsets)):
-            for right in range(left + 1, len(profile_offsets)):
+        for left in range(len(profile_paths)):
+            for right in range(left + 1, len(profile_paths)):
                 minimum = min(
                     minimum,
                     float(
                         np.linalg.norm(
-                            profile_offsets[left][1] - profile_offsets[right][1]
-                        )
+                            profile_paths[left][1] - profile_paths[right][1],
+                            axis=1,
+                        ).max()
                     ),
                 )
         diverse = bool(
-            len(profile_offsets) == len(PROFILES)
-            and minimum >= MIN_GRASP_OFFSET_SEPARATION_M
+            len(profile_paths) == len(PROFILES)
+            and minimum >= MIN_LINK6_PATH_SEPARATION_M
         )
         if not diverse:
             failures.append(f"trajectory_diversity_{episode:03d}")
         diversity_records.append(
             {
                 "episode_idx": episode,
-                "minimum_pairwise_grasp_offset_separation_m": minimum,
-                "required_m": MIN_GRASP_OFFSET_SEPARATION_M,
+                "minimum_pairwise_link6_path_separation_m": minimum,
+                "metric": "maximum_time_normalized_xy_separation_128_samples",
+                "required_m": MIN_LINK6_PATH_SEPARATION_M,
                 "valid": diverse,
             }
         )

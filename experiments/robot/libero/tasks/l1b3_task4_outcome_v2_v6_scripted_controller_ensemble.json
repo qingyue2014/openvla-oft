@@ -40,6 +40,7 @@
     "transport_obstacle_clearance": 0.0,
     "transport_clearance": 0.04,
     "approach_height": 0.12,
+    "grasp_candidate_order": "center_then_axes",
     "grasp_offset_fractions": "0.80",
     "grasp_height": 0.015,
     "grasp_seat_steps": 15,
@@ -58,27 +59,29 @@
   "profiles": {
     "canonical_center": {
       "role": "candidate_generation_and_construction_gate",
-      "grasp_candidate_order": "center_then_axes"
+      "pregrasp_target_offset_xy_m": [0.0, 0.0]
     },
     "stress_x_plus": {
       "role": "construction_gate",
-      "grasp_candidate_order": "positive_x_then_center"
+      "pregrasp_target_offset_xy_m": [0.06, 0.0]
     },
     "stress_x_minus": {
       "role": "construction_gate",
-      "grasp_candidate_order": "negative_x_then_center"
+      "pregrasp_target_offset_xy_m": [-0.06, 0.0]
     },
     "holdout_y_plus": {
       "role": "source_level_holdout",
-      "grasp_candidate_order": "positive_y_then_center"
+      "pregrasp_target_offset_xy_m": [0.0, 0.06]
     },
     "holdout_y_minus": {
       "role": "source_level_holdout",
-      "grasp_candidate_order": "negative_y_then_center"
+      "pregrasp_target_offset_xy_m": [0.0, -0.06]
     }
   },
   "diversity_gate": {
-    "minimum_pairwise_successful_grasp_offset_separation_m": 0.01,
+    "measured_body": "robot0_link6",
+    "metric": "maximum time-normalized pairwise XY separation over 128 samples",
+    "minimum_pairwise_path_separation_m": 0.025,
     "failure_action": "reject_complete_native_source"
   },
   "selection_thresholds": {

@@ -438,7 +438,7 @@ FAMILIES = {
         "canonical_trajectory_profile": "canonical_center",
         "stress_trajectory_profiles": ["stress_x_plus", "stress_x_minus"],
         "holdout_trajectory_profiles": ["holdout_y_plus", "holdout_y_minus"],
-        "minimum_grasp_offset_separation_m": 0.010,
+        "minimum_link6_path_separation_m": 0.025,
         "forbid_learned_selection_trajectories": True,
         "calibration_penetration_buffer_m": 0.001,
         "evaluation_penetration_limit_m": 0.002,

@@ -330,16 +330,18 @@ native task, prompt, BDDL, parsed goal, inventory, EB offset, dual-radius EC,
 `replan_steps=1` remain unchanged.
 
 The repair replaces v5's single scripted selection path with five hash-bound,
-obstacle-independent OSC profiles. `canonical_center` alone generates and
-refines candidate poses. `stress_x_plus` and `stress_x_minus` participate in
+obstacle-independent OSC profiles: one direct approach and four target-relative
+pregrasp detours at +/-6 cm in the world X/Y axes. `canonical_center` alone
+generates and refines candidate poses. `stress_x_plus` and `stress_x_minus` participate in
 the construction gate: their ER replays must complete the task without
 exceeding 1 mm protected penetration, and their EC replays must also be
 contact-free. `holdout_y_plus` and `holdout_y_minus` never generate, rank, or
 refine a bottle pose. They audit only the first construction-qualified pair;
 any holdout task, penetration, or EC-contact failure rejects the complete
 native source state, after which construction continues at the next source
-index. The five successful grasp offsets must be pairwise separated by at
-least 10 mm so nominal profiles cannot collapse to one physical path.
+index. The measured `robot0_link6` paths must have at least 25 mm pairwise
+maximum time-normalized XY separation, so profile labels cannot collapse to
+one physical path even when the same bowl grasp is ultimately successful.
 
 Every surface-contact step now records penetration depth, geom/body pair,
 component, phase, and causal eligibility, together with the maximum-depth

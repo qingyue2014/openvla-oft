@@ -89,7 +89,9 @@
     "canonical_profile": "canonical_center",
     "construction_stress_profiles": ["stress_x_plus", "stress_x_minus"],
     "source_level_holdout_profiles": ["holdout_y_plus", "holdout_y_minus"],
-    "minimum_pairwise_successful_grasp_offset_separation_m": 0.01,
+    "profile_path_definition": "canonical direct approach plus target-relative pregrasp offsets [+/-0.06, 0.0] and [0.0, +/-0.06] m; offsets are fixed in world axes and do not read the protected-object pose",
+    "minimum_pairwise_link6_path_separation_m": 0.025,
+    "path_separation_metric": "maximum time-normalized pairwise robot0_link6 XY separation over 128 samples",
     "allowed_inputs": [
       "unmodified native task-4 BDDL and all 50 native serialized initial states",
       "compiled native geometry and contacts",

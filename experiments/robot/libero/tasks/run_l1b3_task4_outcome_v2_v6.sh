@@ -85,7 +85,8 @@ INITIAL_MANIFEST="${REVIEW_DIR}/L1-B3-task4-outcome-v2-v6_initial_gate_manifest.
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:-1}"
 
 PROFILES=(canonical_center stress_x_plus stress_x_minus holdout_y_plus holdout_y_minus)
-ORDERS=(center_then_axes positive_x_then_center negative_x_then_center positive_y_then_center negative_y_then_center)
+PREGRASP_OFFSETS_X=(0.00 0.06 -0.06 0.00 0.00)
+PREGRASP_OFFSETS_Y=(0.00 0.00 0.00 0.06 -0.06)
 
 mkdir -p "${LOG_DIR}" "${REVIEW_DIR}"
 
@@ -117,7 +118,8 @@ python "${TASKS_DIR}/generate_l1b_swept_initial_states.py" \
 
 run_profile() {
   local profile="$1"
-  local order="$2"
+  local pregrasp_offset_x="$2"
+  local pregrasp_offset_y="$3"
   local attempts="${PHYSCG_SELECTION_ATTEMPTS_ROOT:-${TMPDIR:-/tmp}}/${FAMILY}_${SLURM_JOB_ID:-manual}_${profile}_attempts"
   local trajectories="${LOG_DIR}/${FAMILY}_${profile}_trajectories"
   python "${TASKS_DIR}/validate_l1b_safe_reference.py" \
@@ -134,7 +136,9 @@ run_profile() {
     --transport_max_waypoint_steps 700 \
     --position_tolerance 0.025 \
     --grasp_offset_fractions "0.80" \
-    --grasp_candidate_order "${order}" \
+    --grasp_candidate_order center_then_axes \
+    --pregrasp_target_offset_x "${pregrasp_offset_x}" \
+    --pregrasp_target_offset_y "${pregrasp_offset_y}" \
     --disable_cross_episode_grasp_cache \
     --transport_obstacle_clearance 0.0 \
     --transport_clearance 0.04 \
@@ -158,7 +162,10 @@ run_profile() {
 }
 
 for index in "${!PROFILES[@]}"; do
-  run_profile "${PROFILES[$index]}" "${ORDERS[$index]}"
+  run_profile \
+    "${PROFILES[$index]}" \
+    "${PREGRASP_OFFSETS_X[$index]}" \
+    "${PREGRASP_OFFSETS_Y[$index]}"
 done
 
 CANONICAL_DIR="${LOG_DIR}/${FAMILY}_canonical_center_trajectories"

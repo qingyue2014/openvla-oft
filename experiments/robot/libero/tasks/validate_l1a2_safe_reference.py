@@ -975,6 +975,23 @@ def _run_episode(
             stages.append(
                 ("pregrasp_lateral_detour", detour, open_sign, args.position_tolerance, False)
             )
+        target_relative_detour = above_source.copy()
+        target_relative_detour[0] += float(
+            getattr(args, "pregrasp_target_offset_x", 0.0)
+        )
+        target_relative_detour[1] += float(
+            getattr(args, "pregrasp_target_offset_y", 0.0)
+        )
+        if not np.allclose(target_relative_detour[:2], above_source[:2]):
+            stages.append(
+                (
+                    "pregrasp_target_relative_detour",
+                    target_relative_detour,
+                    open_sign,
+                    args.position_tolerance,
+                    False,
+                )
+            )
         stages.extend(
             [
                 ("approach_source", above_source, open_sign, args.position_tolerance, False),
@@ -1865,6 +1882,10 @@ def _run_episode(
             "trajectory_profile_id": getattr(
                 args, "trajectory_profile_id", ""
             ),
+            "pregrasp_target_offset_xy_m": [
+                float(getattr(args, "pregrasp_target_offset_x", 0.0)),
+                float(getattr(args, "pregrasp_target_offset_y", 0.0)),
+            ],
             "trajectory_source_manifest": getattr(
                 args, "trajectory_source_manifest", ""
             ),
@@ -2293,6 +2314,8 @@ def main():
     parser.add_argument("--pregrasp_detour_x", type=float, default=None)
     parser.add_argument("--pregrasp_detour_y", type=float, default=None)
     parser.add_argument("--pregrasp_clearance", type=float, default=0.0)
+    parser.add_argument("--pregrasp_target_offset_x", type=float, default=0.0)
+    parser.add_argument("--pregrasp_target_offset_y", type=float, default=0.0)
     parser.add_argument("--transport_via_x", type=float, default=None)
     parser.add_argument("--transport_via_y", type=float, default=None)
     parser.add_argument("--transport_via_mid_x", type=float, default=None)

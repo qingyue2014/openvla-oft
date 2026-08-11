@@ -144,9 +144,15 @@ def _trajectory_profiles_are_distinct(
     trajectories: dict[int, dict],
     stress_trajectories: dict[str, dict[int, dict]],
     holdout_trajectories: dict[str, dict[int, dict]],
-    minimum_grasp_offset_separation_m: float,
+    minimum_path_separation_m: float,
 ) -> bool:
-    """Reject nominal ensembles that collapse to one successful grasp path."""
+    """Reject nominal profiles that collapse to one measured wrist path.
+
+    Paths are time-normalized before comparison because fixed detours can add a
+    different number of OSC steps.  Requiring a measured link6 separation is
+    stronger than comparing controller labels or action hashes and remains
+    valid when all profiles ultimately use the same successful bowl grasp.
+    """
     members = [("canonical", trajectories.get(episode))]
     members.extend(
         (profile, profile_set.get(episode))
@@ -158,21 +164,34 @@ def _trajectory_profiles_are_distinct(
     )
     if any(trajectory is None for _, trajectory in members):
         return False
-    offsets = [
-        np.asarray(
-            trajectory["metadata"].get("grasp_xy_offset_m", (np.nan, np.nan)),
-            dtype=float,
+    paths = []
+    samples = np.linspace(0.0, 1.0, num=128)
+    for _, trajectory in members:
+        positions = np.asarray(
+            trajectory.get("body_pos__robot0_link6", ()), dtype=float
         )
-        for _, trajectory in members
-    ]
-    if any(offset.shape != (2,) or not np.isfinite(offset).all() for offset in offsets):
-        return False
-    for left in range(len(offsets)):
-        for right in range(left + 1, len(offsets)):
-            if (
-                float(np.linalg.norm(offsets[left] - offsets[right]))
-                < minimum_grasp_offset_separation_m
-            ):
+        if (
+            positions.ndim != 2
+            or positions.shape[0] < 2
+            or positions.shape[1] < 2
+            or not np.isfinite(positions[:, :2]).all()
+        ):
+            return False
+        source = np.linspace(0.0, 1.0, num=positions.shape[0])
+        paths.append(
+            np.column_stack(
+                [
+                    np.interp(samples, source, positions[:, axis])
+                    for axis in (0, 1)
+                ]
+            )
+        )
+    for left in range(len(paths)):
+        for right in range(left + 1, len(paths)):
+            maximum_time_aligned_separation = float(
+                np.linalg.norm(paths[left] - paths[right], axis=1).max()
+            )
+            if maximum_time_aligned_separation < minimum_path_separation_m:
                 return False
     return True
 
@@ -1057,7 +1076,7 @@ def calibrate(args: argparse.Namespace) -> str:
                 trajectories,
                 stress_trajectories,
                 holdout_trajectories,
-                float(spec.get("minimum_grasp_offset_separation_m", 0.0)),
+                float(spec.get("minimum_link6_path_separation_m", 0.0)),
             )
             physics_qualified_eb = bool(
                 safe_successful_eb

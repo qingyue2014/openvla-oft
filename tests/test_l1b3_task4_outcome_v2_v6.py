@@ -110,6 +110,19 @@ def test_v6_fixed_profiles_are_obstacle_independent_and_distinct():
         "holdout_y_plus",
         "holdout_y_minus",
     ]
+    assert controller["common_arguments"]["grasp_candidate_order"] == (
+        "center_then_axes"
+    )
+    assert {
+        profile: values["pregrasp_target_offset_xy_m"]
+        for profile, values in controller["profiles"].items()
+    } == {
+        "canonical_center": [0.0, 0.0],
+        "stress_x_plus": [0.06, 0.0],
+        "stress_x_minus": [-0.06, 0.0],
+        "holdout_y_plus": [0.0, 0.06],
+        "holdout_y_minus": [0.0, -0.06],
+    }
     candidates = [
         np.array([0.0, 0.0]),
         np.array([0.03, 0.0]),
@@ -132,7 +145,7 @@ def test_v6_calibrator_rejects_collapsed_or_overpenetrating_corridors():
     text = CALIBRATOR.read_text()
     for token in (
         "_trajectory_profiles_are_distinct",
-        "minimum_grasp_offset_separation_m",
+        "minimum_link6_path_separation_m",
         "_corridor_er_passes",
         "_corridor_ec_passes",
         "holdout_source_rejected = True",
@@ -153,15 +166,15 @@ def test_v6_calibrator_rejects_collapsed_or_overpenetrating_corridors():
 
 def test_v6_selection_validator_accepts_complete_synthetic_ensemble(tmp_path):
     controller_hash = selection_validator._sha256(CONTROLLER)
-    offsets = {
+    path_endpoints = {
         "canonical_center": (0.0, 0.0),
-        "stress_x_plus": (0.03, 0.0),
-        "stress_x_minus": (-0.03, 0.0),
-        "holdout_y_plus": (0.0, 0.03),
-        "holdout_y_minus": (0.0, -0.03),
+        "stress_x_plus": (0.04, 0.0),
+        "stress_x_minus": (-0.04, 0.0),
+        "holdout_y_plus": (0.0, 0.04),
+        "holdout_y_minus": (0.0, -0.04),
     }
     profile_args = []
-    for profile, offset in offsets.items():
+    for profile, endpoint in path_endpoints.items():
         directory = tmp_path / profile
         directory.mkdir()
         metadata = {
@@ -172,12 +185,16 @@ def test_v6_selection_validator_accepts_complete_synthetic_ensemble(tmp_path):
             "controller_obstacle_adaptive": False,
             "cross_episode_grasp_cache_disabled": True,
             "success": True,
-            "grasp_xy_offset_m": list(offset),
+            "grasp_xy_offset_m": [0.0, 0.04],
         }
         np.savez_compressed(
             directory / "task4_ep000.npz",
             metadata=json.dumps(metadata),
             actions=np.zeros((1, 7), dtype=np.float32),
+            body_pos__robot0_link6=np.asarray(
+                [[0.0, 0.0, 1.0], [endpoint[0], endpoint[1], 1.0]],
+                dtype=np.float32,
+            ),
         )
         profile_args.append(f"{profile}={directory}")
     harm = _replay(harm=True)

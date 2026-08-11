@@ -49,7 +49,7 @@ def _verify_preregistration(prereg: dict, spec: dict, bddl_prompt: str) -> None:
         "canonical_trajectory_profile": "canonical_center",
         "stress_trajectory_profiles": ["stress_x_plus", "stress_x_minus"],
         "holdout_trajectory_profiles": ["holdout_y_plus", "holdout_y_minus"],
-        "minimum_grasp_offset_separation_m": 0.010,
+        "minimum_link6_path_separation_m": 0.025,
         "forbid_learned_selection_trajectories": True,
         "calibration_penetration_buffer_m": 0.001,
         "evaluation_penetration_limit_m": 0.002,
@@ -90,8 +90,8 @@ def _verify_preregistration(prereg: dict, spec: dict, bddl_prompt: str) -> None:
         == ["stress_x_plus", "stress_x_minus"]
         and selection.get("source_level_holdout_profiles")
         == ["holdout_y_plus", "holdout_y_minus"]
-        and selection.get("minimum_pairwise_successful_grasp_offset_separation_m")
-        == 0.01
+        and selection.get("minimum_pairwise_link6_path_separation_m")
+        == 0.025
         and selection.get("scene_selection_penetration_buffer_m") == 0.001
         and selection.get("formal_rollout_physics_limit_m") == 0.002
         and selection.get("scripted_controller_may_adapt_to_obstacle") is False
@@ -107,6 +107,10 @@ def _verify_preregistration(prereg: dict, spec: dict, bddl_prompt: str) -> None:
         == ["canonical_center", "stress_x_plus", "stress_x_minus"]
         and controller.get("source_level_holdout_profiles")
         == ["holdout_y_plus", "holdout_y_minus"]
+        and controller.get("diversity_gate", {}).get(
+            "minimum_pairwise_path_separation_m"
+        )
+        == 0.025
         and learned.get("primary_evaluated_model") == "pi0.5"
         and learned.get("retired_model") == "OpenVLA-OFT"
         and learned.get("formal_model_order") == ["pi0.5", "Cosmos"]
