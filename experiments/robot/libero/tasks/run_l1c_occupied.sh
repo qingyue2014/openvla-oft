@@ -19,6 +19,18 @@ UPPER_SCENARIO="$(printf '%s' "${SCENARIO}" | tr '[:lower:]' '[:upper:]' | sed '
 PIPELINE="experiments/robot/libero/tasks/l1c_occupied_pipeline.py"
 L1C5_FREEZE_VERIFIER="experiments/robot/libero/tasks/verify_l1c5_frozen_gate.py"
 L1C5_FROZEN_GATE_SHA256="14eeb148208f536eca7920ddde28b285502007d6b719739f6742712264cd5937"
+L1C5_FROZEN_GATE_VARIANT="${L1C5_FROZEN_GATE_VARIANT:-original}"
+case "${L1C5_FROZEN_GATE_VARIANT}" in
+  original) ;;
+  model-informed-v1)
+    L1C5_FREEZE_VERIFIER="experiments/robot/libero/tasks/verify_l1c5_mi_v1_frozen_gate.py"
+    L1C5_FROZEN_GATE_SHA256="188618a62db589895b8e3f6c07e9128073a14066421f10321c844127962e946c"
+    ;;
+  *)
+    echo "Unsupported L1-C5 frozen-gate variant: ${L1C5_FROZEN_GATE_VARIANT}" >&2
+    exit 2
+    ;;
+esac
 L1C5_EC_AMENDMENT="experiments/robot/libero/tasks/l1c5_ec_replay_amendment_20260811.json"
 L1C5_EC_AMENDMENT_SHA256="bb8beab2c573635742e2bdc2357962596e9873cf64f7c2fed1f968e9f698ded0"
 L1C5_UPRIGHT_AMENDMENT="experiments/robot/libero/tasks/l1c5_posthoc_upright_oracle_amendment_20260811.json"
@@ -106,7 +118,9 @@ if [[ "${SCENARIO}" == "l1c5" && "${L1C5_EC_MATCH_MIN_RATE}" != "1.0" ]]; then
     echo "L1-C5 EC replay relaxation requires the explicit post-hoc 98% amendment unlock." >&2
     exit 2
   fi
-  if [[ "${L1C5_EC_AMENDMENT_UNLOCK:-}" == "I_ACKNOWLEDGE_POSTHOC_98_PERCENT" ]]; then
+  if [[ "${L1C5_FROZEN_GATE_VARIANT}" == "model-informed-v1" ]]; then
+    python "${L1C5_FREEZE_VERIFIER}"
+  elif [[ "${L1C5_EC_AMENDMENT_UNLOCK:-}" == "I_ACKNOWLEDGE_POSTHOC_98_PERCENT" ]]; then
     test -s "${L1C5_EC_AMENDMENT}"
     observed_amendment_sha="$(sha256sum "${L1C5_EC_AMENDMENT}" | awk '{print $1}')"
     if [[ "${observed_amendment_sha}" != "${L1C5_EC_AMENDMENT_SHA256}" ]]; then
@@ -121,19 +135,25 @@ if [[ "${SCENARIO}" == "l1c5" && "${L1C5_EC_MATCH_MIN_RATE}" != "1.0" ]]; then
 fi
 if [[ -n "${L1C5_MAX_TARGET_POST_RELEASE_XY_DISPLACEMENT}" || \
       -n "${L1C5_POSTHOC_ORACLE_UNLOCK:-}" ]]; then
-  if [[ "${SCENARIO}" != "l1c5" || \
+  if [[ "${SCENARIO}" == "l1c5" && \
+        "${L1C5_FROZEN_GATE_VARIANT}" == "model-informed-v1" && \
+        "${L1C5_MAX_TARGET_POST_RELEASE_XY_DISPLACEMENT}" == "inf" && \
+        -z "${L1C5_POSTHOC_ORACLE_UNLOCK:-}" ]]; then
+    python "${L1C5_FREEZE_VERIFIER}"
+  elif [[ "${SCENARIO}" != "l1c5" || \
         "${L1C5_MAX_TARGET_POST_RELEASE_XY_DISPLACEMENT}" != "inf" || \
         "${L1C5_POSTHOC_ORACLE_UNLOCK:-}" != "I_ACKNOWLEDGE_POSTHOC_NO_POST_RELEASE_XY_LIMIT" ]]; then
     echo "The post-hoc no-displacement-limit oracle is authorized only for L1-C5 with its explicit unlock." >&2
     exit 2
+  else
+    test -s "${L1C5_UPRIGHT_AMENDMENT}"
+    observed_upright_amendment_sha="$(sha256sum "${L1C5_UPRIGHT_AMENDMENT}" | awk '{print $1}')"
+    if [[ "${observed_upright_amendment_sha}" != "${L1C5_UPRIGHT_AMENDMENT_SHA256}" ]]; then
+      echo "L1-C5 post-hoc upright-oracle amendment hash mismatch." >&2
+      exit 2
+    fi
+    grep -Fq 'POSTHOC_REVISED_ORACLE_NOT_ORIGINAL_PREREGISTRATION' "${L1C5_UPRIGHT_AMENDMENT}"
   fi
-  test -s "${L1C5_UPRIGHT_AMENDMENT}"
-  observed_upright_amendment_sha="$(sha256sum "${L1C5_UPRIGHT_AMENDMENT}" | awk '{print $1}')"
-  if [[ "${observed_upright_amendment_sha}" != "${L1C5_UPRIGHT_AMENDMENT_SHA256}" ]]; then
-    echo "L1-C5 post-hoc upright-oracle amendment hash mismatch." >&2
-    exit 2
-  fi
-  grep -Fq 'POSTHOC_REVISED_ORACLE_NOT_ORIGINAL_PREREGISTRATION' "${L1C5_UPRIGHT_AMENDMENT}"
 fi
 
 RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"

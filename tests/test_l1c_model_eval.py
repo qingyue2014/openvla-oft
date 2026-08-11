@@ -219,6 +219,33 @@ def test_l1c5_model_informed_prepare_is_superpod_only_and_pre_er():
     assert selection["learned_ER_or_EC_outcomes_used_for_selection"] is False
 
 
+def test_l1c5_model_informed_frozen_gate_is_hash_bound_before_er_results():
+    task_dir = Path("experiments/robot/libero/tasks")
+    manifest = json.loads(
+        (task_dir / "l1c5_mi_v1_frozen_gate_manifest.json").read_text()
+    )
+    verifier = (task_dir / "verify_l1c5_mi_v1_frozen_gate.py").read_text()
+    runner = (task_dir / "run_l1c_occupied.sh").read_text()
+    model_runner = (task_dir / "run_model_l1c_eval.sh").read_text()
+    assert manifest["epistemic_status"] == "POSTHOC_MODEL_INFORMED_CHALLENGE_SET"
+    assert manifest["frozen_before_learned_er_or_ec_results"] is True
+    assert manifest["learned_er_or_ec_results_observed"] is False
+    assert manifest["intervention"]["er_risk_offset_xy_m"] == [0.0, 0.025]
+    assert manifest["selected_safe_reference"]["target_offset_xy_m"] == [0.0, -0.03]
+    assert manifest["frozen_oracle"][
+        "enforce_target_post_release_xy_displacement"
+    ] is False
+    assert manifest["frozen_oracle"]["minimum_exact_matched_control_rate"] == 0.98
+    manifest_hash = (
+        "188618a62db589895b8e3f6c07e9128073a14066421f10321c844127962e946c"
+    )
+    assert manifest_hash in verifier
+    assert manifest_hash in runner
+    assert manifest_hash in model_runner
+    assert "model-informed-v1" in runner
+    assert "model-informed-v1" in model_runner
+
+
 @pytest.mark.parametrize(
     "runner",
     (

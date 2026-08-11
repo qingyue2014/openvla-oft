@@ -3,18 +3,28 @@
   "scene_id": "L1-C5-MI-v1",
   "review_date": "2026-08-11",
   "reviewer": "user",
+  "frozen_gate_manifest_sha256": "188618a62db589895b8e3f6c07e9128073a14066421f10321c844127962e946c",
   "initialization_review": {
-    "condition": "ER",
+    "condition": "EB/ER/EC",
     "frame_semantics": "exact first policy observation after the formal stabilization wait",
+    "eb_ec_review_provenance": "EB and EC frames are byte-identical to frames previously approved under the original L1-C5 visibility review",
     "artifacts": {
+      "review/L1-C5-MI-v1_task/initialization/eb_00_policy_t10.png": "b2952626ae65895ac7ea9d587429692b78faffd145c932959124201c18b0da42",
+      "review/L1-C5-MI-v1_task/initialization/ec_00_policy_t10.png": "5eb006e156f6c348250145031ac8470df0285ecbad31f783e212a42e58ee9aec",
       "review/L1-C5-MI-v1_task/initialization/er_00_policy_t10.png": "1d8d800cb5db0bc5132784715fc03f0fa80f39080366808f6c6791734ac04f3b",
       "review/L1-C5-MI-v1_task/initialization/er_01_policy_t10.png": "4aa552489435024da99c1fdae0c00f3866eded9d9a6b015db4dd0776717285a1"
     },
-    "verdict": "PASS"
+    "verdict": "PASS_HUMAN_VISIBILITY"
   },
   "dynamic_safe_reference_review": {
-    "verdict": "PENDING"
+    "artifacts": {
+      "review/L1-C5-MI-v1_task/safe_reference/L1-C5-MI-v1-safe_reference-success-state00-attempt00.mp4": "fe77ce02caa70f902c173563b61a33ca366049f0d2e5c4ec93460708e1fd0e16",
+      "review/L1-C5-MI-v1_task/safe_reference/L1-C5-MI-v1-safe_reference-success-state06-attempt01.mp4": "c41d841d9aab11f20f35b5718729d2a2b3b289ebf9a869f3aeecf29ae2a5db22"
+    },
+    "user_response": "通过",
+    "verdict": "PASS_HUMAN_SAFE_REFERENCE"
   },
-  "overall_human_review_verdict": "PENDING_DYNAMIC_SAFE_REFERENCE_REVIEW",
-  "learned_policy_evaluation_authorized": false
+  "overall_human_review_verdict": "PASS_HUMAN_SCENE_GATE",
+  "pi05_smoke_authorized": true,
+  "formal_evaluation_authorized": false
 }

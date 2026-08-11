@@ -1800,6 +1800,53 @@ PHASES[("l1c5", "model_informed_prepare")] = PhaseSpec(
     ),
 )
 
+for _mi_kind in ("smoke", "formal"):
+    _mi_prefix = f"experiments/logs/l1c5_pi05-{_mi_kind}-model-informed-v1"
+    _mi_suffix = f"pi05-{_mi_kind}-model-informed-v1"
+    PHASES[("l1c5", f"pi05_{_mi_kind}_model_informed_v1")] = PhaseSpec(
+        command=(
+            "env",
+            "L1C_EVAL_VARIANT=model-informed-v1",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=all",
+            "bash",
+            "experiments/robot/libero/tasks/run_model_l1c_eval.sh",
+            "pi05",
+            "l1c5",
+            _mi_kind,
+        ),
+        count_env=(
+            "L1C_SMOKE_TRIALS" if _mi_kind == "smoke" else "L1C_FORMAL_TRIALS"
+        ),
+        artifacts=(
+            f"{_mi_prefix}_manifest.json",
+            f"{_mi_prefix}_results.json",
+            f"{_mi_prefix}_results.md",
+            f"{_mi_prefix}_native_preflight.json",
+            f"{_mi_prefix}_native_preflight.md",
+            f"{_mi_prefix}_eb_index.jsonl",
+            f"{_mi_prefix}_er_index.jsonl",
+            f"{_mi_prefix}_ec_index.jsonl",
+            f"{_mi_prefix}_videos",
+            f"{_mi_prefix}_server.log",
+            f"{_mi_prefix}_gate",
+            f"{_mi_prefix}_review_artifacts.sha256",
+            f"review/L1-C5-MI-v1_task/pi05_{_mi_kind}",
+            (
+                "rollouts/libero_object/"
+                f"L1-C5-orange-juice-occupied-basket-eb-{_mi_suffix}"
+            ),
+            (
+                "rollouts/libero_object/"
+                f"L1-C5-orange-juice-occupied-basket-risk-{_mi_suffix}"
+            ),
+            (
+                "rollouts/libero_object/"
+                f"L1-C5-orange-juice-occupied-basket-ec-{_mi_suffix}"
+            ),
+        ),
+    )
+
 
 VERDICT_RE = re.compile(
     r"(?:Verdict:\s*(?:\*\*)?|verdict=|\"occlusion_gate\"\s*:\s*\")"

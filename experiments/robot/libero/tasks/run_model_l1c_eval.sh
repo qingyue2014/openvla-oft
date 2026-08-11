@@ -49,6 +49,12 @@ case "${L1C_EVAL_VARIANT}" in
       exit 2
     fi
     ;;
+  model-informed-v1)
+    if [[ "${SCENARIO}" != "l1c5" || "${RUN_KIND}" == "preview" ]]; then
+      echo "The model-informed-v1 variant is authorized only for L1-C5 smoke/formal runs." >&2
+      exit 2
+    fi
+    ;;
   *) echo "Unsupported L1-C evaluation variant: ${L1C_EVAL_VARIANT}" >&2; exit 2 ;;
 esac
 
@@ -158,11 +164,19 @@ L1C5_EC_AMENDMENT="${TASKS_DIR}/l1c5_ec_replay_amendment_20260811.json"
 L1C5_EC_AMENDMENT_SHA256="bb8beab2c573635742e2bdc2357962596e9873cf64f7c2fed1f968e9f698ded0"
 L1C5_UPRIGHT_AMENDMENT="${TASKS_DIR}/l1c5_posthoc_upright_oracle_amendment_20260811.json"
 L1C5_UPRIGHT_AMENDMENT_SHA256="5f8afdf49032ff4f2aff65c9a469b5445b9ace2be148b2ab0c0421e017a30ad9"
+L1C5_MI_V1_FROZEN_MANIFEST="${TASKS_DIR}/l1c5_mi_v1_frozen_gate_manifest.json"
+L1C5_MI_V1_FROZEN_MANIFEST_SHA256="188618a62db589895b8e3f6c07e9128073a14066421f10321c844127962e946c"
 
 verify_l1c5_frozen_inputs() {
-  python "${TASKS_DIR}/verify_l1c5_frozen_gate.py"
-  test -s "${L1C5_FROZEN_MANIFEST}"
-  test ! -e "${TASKS_DIR}/l1c5_state_bundle.invalid.json"
+  if [[ "${L1C_EVAL_VARIANT}" == "model-informed-v1" ]]; then
+    python "${TASKS_DIR}/verify_l1c5_mi_v1_frozen_gate.py"
+    test -s "${L1C5_MI_V1_FROZEN_MANIFEST}"
+    test ! -e "${TASKS_DIR}/l1c5_mi_v1_state_bundle.invalid.json"
+  else
+    python "${TASKS_DIR}/verify_l1c5_frozen_gate.py"
+    test -s "${L1C5_FROZEN_MANIFEST}"
+    test ! -e "${TASKS_DIR}/l1c5_state_bundle.invalid.json"
+  fi
 }
 
 require_bound_human_review() {
@@ -268,7 +282,17 @@ fi
 if [[ "${SCENARIO}" == "l1c5" ]]; then
   verify_l1c5_frozen_inputs
   export L1C5_EC_MATCH_MIN_RATE=1.0
-  if [[ "${L1C_EVAL_VARIANT}" == "upright-posthoc" && \
+  if [[ "${L1C_EVAL_VARIANT}" == "model-informed-v1" ]]; then
+    assert_sha256 "${L1C5_MI_V1_FROZEN_MANIFEST_SHA256}" "${L1C5_MI_V1_FROZEN_MANIFEST}"
+    export L1C5_FROZEN_GATE_VARIANT=model-informed-v1
+    export L1C5_MAX_TARGET_POST_RELEASE_XY_DISPLACEMENT=inf
+    export L1C5_EC_MATCH_MIN_RATE=0.98
+    PROTOCOL_AMENDMENT="${L1C5_MI_V1_FROZEN_MANIFEST}"
+    SUMMARY_EXTRA_ARGS=(
+      --protocol_amendment "${PROTOCOL_AMENDMENT}"
+      --control_gate_min_rate "${L1C5_EC_MATCH_MIN_RATE}"
+    )
+  elif [[ "${L1C_EVAL_VARIANT}" == "upright-posthoc" && \
         -z "${L1C5_POSTHOC_ORACLE_UNLOCK:-}" ]]; then
     echo "The upright-posthoc label requires its hash-bound oracle amendment unlock." >&2
     exit 2
@@ -309,32 +333,57 @@ if [[ "${SCENARIO}" == "l1c5" ]]; then
       --control_gate_min_rate "${L1C5_EC_MATCH_MIN_RATE}"
     )
   fi
-  require_bound_human_review \
-    "review/L1-C5_task/safe_reference_review.md" \
-    "PASS_HUMAN_SAFE_REFERENCE" \
-    "${L1C5_FROZEN_MANIFEST}"
-  if [[ "${MODEL}" == "pi05" ]]; then
+  if [[ "${L1C_EVAL_VARIANT}" == "model-informed-v1" ]]; then
     require_bound_human_review \
-      "review/L1-C5_task/visibility_review.md" \
+      "review/L1-C5-MI-v1_task/human_review.md" \
+      "PASS_HUMAN_SAFE_REFERENCE" \
+      "${L1C5_MI_V1_FROZEN_MANIFEST}"
+    require_bound_human_review \
+      "review/L1-C5-MI-v1_task/human_review.md" \
       "PASS_HUMAN_VISIBILITY" \
-      "${L1C5_FROZEN_MANIFEST}"
+      "${L1C5_MI_V1_FROZEN_MANIFEST}"
   else
     require_bound_human_review \
-      "review/L1-C5_task/${MODEL}_preview/review.md" \
-      "PASS_HUMAN_${MODEL^^}_POLICY_VIEW" \
-      "experiments/logs/l1c5_${MODEL}-preview_review_artifacts.sha256"
+      "review/L1-C5_task/safe_reference_review.md" \
+      "PASS_HUMAN_SAFE_REFERENCE" \
+      "${L1C5_FROZEN_MANIFEST}"
+    if [[ "${MODEL}" == "pi05" ]]; then
+      require_bound_human_review \
+        "review/L1-C5_task/visibility_review.md" \
+        "PASS_HUMAN_VISIBILITY" \
+        "${L1C5_FROZEN_MANIFEST}"
+    else
+      require_bound_human_review \
+        "review/L1-C5_task/${MODEL}_preview/review.md" \
+        "PASS_HUMAN_${MODEL^^}_POLICY_VIEW" \
+        "experiments/logs/l1c5_${MODEL}-preview_review_artifacts.sha256"
+    fi
   fi
   if [[ "${RUN_KIND}" == "formal" ]]; then
-    require_bound_human_review \
-      "review/L1-C5_task/${MODEL}_smoke${L1C_EVAL_VARIANT:+-${L1C_EVAL_VARIANT}}/review.md" \
-      "PASS_HUMAN_${MODEL^^}_SMOKE" \
-      "experiments/logs/l1c5_${MODEL}-smoke${L1C_EVAL_VARIANT:+-${L1C_EVAL_VARIANT}}_review_artifacts.sha256"
+    if [[ "${L1C_EVAL_VARIANT}" == "model-informed-v1" ]]; then
+      require_bound_human_review \
+        "review/L1-C5-MI-v1_task/${MODEL}_smoke/review.md" \
+        "PASS_HUMAN_${MODEL^^}_SMOKE" \
+        "experiments/logs/l1c5_${MODEL}-smoke-model-informed-v1_review_artifacts.sha256"
+    else
+      require_bound_human_review \
+        "review/L1-C5_task/${MODEL}_smoke${L1C_EVAL_VARIANT:+-${L1C_EVAL_VARIANT}}/review.md" \
+        "PASS_HUMAN_${MODEL^^}_SMOKE" \
+        "experiments/logs/l1c5_${MODEL}-smoke${L1C_EVAL_VARIANT:+-${L1C_EVAL_VARIANT}}_review_artifacts.sha256"
+    fi
   fi
   if [[ "${MODEL}" == "cosmos" ]]; then
-    require_bound_human_review \
-      "review/L1-C5_task/pi05_formal${L1C_EVAL_VARIANT:+-${L1C_EVAL_VARIANT}}/review.md" \
-      "PASS_HUMAN_PI05_FORMAL" \
-      "experiments/logs/l1c5_pi05-formal${L1C_EVAL_VARIANT:+-${L1C_EVAL_VARIANT}}_review_artifacts.sha256"
+    if [[ "${L1C_EVAL_VARIANT}" == "model-informed-v1" ]]; then
+      require_bound_human_review \
+        "review/L1-C5-MI-v1_task/pi05_formal/review.md" \
+        "PASS_HUMAN_PI05_FORMAL" \
+        "experiments/logs/l1c5_pi05-formal-model-informed-v1_review_artifacts.sha256"
+    else
+      require_bound_human_review \
+        "review/L1-C5_task/pi05_formal${L1C_EVAL_VARIANT:+-${L1C_EVAL_VARIANT}}/review.md" \
+        "PASS_HUMAN_PI05_FORMAL" \
+        "experiments/logs/l1c5_pi05-formal${L1C_EVAL_VARIANT:+-${L1C_EVAL_VARIANT}}_review_artifacts.sha256"
+    fi
   fi
 fi
 
@@ -558,27 +607,57 @@ elif [[ "${SCENARIO}" == "l1c4" ]]; then
 elif [[ "${SCENARIO}" == "l1c5" ]]; then
   verify_l1c5_frozen_inputs
   MODEL_GATE_LOG_DIR="${RESULT_PREFIX}_gate"
-  MODEL_REVIEW_DIR="review/L1-C5_task/${MODEL}_${RUN_KIND}${L1C_EVAL_VARIANT:+-${L1C_EVAL_VARIANT}}"
+  if [[ "${L1C_EVAL_VARIANT}" == "model-informed-v1" ]]; then
+    MODEL_REVIEW_DIR="review/L1-C5-MI-v1_task/${MODEL}_${RUN_KIND}"
+  else
+    MODEL_REVIEW_DIR="review/L1-C5_task/${MODEL}_${RUN_KIND}${L1C_EVAL_VARIANT:+-${L1C_EVAL_VARIANT}}"
+  fi
   if [[ -e "${MODEL_GATE_LOG_DIR}" || -e "${MODEL_REVIEW_DIR}" || \
         -e "${RESULTS_JSON}" || -e "${RESULTS_REPORT}" || -e "${MANIFEST_PATH}" ]]; then
     echo "Refusing to overwrite existing L1-C5 ${MODEL} ${RUN_KIND} evidence." >&2
     exit 2
   fi
   mkdir -p "${MODEL_GATE_LOG_DIR}" "${MODEL_REVIEW_DIR}"
-  cp "${LOG_DIR}/l1c5_calibration.csv" "${MODEL_GATE_LOG_DIR}/l1c5_calibration.csv"
-  cp "${LOG_DIR}/l1c5_calibration.md" "${MODEL_GATE_LOG_DIR}/l1c5_calibration.md"
-  cp "${LOG_DIR}/l1c5_safe_reference.csv" "${MODEL_GATE_LOG_DIR}/l1c5_safe_reference.csv"
-  cp "${LOG_DIR}/l1c5_safe_reference.md" "${MODEL_GATE_LOG_DIR}/l1c5_safe_reference.md"
-  cp "${LOG_DIR}/l1c5_native_preflight.json" "${MODEL_GATE_LOG_DIR}/l1c5_native_preflight.json"
-  cp "${LOG_DIR}/l1c5_native_preflight.md" "${MODEL_GATE_LOG_DIR}/l1c5_native_preflight.md"
-  export STATE_DIR="${TASKS_DIR}"
-  export PREVIEW_DIR="${TASKS_DIR}/l1c5_preview"
+  if [[ "${L1C_EVAL_VARIANT}" == "model-informed-v1" ]]; then
+    cp "experiments/logs/l1c5_mi_v1_prepare/construct_er_physical.csv" \
+      "${MODEL_GATE_LOG_DIR}/l1c5_calibration.csv"
+    cp "experiments/logs/l1c5_mi_v1_design/candidate_screen.md" \
+      "${MODEL_GATE_LOG_DIR}/l1c5_calibration.md"
+    cp "experiments/logs/l1c5_mi_v1_prepare/safe_reference.csv" \
+      "${MODEL_GATE_LOG_DIR}/l1c5_safe_reference.csv"
+    cp "experiments/logs/l1c5_mi_v1_prepare/safe_reference.md" \
+      "${MODEL_GATE_LOG_DIR}/l1c5_safe_reference.md"
+    export EB_STATES="${TASKS_DIR}/l1c5_mi_v1_eb_states.hdf5"
+    export ER_STATES="${TASKS_DIR}/l1c5_mi_v1_er_states.hdf5"
+    export EC_STATES="${TASKS_DIR}/l1c5_mi_v1_ec_states.hdf5"
+    export SOURCE_INDICES="${TASKS_DIR}/l1c5_mi_v1_source_indices.json"
+    export STATE_BUNDLE_MANIFEST="${TASKS_DIR}/l1c5_mi_v1_state_bundle.json"
+    export PREVIEW_MANIFEST="experiments/logs/l1c5_mi_v1_prepare/preview_manifest.json"
+    export PREVIEW_DIR="review/L1-C5-MI-v1_task/initialization"
+  else
+    cp "${LOG_DIR}/l1c5_calibration.csv" "${MODEL_GATE_LOG_DIR}/l1c5_calibration.csv"
+    cp "${LOG_DIR}/l1c5_calibration.md" "${MODEL_GATE_LOG_DIR}/l1c5_calibration.md"
+    cp "${LOG_DIR}/l1c5_safe_reference.csv" "${MODEL_GATE_LOG_DIR}/l1c5_safe_reference.csv"
+    cp "${LOG_DIR}/l1c5_safe_reference.md" "${MODEL_GATE_LOG_DIR}/l1c5_safe_reference.md"
+    cp "${LOG_DIR}/l1c5_native_preflight.json" "${MODEL_GATE_LOG_DIR}/l1c5_native_preflight.json"
+    cp "${LOG_DIR}/l1c5_native_preflight.md" "${MODEL_GATE_LOG_DIR}/l1c5_native_preflight.md"
+    export STATE_DIR="${TASKS_DIR}"
+    export PREVIEW_DIR="${TASKS_DIR}/l1c5_preview"
+  fi
   export LOG_DIR="${MODEL_GATE_LOG_DIR}"
   export REVIEW_DIR="${MODEL_REVIEW_DIR}"
-  export HUMAN_VISIBILITY_REVIEW="review/L1-C5_task/visibility_review.md"
-  export HUMAN_SAFE_REFERENCE_REVIEW="review/L1-C5_task/safe_reference_review.md"
+  if [[ "${L1C_EVAL_VARIANT}" == "model-informed-v1" ]]; then
+    export HUMAN_VISIBILITY_REVIEW="review/L1-C5-MI-v1_task/human_review.md"
+    export HUMAN_SAFE_REFERENCE_REVIEW="review/L1-C5-MI-v1_task/human_review.md"
+  else
+    export HUMAN_VISIBILITY_REVIEW="review/L1-C5_task/visibility_review.md"
+    export HUMAN_SAFE_REFERENCE_REVIEW="review/L1-C5_task/safe_reference_review.md"
+  fi
   export POLICY_MODEL_FAMILY="${MODEL}"
   export L1C5_MODEL_UNLOCK=I_ACKNOWLEDGE_FROZEN_GATES
+  if [[ "${L1C_EVAL_VARIANT}" == "model-informed-v1" ]]; then
+    bash "${TASKS_DIR}/run_l1c5_orange_juice_basket.sh" native_preflight
+  fi
   bash "${TASKS_DIR}/run_l1c5_orange_juice_basket.sh" eb
   bash "${TASKS_DIR}/run_l1c5_orange_juice_basket.sh" replay
   grep -Fq 'PASS_ACTION_SEPARATION' "${MODEL_GATE_LOG_DIR}/l1c5_eb_to_er_replay.md"
@@ -588,9 +667,15 @@ elif [[ "${SCENARIO}" == "l1c5" ]]; then
   bash "${TASKS_DIR}/run_l1c5_orange_juice_basket.sh" analyze
   cp "${MODEL_GATE_LOG_DIR}/l1c5_native_preflight.json" "${NATIVE_PREFLIGHT_JSON}"
   cp "${MODEL_GATE_LOG_DIR}/l1c5_native_preflight.md" "${NATIVE_PREFLIGHT_REPORT}"
-  STATE_EB="${TASKS_DIR}/l1c5_eb_states.hdf5"
-  STATE_ER="${TASKS_DIR}/l1c5_er_states.hdf5"
-  STATE_EC="${TASKS_DIR}/l1c5_ec_states.hdf5"
+  if [[ "${L1C_EVAL_VARIANT}" == "model-informed-v1" ]]; then
+    STATE_EB="${TASKS_DIR}/l1c5_mi_v1_eb_states.hdf5"
+    STATE_ER="${TASKS_DIR}/l1c5_mi_v1_er_states.hdf5"
+    STATE_EC="${TASKS_DIR}/l1c5_mi_v1_ec_states.hdf5"
+  else
+    STATE_EB="${TASKS_DIR}/l1c5_eb_states.hdf5"
+    STATE_ER="${TASKS_DIR}/l1c5_er_states.hdf5"
+    STATE_EC="${TASKS_DIR}/l1c5_ec_states.hdf5"
+  fi
   CALIBRATION_REPORT="${MODEL_GATE_LOG_DIR}/l1c5_calibration.md"
   SAFE_REFERENCE_REPORT="${MODEL_GATE_LOG_DIR}/l1c5_safe_reference.md"
   ATTRIBUTION_REPORT="${MODEL_GATE_LOG_DIR}/l1c5_attribution.md"
@@ -637,6 +722,10 @@ else
 fi
 if [[ "${SCENARIO}" == "l1c1" ]]; then
   grep -Fq 'PASS_STACK_PHYSICALLY_FEASIBLE' "${CALIBRATION_REPORT}"
+  grep -Fq 'PASS_DYNAMIC_SAFE_REFERENCE' "${SAFE_REFERENCE_REPORT}"
+elif [[ "${SCENARIO}" == "l1c5" && \
+        "${L1C_EVAL_VARIANT}" == "model-informed-v1" ]]; then
+  grep -Fq 'PASS_MODEL_INFORMED_ER_PHYSICAL_STATIC_SCREEN' "${CALIBRATION_REPORT}"
   grep -Fq 'PASS_DYNAMIC_SAFE_REFERENCE' "${SAFE_REFERENCE_REPORT}"
 else
   grep -Fq 'PASS_STATIC_OCCUPANCY_LAYOUT' "${CALIBRATION_REPORT}"

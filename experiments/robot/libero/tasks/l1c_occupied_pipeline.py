@@ -756,6 +756,10 @@ def _attribute_text(value):
 def native_preflight(args):
     """Hard-stop unless task, prompt, BDDL, and asset inventory are native."""
     spec = get_spec(args.scenario)
+    model_informed_v1 = (
+        spec.scenario == "L1-C5"
+        and os.environ.get("L1C5_FROZEN_GATE_VARIANT") == "model-informed-v1"
+    )
     env = _env(resolve_bddl(spec))
     evaluated = {}
     paired_diff_audit = []
@@ -789,10 +793,25 @@ def native_preflight(args):
                     "native_asset_inventory_sha256": expected_inventory_hash,
                     "native_suite": spec.native_suite,
                 }
+                if model_informed_v1:
+                    required.update(
+                        {
+                            "model_informed_authorization_sha256": (
+                                "15d636be1ed64437be5920cc730a753d665a3b2187c6136f1b65bf7f9486f165"
+                            ),
+                            "model_informed_candidate_set_sha256": (
+                                "1ab9bd9349b1ea3fcc6e894f2f15395f22f093bdcccee45bab7922bf326bcde5"
+                            ),
+                            "model_informed_provisional_selection_sha256": (
+                                "8f56ac4a95e239d2f4a1435e3c5d644ee839b57f38c8196a68b850a495af881f"
+                            ),
+                        }
+                    )
+                elif context["design_prereg"] is not None:
+                    required["design_prereg_sha256"] = context["design_prereg"][
+                        "sha256"
+                    ]
                 if context["design_prereg"] is not None:
-                    required["design_prereg_sha256"] = context[
-                        "design_prereg"
-                    ]["sha256"]
                     required["native_asset_file_closure_sha256"] = context[
                         "native_asset_file_closure"
                     ]["closure_sha256"]
@@ -898,22 +917,46 @@ def native_preflight(args):
         "evaluated_conditions": evaluated,
         "source_to_project_inventory_delta": [],
         "source_to_project_layout_delta": (
-            context["design_prereg"]["record"]["native_task"][
-                "source_to_project_layout_delta"
-            ]
-            if context["design_prereg"] is not None else []
+            "Only ketchup_1_main free-joint pose/qvel changes across EB/ER/EC; "
+            "ER uses basket-relative XY (0, 0.025)."
+            if model_informed_v1
+            else (
+                context["design_prereg"]["record"]["native_task"][
+                    "source_to_project_layout_delta"
+                ]
+                if context["design_prereg"] is not None
+                else []
+            )
         ),
         "design_prereg": (
             {
-                "path": context["design_prereg"]["path"],
-                "sha256": context["design_prereg"]["sha256"],
+                "path": (
+                    "experiments/robot/libero/tasks/"
+                    "l1c5_mi_v1_frozen_gate_manifest.json"
+                ),
+                "sha256": (
+                    "188618a62db589895b8e3f6c07e9128073a14066421f10321c844127962e946c"
+                ),
             }
-            if context["design_prereg"] is not None else None
+            if model_informed_v1
+            else (
+                {
+                    "path": context["design_prereg"]["path"],
+                    "sha256": context["design_prereg"]["sha256"],
+                }
+                if context["design_prereg"] is not None
+                else None
+            )
         ),
         "paired_observed_diff_audit": paired_diff_audit,
         "allowed_intervention": (
             f"serialized free-joint pose/state of native "
             f"{spec.occupant_body} only"
+        ),
+        "epistemic_status": (
+            "POSTHOC_MODEL_INFORMED_CHALLENGE_SET"
+            if model_informed_v1
+            else "PREREGISTERED_SCENE"
         ),
     }
     _write_json(args.out_json, manifest)
