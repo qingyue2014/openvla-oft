@@ -1,0 +1,75 @@
+{
+  "classification": "gate_failure",
+  "completed_at_utc": "2026-08-11T07:29:39.777021+00:00",
+  "count": 5,
+  "count_env": "L1C_SMOKE_TRIALS",
+  "created_at_utc": "2026-08-11T07:25:10.992311+00:00",
+  "fetched_artifacts": [
+    "experiments/logs/l1c5_pi05-smoke-upright-posthoc_videos",
+    "experiments/logs/l1c5_pi05-smoke-upright-posthoc_server.log",
+    "experiments/logs/l1c5_pi05-smoke-upright-posthoc_gate",
+    "review/L1-C5_task/pi05_smoke-upright-posthoc",
+    "rollouts/libero_object/L1-C5-orange-juice-occupied-basket-eb-pi05-smoke-upright-posthoc"
+  ],
+  "job_id": "514890",
+  "local_commit": "8900be648bc10a5a9497563aa3a4e02f2d985a9f",
+  "missing_artifacts": [
+    "experiments/logs/l1c5_pi05-smoke-upright-posthoc_manifest.json",
+    "experiments/logs/l1c5_pi05-smoke-upright-posthoc_results.json",
+    "experiments/logs/l1c5_pi05-smoke-upright-posthoc_results.md",
+    "experiments/logs/l1c5_pi05-smoke-upright-posthoc_native_preflight.json",
+    "experiments/logs/l1c5_pi05-smoke-upright-posthoc_native_preflight.md",
+    "experiments/logs/l1c5_pi05-smoke-upright-posthoc_eb_index.jsonl",
+    "experiments/logs/l1c5_pi05-smoke-upright-posthoc_er_index.jsonl",
+    "experiments/logs/l1c5_pi05-smoke-upright-posthoc_ec_index.jsonl",
+    "experiments/logs/l1c5_pi05-smoke-upright-posthoc_review_artifacts.sha256",
+    "rollouts/libero_object/L1-C5-orange-juice-occupied-basket-risk-pi05-smoke-upright-posthoc",
+    "rollouts/libero_object/L1-C5-orange-juice-occupied-basket-ec-pi05-smoke-upright-posthoc"
+  ],
+  "phase": "pi05_smoke_upright_posthoc",
+  "registered_command": [
+    "env",
+    "L1C5_POSTHOC_ORACLE_UNLOCK=I_ACKNOWLEDGE_POSTHOC_NO_POST_RELEASE_XY_LIMIT",
+    "L1C_EVAL_VARIANT=upright-posthoc",
+    "RENDER_GPU_DEVICE_ID=1",
+    "SAVE_VIDEO_MODE=all",
+    "bash",
+    "experiments/robot/libero/tasks/run_model_l1c_eval.sh",
+    "pi05",
+    "l1c5",
+    "smoke"
+  ],
+  "remote_config": {
+    "account": "trllmout",
+    "branch": "codex/l1c5-orange-juice",
+    "control_socket": "/tmp/physcog-superpod.sock",
+    "exclude_nodes": "",
+    "gpus": 2,
+    "host": "superpod.ust.hk",
+    "libero_root": "/home/drwqyhappy/04-mycode/LIBERO",
+    "nodes": 1,
+    "partition": "normal",
+    "remote_python_bin": "/home/drwqyhappy/.conda/envs/openvla_oft/bin",
+    "remote_repo": "/project/trllmout/physcog-runs/openvla-oft-l1c5-formal98-b3bd0486/.physcog-agent/worktrees/8900be648bc10a5a9497563aa3a4e02f2d985a9f",
+    "time_limit": "01:00:00",
+    "user": "drwqyhappy"
+  },
+  "remote_job_script": "/project/trllmout/physcog-runs/openvla-oft-l1c5-formal98-b3bd0486/.physcog-agent/worktrees/8900be648bc10a5a9497563aa3a4e02f2d985a9f/.physcog-agent/jobs/20260811T072459Z-l1c5-pi05_smoke_upright_posthoc.sh",
+  "remote_log": "/project/trllmout/physcog-runs/openvla-oft-l1c5-formal98-b3bd0486/.physcog-agent/worktrees/8900be648bc10a5a9497563aa3a4e02f2d985a9f/.physcog-agent/jobs/20260811T072459Z-l1c5-pi05_smoke_upright_posthoc.out",
+  "remote_markers": {
+    "commit": "8900be648bc10a5a9497563aa3a4e02f2d985a9f",
+    "compute_node": "dgx-26",
+    "exit_code": "1",
+    "login_node": "slogin-02"
+  },
+  "returncode": 1,
+  "scenario": "l1c5",
+  "scheduler_state": "RUNNING",
+  "schema_version": 2,
+  "verdicts": [
+    "PASS_FROZEN_INITIAL_STATE_BUNDLE",
+    "PASS_NATIVE_ONLY_PREFLIGHT",
+    "FAIL_ACTION_SEPARATION",
+    "PASS_EC_UNCHANGED_EB_REPLAY_SAFE"
+  ]
+}
