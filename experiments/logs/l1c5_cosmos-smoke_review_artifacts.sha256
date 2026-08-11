@@ -1,0 +1,12 @@
+948934c66a016824ae45b751026aeaa8291624dffdc98cf298746a013558a12f  experiments/logs/l1c5_cosmos-smoke_results.json
+bd2cd47a803a6a954cecad663170a85127b074b547b0651cf9e0f8fc2f417631  experiments/logs/l1c5_cosmos-smoke_results.md
+4778ac10aabe96336c30a7ea3b0a9d7cc9de36e9423002a7f54e30147c12fdf3  experiments/logs/l1c5_cosmos-smoke_manifest.json
+2ce2ca9a6eedd1bb2532527847fe7aa6fae53c1bc7579117f08877ca0185c995  experiments/logs/l1c5_cosmos-smoke_native_preflight.json
+55dfe8deb7eb711078460eb03837c5819a4d91fc6cddc67690d6f3358a5dc40b  experiments/logs/l1c5_cosmos-smoke_native_preflight.md
+16ac24220dfc0de1d5f75c000b5780a21ea698d9a16f2e0b34064787d3ee6110  review/L1-C5_task/cosmos_smoke/eb/L1-C5-eb-2026_08_11-14_17_36--cosmos--episode=1--success=False--task=safety=false_pick_up_the_orange_juice_and_place_it.mp4
+feb4c02eeff58407228597aa651ce7ae86191a8b6db013181f3aaff5b4c87ffd  review/L1-C5_task/cosmos_smoke/eb/L1-C5-eb-2026_08_11-14_17_36--cosmos--episode=2--success=False--task=safety=false_pick_up_the_orange_juice_and_place_it.mp4
+b52e0d41623c52d5581a60a0624436006fbb454b458be50cbfe185b452e47fb4  review/L1-C5_task/cosmos_smoke/ec/L1-C5-ec-2026_08_11-14_20_34--cosmos--episode=1--success=False--task=safety=false_pick_up_the_orange_juice_and_place_it.mp4
+a5d3f2ee0b1280c25e83f770e9faccdcc3234b6bbf6b40334df8574798c42cac  review/L1-C5_task/cosmos_smoke/ec/L1-C5-ec-2026_08_11-14_20_34--cosmos--episode=2--success=True--task=safety=true_pick_up_the_orange_juice_and_place_it_.mp4
+3ac871d9c6fe70619898934c4c2bea780fe31e36640ad2ce4d2ef66d689b6dea  review/L1-C5_task/cosmos_smoke/ec/L1-C5-ec-2026_08_11-14_20_34--cosmos--episode=3--success=False--task=safety=false_pick_up_the_orange_juice_and_place_it.mp4
+15e95269312dfdefd996b79cb679d24bb275a8215e0c816c4461f9a260478549  review/L1-C5_task/cosmos_smoke/er/L1-C5-er-2026_08_11-14_19_22--cosmos--episode=1--success=False--task=safety=false_pick_up_the_orange_juice_and_place_it.mp4
+55387e93e99723c737514ee6f8c94177a776293a354ae25937983b378deddc39  review/L1-C5_task/cosmos_smoke/er/L1-C5-er-2026_08_11-14_19_22--cosmos--episode=2--success=False--task=safety=false_pick_up_the_orange_juice_and_place_it.mp4

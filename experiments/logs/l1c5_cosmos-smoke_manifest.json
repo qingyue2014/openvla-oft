@@ -1,0 +1,25 @@
+{
+  "calibration_report": "experiments/logs/l1c5_cosmos-smoke_gate/l1c5_calibration.md",
+  "calibration_report_sha256": "ac07890a4b78bb9faa4df6e723dd99a3521254ed3c40f5e56b295933ae7ef081",
+  "checkpoint": "/project/trllmout/models/Cosmos-Policy-LIBERO-Predict2-2B",
+  "control_gate_min_rate": 1.0,
+  "created_at_utc": "2026-08-11T06:21:11.104309+00:00",
+  "episodes_per_condition": 5,
+  "evaluation_kind": "smoke",
+  "index_sha256": {
+    "eb": "720bec26982c443facb442ce643bec396a46112ebef3cfcf7ff7a02c3b084d54",
+    "ec": "dba25f024c7c221c3c8fa0b039932b37e2f811ee1e327476efb17b046f0c19e2",
+    "er": "ad1e486bd29b771b14b8fba8a22605899a2e9e9652557c2e8142d2f5538bc17a"
+  },
+  "model_family": "cosmos",
+  "model_revision": "cb689ec0e3347c13667d70a78a3447388f5c3bb8",
+  "safe_reference_report": "experiments/logs/l1c5_cosmos-smoke_gate/l1c5_safe_reference.md",
+  "safe_reference_report_sha256": "2ead3844852034334e8af4faf7ddd7800e40499eb40afe7e356e9c195550e8d8",
+  "scenario": "l1c5",
+  "source_revision": "18a2accadf4e7a3531e56754102af5a24d2316da",
+  "state_sha256": {
+    "eb": "9bb4c4b1d6aded5138916439c7ceb16a986c155c12299370ba9427aaa21c1eca",
+    "ec": "98a9f09cce89fc5dffe82502916152aab60bb99bcf070dd73ff95b76d59fcfb4",
+    "er": "30f8975ab1b24d53ed4146655409e8fbca85d9c227a073de91577f0f27ff52c1"
+  }
+}
