@@ -8,6 +8,10 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from pathlib import Path
+import pickle
+import socket
+import struct
+import time
 from typing import Any, Mapping
 
 import numpy as np
@@ -25,6 +29,8 @@ COSMOS_TOKENIZER_REVISION = "f50c09f5d8ab133a90cac3f4886a6471e9ba3f18"
 COSMOS_DEFAULT_TOKENIZER = Path(
     "/project/trllmout/models/Cosmos-Predict2-2B-Video2World/tokenizer/tokenizer.pth"
 )
+_MESSAGE_HEADER = struct.Struct("!Q")
+_MAX_MESSAGE_BYTES = 64 * 1024 * 1024
 
 
 def is_cosmos_model_family(model_family: str) -> bool:
@@ -251,5 +257,136 @@ class CosmosPolicy:
         """Cosmos Policy is stateless across action-chunk queries."""
 
 
-def get_cosmos_policy(cfg: Any) -> CosmosPolicy:
+def _recv_exact(sock: socket.socket, size: int) -> bytes | None:
+    chunks = bytearray()
+    while len(chunks) < size:
+        chunk = sock.recv(size - len(chunks))
+        if not chunk:
+            return None
+        chunks.extend(chunk)
+    return bytes(chunks)
+
+
+def _recv_message(sock: socket.socket) -> Any | None:
+    header = _recv_exact(sock, _MESSAGE_HEADER.size)
+    if header is None:
+        return None
+    (size,) = _MESSAGE_HEADER.unpack(header)
+    if size > _MAX_MESSAGE_BYTES:
+        raise ValueError(f"Cosmos policy message is too large: {size} bytes")
+    payload = _recv_exact(sock, size)
+    if payload is None:
+        raise ConnectionError("Cosmos policy connection closed mid-message")
+    return pickle.loads(payload)
+
+
+def _send_message(sock: socket.socket, value: Any) -> None:
+    payload = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
+    if len(payload) > _MAX_MESSAGE_BYTES:
+        raise ValueError(f"Cosmos policy message is too large: {len(payload)} bytes")
+    sock.sendall(_MESSAGE_HEADER.pack(len(payload)) + payload)
+
+
+class CosmosPolicyClient:
+    """Localhost client keeping Cosmos dependencies out of the simulator process."""
+
+    def __init__(self, cfg: Any):
+        self.host = str(getattr(cfg, "cosmos_host", "127.0.0.1"))
+        self.port = int(getattr(cfg, "cosmos_port", 0))
+        self.connect_timeout_s = float(
+            getattr(cfg, "cosmos_connect_timeout_s", 900.0)
+        )
+        if self.port <= 0:
+            raise ValueError("cosmos_port must be positive for remote inference")
+        if self.connect_timeout_s <= 0:
+            raise ValueError("cosmos_connect_timeout_s must be positive")
+        self._request({"op": "ping"})
+
+    def _request(self, request: Mapping[str, Any]) -> Any:
+        deadline = time.monotonic() + self.connect_timeout_s
+        while True:
+            try:
+                sock = socket.create_connection(
+                    (self.host, self.port), timeout=min(5.0, self.connect_timeout_s)
+                )
+                break
+            except OSError:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(
+                        f"Timed out connecting to Cosmos policy server at "
+                        f"{self.host}:{self.port}"
+                    )
+                time.sleep(1.0)
+        with sock:
+            sock.settimeout(self.connect_timeout_s)
+            _send_message(sock, dict(request))
+            response = _recv_message(sock)
+        if not isinstance(response, Mapping):
+            raise RuntimeError("Cosmos policy server returned an invalid response")
+        if not response.get("ok"):
+            raise RuntimeError(
+                f"Cosmos policy server error: {response.get('error', 'unknown error')}"
+            )
+        return response.get("result")
+
+    def infer(self, observation: Mapping[str, Any], task_label: str) -> np.ndarray:
+        result = self._request(
+            {
+                "op": "infer",
+                "observation": dict(observation),
+                "task_label": str(task_label),
+            }
+        )
+        return validate_cosmos_actions(result)
+
+    def reset(self) -> None:
+        """Cosmos Policy is stateless across action-chunk queries."""
+
+
+def serve_cosmos_policy(policy: CosmosPolicy, host: str, port: int) -> None:
+    """Serve one official Cosmos policy on a loopback-only TCP endpoint."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind((host, port))
+        listener.listen(8)
+        print(f"COSMOS_POLICY_SERVER_READY host={host} port={port}", flush=True)
+        while True:
+            connection, _ = listener.accept()
+            with connection:
+                while True:
+                    try:
+                        request = _recv_message(connection)
+                    except Exception as exc:
+                        try:
+                            _send_message(
+                                connection,
+                                {"ok": False, "error": f"{type(exc).__name__}: {exc}"},
+                            )
+                        except Exception:
+                            pass
+                        break
+                    if request is None:
+                        break
+                    try:
+                        operation = request.get("op")
+                        if operation == "ping":
+                            result = "pong"
+                        elif operation == "infer":
+                            result = policy.infer(
+                                request["observation"], request["task_label"]
+                            )
+                        else:
+                            raise ValueError(f"Unsupported Cosmos server operation: {operation}")
+                        response = {"ok": True, "result": result}
+                    except Exception as exc:
+                        response = {
+                            "ok": False,
+                            "error": f"{type(exc).__name__}: {exc}",
+                        }
+                    _send_message(connection, response)
+
+
+def get_cosmos_policy(cfg: Any) -> CosmosPolicy | CosmosPolicyClient:
+    if int(getattr(cfg, "cosmos_port", 0)) > 0:
+        return CosmosPolicyClient(cfg)
     return CosmosPolicy(cfg)

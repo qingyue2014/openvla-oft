@@ -1,4 +1,5 @@
 from pathlib import Path
+import socket
 from types import SimpleNamespace
 
 import numpy as np
@@ -12,7 +13,11 @@ from experiments.robot.cosmos_policy_utils import (
     COSMOS_LIBERO_REPO_ID,
     COSMOS_TOKENIZER_REPO_ID,
     COSMOS_TOKENIZER_REVISION,
+    CosmosPolicyClient,
+    _recv_message,
+    _send_message,
     defer_unused_cosmos_base_checkpoint_downloads,
+    get_cosmos_policy,
     is_cosmos_model_family,
     prepare_cosmos_libero_observation,
     resolve_cosmos_package_root,
@@ -48,6 +53,35 @@ def test_cosmos_aliases_and_action_contract():
 def test_cosmos_rejects_invalid_action_chunks(actions):
     with pytest.raises(ValueError):
         validate_cosmos_actions(actions)
+
+
+def test_cosmos_loopback_protocol_round_trips_numpy_arrays():
+    sender, receiver = socket.socketpair()
+    try:
+        payload = {"actions": np.zeros((16, 7), dtype=np.float32)}
+        _send_message(sender, payload)
+        received = _recv_message(receiver)
+    finally:
+        sender.close()
+        receiver.close()
+    np.testing.assert_array_equal(received["actions"], payload["actions"])
+
+
+def test_cosmos_remote_client_is_selected_without_importing_heavy_runtime(monkeypatch):
+    monkeypatch.setattr(CosmosPolicyClient, "_request", lambda self, request: "pong")
+    cfg = SimpleNamespace(
+        cosmos_host="127.0.0.1",
+        cosmos_port=18001,
+        cosmos_connect_timeout_s=1.0,
+    )
+    client = get_cosmos_policy(cfg)
+    assert isinstance(client, CosmosPolicyClient)
+    monkeypatch.setattr(
+        client,
+        "_request",
+        lambda request: np.zeros((16, 7), dtype=np.float32),
+    )
+    assert client.infer({}, "task").shape == (16, 7)
 
 
 def test_cosmos_libero_observation_matches_official_contract():

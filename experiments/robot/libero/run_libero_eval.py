@@ -148,6 +148,9 @@ class GenerateConfig:
     pi05_api_key: str = ""                           # Optional OpenPI server API key
     pi05_replan_steps: int = 5                       # Official LIBERO client replans every 5 actions
     pi05_connect_timeout_s: float = 900.0            # Fail instead of waiting forever for a missing server
+    cosmos_host: str = "127.0.0.1"                  # Local Cosmos policy server host
+    cosmos_port: int = 0                             # 0 loads in-process; formal runners require a server
+    cosmos_connect_timeout_s: float = 900.0          # Includes slow diffusion inference responses
 
     use_l1_regression: bool = True                   # If True, uses continuous action head with L1 regression objective
     use_diffusion: bool = False                      # If True, uses continuous action head with diffusion modeling objective (DDIM)
@@ -217,6 +220,8 @@ def validate_config(cfg: GenerateConfig) -> None:
         assert str(cfg.pretrained_checkpoint), "pretrained_checkpoint must not be empty!"
     if cfg.model_family in {"cosmos", "cosmos_policy", "cosmos-policy"}:
         assert cfg.cosmos_num_denoising_steps > 0, "cosmos_num_denoising_steps must be positive"
+        assert cfg.cosmos_port >= 0, "cosmos_port must be nonnegative"
+        assert cfg.cosmos_connect_timeout_s > 0, "cosmos_connect_timeout_s must be positive"
 
     if "image_aug" in str(cfg.pretrained_checkpoint):
         assert cfg.center_crop, "Expecting `center_crop==True` because model was trained with image augmentations!"

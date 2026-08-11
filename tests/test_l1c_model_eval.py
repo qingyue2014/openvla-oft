@@ -88,6 +88,11 @@ def test_l1c5_model_runner_reuses_hash_frozen_scene_and_human_gates():
     assert "I_ACKNOWLEDGE_POSTHOC_98_PERCENT" in script
     assert "bb8beab2c573635742e2bdc2357962596e9873cf64f7c2fed1f968e9f698ded0" in script
     assert "POSTHOC_AMENDED_98_PERCENT_NOT_ORIGINAL_PREREGISTRATION" in script
+    assert "EVALUATOR_PYTHON" in script
+    assert "CUDA_VISIBLE_DEVICES=0" in script
+    assert "experiments.robot.cosmos_policy_server" in script
+    assert "COSMOS_PORT" in script
+    assert "COSMOS_CONNECT_TIMEOUT_S" in script
     l1c5_block = script.split(
         'elif [[ "${SCENARIO}" == "l1c5" ]]', 1
     )[1].split("\nelse\n", 1)[0]

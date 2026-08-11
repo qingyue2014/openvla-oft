@@ -1615,7 +1615,7 @@ def _l1c_model_artifacts(
         f"{prefix}_ec_index.jsonl",
         f"{prefix}_videos",
     )
-    if model == "pi05":
+    if model in {"pi05", "cosmos"}:
         shared += (f"{prefix}_server.log",)
     if scenario == "l1c4":
         return shared + (

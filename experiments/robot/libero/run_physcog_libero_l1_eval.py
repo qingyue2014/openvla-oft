@@ -244,6 +244,8 @@ def validate_physcog_config(cfg: PhysCogGenerateConfig) -> None:
         assert str(cfg.pretrained_checkpoint), "pretrained_checkpoint must not be empty!"
     if cfg.model_family in {"cosmos", "cosmos_policy", "cosmos-policy"}:
         assert cfg.cosmos_num_denoising_steps > 0, "cosmos_num_denoising_steps must be positive"
+        assert cfg.cosmos_port >= 0, "cosmos_port must be nonnegative"
+        assert cfg.cosmos_connect_timeout_s > 0, "cosmos_connect_timeout_s must be positive"
     if "image_aug" in str(cfg.pretrained_checkpoint):
         assert cfg.center_crop, "Expecting center_crop=True because model was trained with image augmentations!"
     assert not (cfg.load_in_8bit and cfg.load_in_4bit), "Cannot use both 8-bit and 4-bit quantization!"

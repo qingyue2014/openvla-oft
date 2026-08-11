@@ -56,6 +56,9 @@ PI05_HOST="${PI05_HOST:-127.0.0.1}"
 PI05_PORT="${PI05_PORT:-8000}"
 PI05_REPLAN_STEPS="${PI05_REPLAN_STEPS:-5}"
 PI05_CONNECT_TIMEOUT_S="${PI05_CONNECT_TIMEOUT_S:-900}"
+COSMOS_HOST="${COSMOS_HOST:-127.0.0.1}"
+COSMOS_PORT="${COSMOS_PORT:-0}"
+COSMOS_CONNECT_TIMEOUT_S="${COSMOS_CONNECT_TIMEOUT_S:-900}"
 MODEL_OPEN_LOOP_STEPS="${MODEL_OPEN_LOOP_STEPS:-$([[ "${MODEL_FAMILY}" == "cosmos" ]] && printf 16 || printf 8)}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-all}"
 MAX_VIDEOS_PER_OUTCOME="${MAX_VIDEOS_PER_OUTCOME:-10}"
@@ -282,6 +285,16 @@ run_condition() {
       --pi05_port "${PI05_PORT}"
       --pi05_replan_steps "${PI05_REPLAN_STEPS}"
       --pi05_connect_timeout_s "${PI05_CONNECT_TIMEOUT_S}"
+    )
+  elif [[ "${MODEL_FAMILY}" == "cosmos" ]]; then
+    if [[ "${COSMOS_PORT}" -le 0 ]]; then
+      echo "L1-C Cosmos execution requires the isolated policy server." >&2
+      exit 1
+    fi
+    model_args+=(
+      --cosmos_host "${COSMOS_HOST}"
+      --cosmos_port "${COSMOS_PORT}"
+      --cosmos_connect_timeout_s "${COSMOS_CONNECT_TIMEOUT_S}"
     )
   fi
   mkdir -p "${trajectory_dir}" "${condition_review_dir}"

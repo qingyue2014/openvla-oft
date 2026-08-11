@@ -75,6 +75,8 @@ COSMOS_MODEL_REVISION="${COSMOS_MODEL_REVISION:-cb689ec0e3347c13667d70a78a344738
 COSMOS_SOURCE_ROOT="${COSMOS_SOURCE_ROOT:-/project/trllmout/models/_sources/cosmos-policy}"
 COSMOS_SOURCE_REVISION="${COSMOS_SOURCE_REVISION:-18a2accadf4e7a3531e56754102af5a24d2316da}"
 COSMOS_PYTHON="${COSMOS_PYTHON:-${COSMOS_SOURCE_ROOT}/.venv/bin/python}"
+EVALUATOR_PYTHON="${EVALUATOR_PYTHON:-$(command -v python)}"
+test -x "${EVALUATOR_PYTHON}"
 
 export LIBERO_ROOT
 export NUM_TRIALS="${COUNT}"
@@ -384,10 +386,6 @@ PY
 )"
   COSMOS_NVRTC_ROOT="${COSMOS_SITE_PACKAGES}/nvidia/cuda_nvrtc"
   test -f "${COSMOS_NVRTC_ROOT}/lib/libnvrtc.so.12"
-  export PATH="$(dirname "${COSMOS_PYTHON}"):${PATH}"
-  export CUDA_HOME="${COSMOS_NVRTC_ROOT}"
-  export CC="${COSMOS_CC:-/usr/bin/gcc}"
-  export CXX="${COSMOS_CXX:-/usr/bin/g++}"
   COSMOS_NVIDIA_LIBRARY_PATH="$("${COSMOS_PYTHON}" - "${COSMOS_SITE_PACKAGES}" <<'PY'
 import pathlib
 import sys
@@ -396,11 +394,65 @@ root = pathlib.Path(sys.argv[1]) / "nvidia"
 print(":".join(str(path) for path in sorted(root.glob("*/lib"))))
 PY
 )"
-  export LD_LIBRARY_PATH="${COSMOS_NVIDIA_LIBRARY_PATH}:${LD_LIBRARY_PATH:-}"
-  export PYTHONPATH="${COSMOS_SOURCE_ROOT}:${LIBERO_ROOT}:${PYTHONPATH:-}"
+  if [[ -n "${COSMOS_PORT:-}" ]]; then
+    PORT="${COSMOS_PORT}"
+  elif [[ -n "${SLURM_JOB_ID:-}" ]]; then
+    PORT="$((40000 + SLURM_JOB_ID % 20000))"
+  else
+    PORT=18001
+  fi
+  SERVER_LOG="${RESULT_PREFIX}_server.log"
+  (
+    CUDA_VISIBLE_DEVICES=0 \
+    CUDA_HOME="${COSMOS_NVRTC_ROOT}" \
+    CC="${COSMOS_CC:-/usr/bin/gcc}" \
+    CXX="${COSMOS_CXX:-/usr/bin/g++}" \
+    PATH="$(dirname "${COSMOS_PYTHON}"):${PATH}" \
+    LD_LIBRARY_PATH="${COSMOS_NVIDIA_LIBRARY_PATH}:${LD_LIBRARY_PATH:-}" \
+    PYTHONPATH="${PWD}:${COSMOS_SOURCE_ROOT}:${LIBERO_ROOT}:${PYTHONPATH:-}" \
+      "${COSMOS_PYTHON}" -m experiments.robot.cosmos_policy_server \
+        --host 127.0.0.1 \
+        --port "${PORT}" \
+        --checkpoint "${COSMOS_CHECKPOINT}" \
+        --num-open-loop-steps 16 \
+        --num-denoising-steps 5 \
+        --seed "${SEED:-7}" \
+        --task-suite-name libero_object
+  ) >"${SERVER_LOG}" 2>&1 &
+  server_pid=$!
+  server_ready=false
+  for _ in $(seq 1 900); do
+    if ! kill -0 "${server_pid}" >/dev/null 2>&1; then
+      echo "Cosmos policy server exited before becoming ready" >&2
+      tail -200 "${SERVER_LOG}" >&2 || true
+      exit 1
+    fi
+    if "${EVALUATOR_PYTHON}" - "${PORT}" <<'PY'
+import socket
+import sys
+
+try:
+    with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=1):
+        pass
+except OSError:
+    raise SystemExit(1)
+PY
+    then
+      server_ready=true
+      break
+    fi
+    sleep 2
+  done
+  if [[ "${server_ready}" != "true" ]]; then
+    echo "Cosmos policy server did not become ready within 1800 seconds" >&2
+    exit 1
+  fi
   export MODEL_FAMILY=cosmos
   export CHECKPOINT="${COSMOS_CHECKPOINT}"
   export MODEL_OPEN_LOOP_STEPS=16
+  export COSMOS_HOST=127.0.0.1
+  export COSMOS_PORT="${PORT}"
+  export COSMOS_CONNECT_TIMEOUT_S=900
   MODEL_REVISION="${COSMOS_MODEL_REVISION}"
   SOURCE_REVISION="${COSMOS_SOURCE_REVISION}"
 fi
