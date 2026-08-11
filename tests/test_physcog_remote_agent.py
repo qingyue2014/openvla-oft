@@ -130,6 +130,7 @@ def test_l1c5_registry_exposes_registered_model_runs_and_posthoc_amendment():
         "cosmos_formal_amended98",
         "cosmos_smoke_upright_posthoc",
         "cosmos_formal_upright_posthoc",
+        "model_informed_screen",
     }
     runner = "experiments/robot/libero/tasks/run_model_l1c_eval.sh"
     for model in ("pi05", "cosmos"):
@@ -172,6 +173,14 @@ def test_l1c5_registry_exposes_registered_model_runs_and_posthoc_amendment():
                 f"{model}_{kind}-upright-posthoc" in path
                 for path in revised.artifacts
             )
+    screen = PHASES[("l1c5", "model_informed_screen")]
+    assert screen.count_env == "L1C_MI_SCREEN_STATES"
+    assert screen.command[-2:] == (
+        "experiments/robot/libero/tasks/run_l1c5_model_informed_design.sh",
+        "screen",
+    )
+    assert "experiments/logs/l1c5_mi_v1_design" in screen.artifacts
+    assert "review/L1-C5-MI-v1_task/candidate_screen" in screen.artifacts
 
 
 def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():

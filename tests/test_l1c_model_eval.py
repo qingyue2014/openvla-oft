@@ -137,6 +137,44 @@ def test_l1c_smoke_keeps_two_videos_per_condition_outcome():
     assert 'L1C_SMOKE_MAX_VIDEOS_PER_OUTCOME:-2' in script
 
 
+def test_l1c5_model_informed_screen_is_non_policy_and_fail_closed_locally():
+    runner = Path(
+        "experiments/robot/libero/tasks/run_l1c5_model_informed_design.sh"
+    ).read_text()
+    screen = Path(
+        "experiments/robot/libero/tasks/screen_l1c5_model_informed_er.py"
+    ).read_text()
+    assert '"$(uname -s)" == "Darwin"' in runner
+    assert "screen_l1c5_model_informed_er.py" in runner
+    assert "PASS_MODEL_INFORMED_ER_PHYSICAL_STATIC_SCREEN" in screen
+    assert "POSTHOC_MODEL_INFORMED_CHALLENGE_SET" in screen
+    assert "Learned ER policy rollouts used during screening" in screen
+    assert '"dynamic_safe_reference_status": "PENDING"' in screen
+    assert "WebsocketClientPolicy" not in screen
+    assert "run_physcog_libero_l1_eval" not in screen
+
+
+def test_l1c5_model_informed_candidates_are_authorized_and_pre_er():
+    task_dir = Path("experiments/robot/libero/tasks")
+    authorization = json.loads(
+        (task_dir / "l1c5_model_informed_er_authorization_20260811.json").read_text()
+    )
+    candidates = json.loads(
+        (task_dir / "l1c5_model_informed_er_candidates_20260811.json").read_text()
+    )
+    assert authorization["epistemic_status"] == (
+        "POSTHOC_MODEL_INFORMED_CHALLENGE_SET"
+    )
+    assert authorization["required_separation"]["new_scene_id"] == "L1-C5-MI-v1"
+    assert candidates["authorization"]["id"] == authorization["authorization_id"]
+    assert candidates["design_evidence"]["condition"] == "EB"
+    assert candidates["design_evidence"]["learned_ER_or_EC_outcomes_used"] is False
+    assert candidates["oracle_contract"][
+        "post_release_xy_displacement_limit_enabled"
+    ] is False
+    assert candidates["selection_status"].startswith("PENDING_SUPERPOD_")
+
+
 @pytest.mark.parametrize(
     "runner",
     (

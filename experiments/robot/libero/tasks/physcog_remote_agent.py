@@ -1765,6 +1765,21 @@ for _upright_model in ("pi05", "cosmos"):
             ),
         )
 
+PHASES[("l1c5", "model_informed_screen")] = PhaseSpec(
+    command=(
+        "env",
+        "RENDER_GPU_DEVICE_ID=1",
+        "bash",
+        "experiments/robot/libero/tasks/run_l1c5_model_informed_design.sh",
+        "screen",
+    ),
+    count_env="L1C_MI_SCREEN_STATES",
+    artifacts=(
+        "experiments/logs/l1c5_mi_v1_design",
+        "review/L1-C5-MI-v1_task/candidate_screen",
+    ),
+)
+
 
 VERDICT_RE = re.compile(
     r"(?:Verdict:\s*(?:\*\*)?|verdict=|\"occlusion_gate\"\s*:\s*\")"

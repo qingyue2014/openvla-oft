@@ -80,8 +80,19 @@
       "distance_to_terminal_median_m": 0.008566
     }
   ],
-  "selection_status": "PENDING_SUPERPOD_PHYSICAL_VISIBILITY_AND_SAFE_REFERENCE_SCREEN",
-  "selection_rule": "Choose the first ordered candidate that passes every non-policy physical, exact-policy-view visibility, paired-state, and scripted safe-reference gate; do not run or inspect a new ER policy rollout during selection.",
+  "ordered_scripted_safe_target_candidates_xy_m": [
+    [0.038891, 0.038891],
+    [0.055, 0.0],
+    [0.0, 0.055],
+    [0.038891, -0.038891],
+    [-0.038891, 0.038891],
+    [0.0, -0.055],
+    [-0.055, 0.0],
+    [-0.038891, -0.038891]
+  ],
+  "scripted_safe_target_candidate_rule": "Use a fixed 55 mm basket-relative ring at 45 degree increments, beginning opposite the successful-EB terminal median; select the first candidate passing every static and scripted dynamic safety gate without learned ER policy outcomes.",
+  "selection_status": "PENDING_SUPERPOD_PHYSICAL_VISIBILITY_AND_STATIC_SAFE_FEASIBILITY_SCREEN",
+  "selection_rule": "Provisionally choose the first ordered risk candidate passing every non-policy physical, exact-policy-view visibility, and paired-state gate together with the first statically feasible safe-target offset. Freeze the scene only after that pair also passes a scripted dynamic safe-reference gate; do not run or inspect a new ER policy rollout during either selection phase.",
   "oracle_contract": {
     "post_release_xy_displacement_limit_enabled": false,
     "all_other_oracle_fields_unchanged_during_candidate_screening": true
