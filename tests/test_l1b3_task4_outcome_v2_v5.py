@@ -32,6 +32,7 @@ REMOTE = TASKS / "physcog_remote_agent.py"
 PI05_RUNNER = TASKS / "run_l1b3_task4_outcome_v2_v5_pi05.sh"
 FROZEN = TASKS / "frozen/l1b3_task4_outcome_v2_v5_job514502"
 SCENE_APPROVAL = FROZEN / "scene_human_review_approval.json"
+SMOKE_RESULT = TASKS / "l1b3_task4_outcome_v2_v5_pi05_smoke_job514850_result.json"
 
 
 def _family_block(text: str) -> str:
@@ -229,6 +230,35 @@ def test_v5_pi05_runner_freezes_protocol_and_blocks_formal():
     )
     assert blocked.returncode == 2
     assert "not authorized" in blocked.stderr.lower()
+
+
+def test_v5_pi05_job514850_failure_blocks_formal_and_cascade():
+    result = json.loads(SMOKE_RESULT.read_text())
+    assert result["status"] == "smoke_failed_not_formal"
+    assert result["evidence_status"] == (
+        "invalid_for_formal_results_publication_or_model_comparison"
+    )
+    assert result["execution"]["slurm_job_id"] == "514850"
+    assert result["execution"]["replan_steps"] == 1
+    assert result["frozen_scene_reuse"]["source_job_id"] == "514502"
+    assert result["frozen_scene_reuse"]["source_state_indices"] == [2, 4, 5, 7, 8]
+    assert result["pre_rollout_gates"]["exact_first_policy_records_valid"] == 15
+    assert result["pre_rollout_gates"]["dynamic_safe_reference_successes"] == 5
+    assert result["condition_results"]["eb"]["rollout_physics_gate"] == "PASS"
+    assert result["condition_results"]["er"]["rollout_physics_gate"] == "FAIL"
+    assert result["condition_results"]["er"]["physics_rejected_episode_indices"] == [4]
+    assert result["condition_results"]["ec"]["rollout_physics_gate"] == "PASS"
+    assert result["artifact_completeness"]["registered_artifact_groups_fetched"] == 23
+    assert result["artifact_completeness"]["missing_artifact_groups"] == []
+    assert result["artifact_completeness"]["repository_review_videos"] == 31
+    assert result["authorization"] == {
+        "formal_authorized": False,
+        "cosmos_authorized": False,
+        "openvla_oft_authorized": False,
+        "threshold_relaxation_authorized": False,
+        "posthoc_pair_reselection_authorized": False,
+        "scene_retuning_from_pi05_outcomes_authorized": False,
+    }
 
 
 def test_v5_selection_validator_accepts_only_hash_bound_scripted_evidence(tmp_path):

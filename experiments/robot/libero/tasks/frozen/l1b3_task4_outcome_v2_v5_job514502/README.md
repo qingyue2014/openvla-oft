@@ -29,3 +29,9 @@ five immutable pairs, with the pinned OpenPI commit and `replan_steps=1`.
 It does not authorize pi0.5 formal, Cosmos, or OpenVLA-OFT evaluation. A
 separate explicit human review of the pi0.5 smoke videos is required before
 formal evaluation. No learned policy was executed by prepare job `514502`.
+
+Pi0.5 smoke job `514850` subsequently failed the frozen rollout-physics gate:
+ER episode 004 reached `3.177172475636424 mm` protected-contact penetration,
+above the `2.0 mm` limit. Its complete artifacts are retained as invalid
+diagnostics only. No formal, Cosmos, OpenVLA-OFT, threshold relaxation,
+pair reselection, or scene retuning is authorized from that smoke outcome.
