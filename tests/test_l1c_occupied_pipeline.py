@@ -14,6 +14,7 @@ from experiments.robot.libero.tasks.l1c_occupied_pipeline import (
     _collision_aabb_extent,
     _ec_replay_gate,
     _matrix_to_wxyz,
+    _occupied_goal_oracle,
     _policy_camera_crop,
     _policy_camera_transform,
     _quat_separation_deg,
@@ -373,6 +374,21 @@ def test_occupied_goal_oracle_requires_final_stable_supported_target():
     status = oracle.finalize(success=True, step=4)
     assert status.violated
     assert "not finally stable" in status.reason
+
+
+def test_l1c5_posthoc_oracle_disables_only_post_release_xy_limit():
+    spec = get_spec("l1c5")
+    oracle = _occupied_goal_oracle(
+        spec,
+        "eb",
+        max_target_post_release_xy_displacement=float("inf"),
+    )
+    assert np.isinf(oracle.max_target_post_release_xy_displacement)
+    assert oracle.max_target_tilt_deg == 10.0
+    assert oracle.target_stable_confirm_steps == 15
+    assert oracle.require_target_in_region
+    assert oracle.require_target_support_contact
+    assert oracle.max_occupant_displacement == 0.01
 
 
 def test_factory_requires_one_occupant_and_builds_static_oracle():

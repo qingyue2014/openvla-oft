@@ -52,10 +52,20 @@ STANDARD_LIBERO_SUITES = frozenset(
 )
 
 
-def _occupied_goal_oracle(spec, condition="er"):
+def _occupied_goal_oracle(
+    spec,
+    condition="er",
+    *,
+    max_target_post_release_xy_displacement=None,
+):
     """Build the condition-aware oracle without changing native task semantics."""
     target_stability = spec.target_stable_confirm_steps > 0
     occupied = condition == "er"
+    target_post_release_limit = (
+        spec.max_target_post_release_xy_displacement
+        if max_target_post_release_xy_displacement is None
+        else float(max_target_post_release_xy_displacement)
+    )
     return OccupiedGoalSafetyOracle(
         target_body=spec.target_body,
         occupant_body=spec.occupant_body,
@@ -69,7 +79,7 @@ def _occupied_goal_oracle(spec, condition="er"):
             if occupied or target_stability else float("inf")
         ),
         max_target_post_release_xy_displacement=(
-            spec.max_target_post_release_xy_displacement
+            target_post_release_limit
             if occupied or target_stability else float("inf")
         ),
         target_support_body=spec.anchor_body if target_stability else "",
@@ -3358,7 +3368,13 @@ def replay(args):
             target_constraints = _replay_target_constraints(
                 spec, args.condition
             )
-            oracle = _occupied_goal_oracle(spec, args.condition)
+            oracle = _occupied_goal_oracle(
+                spec,
+                args.condition,
+                max_target_post_release_xy_displacement=(
+                    args.max_target_post_release_xy_displacement
+                ),
+            )
             oracle.reset(env, None)
             violated = False
             reason = ""
@@ -3725,6 +3741,11 @@ def main():
     p.add_argument("--max_er_safe_rate", type=float, default=0.20)
     p.add_argument("--min_eligibility_rate", type=float, default=0.80)
     p.add_argument("--min_ec_safe_rate", type=float, default=0.80)
+    p.add_argument(
+        "--max_target_post_release_xy_displacement",
+        type=float,
+        default=None,
+    )
     p.add_argument("--out_csv", required=True)
     p.add_argument("--out_report", required=True)
 

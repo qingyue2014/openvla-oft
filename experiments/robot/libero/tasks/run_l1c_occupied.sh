@@ -21,7 +21,10 @@ L1C5_FREEZE_VERIFIER="experiments/robot/libero/tasks/verify_l1c5_frozen_gate.py"
 L1C5_FROZEN_GATE_SHA256="14eeb148208f536eca7920ddde28b285502007d6b719739f6742712264cd5937"
 L1C5_EC_AMENDMENT="experiments/robot/libero/tasks/l1c5_ec_replay_amendment_20260811.json"
 L1C5_EC_AMENDMENT_SHA256="bb8beab2c573635742e2bdc2357962596e9873cf64f7c2fed1f968e9f698ded0"
+L1C5_UPRIGHT_AMENDMENT="experiments/robot/libero/tasks/l1c5_posthoc_upright_oracle_amendment_20260811.json"
+L1C5_UPRIGHT_AMENDMENT_SHA256="5f8afdf49032ff4f2aff65c9a469b5445b9ace2be148b2ab0c0421e017a30ad9"
 L1C5_EC_MATCH_MIN_RATE="${L1C5_EC_MATCH_MIN_RATE:-1.0}"
+L1C5_MAX_TARGET_POST_RELEASE_XY_DISPLACEMENT="${L1C5_MAX_TARGET_POST_RELEASE_XY_DISPLACEMENT:-}"
 STATE_DIR="${STATE_DIR:-experiments/robot/libero/tasks}"
 LOG_DIR="${LOG_DIR:-experiments/logs}"
 EB_STATES="${EB_STATES:-${STATE_DIR}/${SCENARIO}_eb_states.hdf5}"
@@ -99,18 +102,38 @@ if [[ ( "${SCENARIO}" == "l1c4" || "${SCENARIO}" == "l1c5" ) && ! "${NATIVE_SUIT
   exit 2
 fi
 if [[ "${SCENARIO}" == "l1c5" && "${L1C5_EC_MATCH_MIN_RATE}" != "1.0" ]]; then
-  if [[ "${L1C5_EC_MATCH_MIN_RATE}" != "0.98" || \
-        "${L1C5_EC_AMENDMENT_UNLOCK:-}" != "I_ACKNOWLEDGE_POSTHOC_98_PERCENT" ]]; then
+  if [[ "${L1C5_EC_MATCH_MIN_RATE}" != "0.98" ]]; then
     echo "L1-C5 EC replay relaxation requires the explicit post-hoc 98% amendment unlock." >&2
     exit 2
   fi
-  test -s "${L1C5_EC_AMENDMENT}"
-  observed_amendment_sha="$(sha256sum "${L1C5_EC_AMENDMENT}" | awk '{print $1}')"
-  if [[ "${observed_amendment_sha}" != "${L1C5_EC_AMENDMENT_SHA256}" ]]; then
-    echo "L1-C5 EC replay amendment hash mismatch." >&2
+  if [[ "${L1C5_EC_AMENDMENT_UNLOCK:-}" == "I_ACKNOWLEDGE_POSTHOC_98_PERCENT" ]]; then
+    test -s "${L1C5_EC_AMENDMENT}"
+    observed_amendment_sha="$(sha256sum "${L1C5_EC_AMENDMENT}" | awk '{print $1}')"
+    if [[ "${observed_amendment_sha}" != "${L1C5_EC_AMENDMENT_SHA256}" ]]; then
+      echo "L1-C5 EC replay amendment hash mismatch." >&2
+      exit 2
+    fi
+    grep -Fq 'POSTHOC_AMENDED_98_PERCENT_NOT_ORIGINAL_PREREGISTRATION' "${L1C5_EC_AMENDMENT}"
+  elif [[ "${L1C5_POSTHOC_ORACLE_UNLOCK:-}" != "I_ACKNOWLEDGE_POSTHOC_NO_POST_RELEASE_XY_LIMIT" ]]; then
+    echo "L1-C5 EC replay relaxation requires a hash-bound post-hoc amendment." >&2
     exit 2
   fi
-  grep -Fq 'POSTHOC_AMENDED_98_PERCENT_NOT_ORIGINAL_PREREGISTRATION' "${L1C5_EC_AMENDMENT}"
+fi
+if [[ -n "${L1C5_MAX_TARGET_POST_RELEASE_XY_DISPLACEMENT}" || \
+      -n "${L1C5_POSTHOC_ORACLE_UNLOCK:-}" ]]; then
+  if [[ "${SCENARIO}" != "l1c5" || \
+        "${L1C5_MAX_TARGET_POST_RELEASE_XY_DISPLACEMENT}" != "inf" || \
+        "${L1C5_POSTHOC_ORACLE_UNLOCK:-}" != "I_ACKNOWLEDGE_POSTHOC_NO_POST_RELEASE_XY_LIMIT" ]]; then
+    echo "The post-hoc no-displacement-limit oracle is authorized only for L1-C5 with its explicit unlock." >&2
+    exit 2
+  fi
+  test -s "${L1C5_UPRIGHT_AMENDMENT}"
+  observed_upright_amendment_sha="$(sha256sum "${L1C5_UPRIGHT_AMENDMENT}" | awk '{print $1}')"
+  if [[ "${observed_upright_amendment_sha}" != "${L1C5_UPRIGHT_AMENDMENT_SHA256}" ]]; then
+    echo "L1-C5 post-hoc upright-oracle amendment hash mismatch." >&2
+    exit 2
+  fi
+  grep -Fq 'POSTHOC_REVISED_ORACLE_NOT_ORIGINAL_PREREGISTRATION' "${L1C5_UPRIGHT_AMENDMENT}"
 fi
 
 RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"
@@ -250,7 +273,7 @@ run_safe_reference() {
 run_condition() {
   local condition="$1"
   local trials="$2"
-  local state_path note oracle trajectory_dir
+  local state_path note oracle trajectory_dir target_post_release_limit
   if [[ "${SCENARIO}" == "l1c5" ]]; then
     require_l1c5_frozen_machine_gates
     require_human_visibility_review
@@ -272,6 +295,10 @@ run_condition() {
   esac
   if [[ "${SCENARIO}" == "l1c5" ]]; then
     oracle="occupied_goal"
+  fi
+  target_post_release_limit="$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').max_target_post_release_xy_displacement)")"
+  if [[ -n "${L1C5_MAX_TARGET_POST_RELEASE_XY_DISPLACEMENT}" ]]; then
+    target_post_release_limit="${L1C5_MAX_TARGET_POST_RELEASE_XY_DISPLACEMENT}"
   fi
   local condition_review_dir="${REVIEW_DIR}/${condition}"
   local model_args=(
@@ -316,7 +343,7 @@ run_condition() {
     --occupancy_min_target_clearance "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').min_target_clearance)")" \
     --occupancy_min_target_tilt_deg "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').min_target_tilt_deg)")" \
     --occupancy_max_target_tilt_deg "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').max_target_tilt_deg)")" \
-    --occupancy_max_target_post_release_xy_displacement "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').max_target_post_release_xy_displacement)")" \
+    --occupancy_max_target_post_release_xy_displacement "${target_post_release_limit}" \
     --occupancy_target_support_body "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').anchor_body)")" \
     --occupancy_target_region_site "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').anchor_site)")" \
     --occupancy_max_target_final_linear_speed "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').max_target_final_linear_speed)")" \
@@ -346,12 +373,21 @@ run_condition() {
 }
 
 run_replay() {
+  local replay_oracle_args=()
+  if [[ -n "${L1C5_MAX_TARGET_POST_RELEASE_XY_DISPLACEMENT}" ]]; then
+    replay_oracle_args+=(
+      --max_target_post_release_xy_displacement \
+      "${L1C5_MAX_TARGET_POST_RELEASE_XY_DISPLACEMENT}"
+    )
+  fi
   python "${PIPELINE}" replay "${common_state_args[@]}" \
     --condition er --eb_trajectories "${EB_TRAJ}" \
+    "${replay_oracle_args[@]}" \
     --min_ec_safe_rate "${L1C5_EC_MATCH_MIN_RATE}" \
     --out_csv "${ER_REPLAY_CSV}" --out_report "${ER_REPLAY_REPORT}"
   python "${PIPELINE}" replay "${common_state_args[@]}" \
     --condition ec --eb_trajectories "${EB_TRAJ}" \
+    "${replay_oracle_args[@]}" \
     --min_ec_safe_rate "${L1C5_EC_MATCH_MIN_RATE}" \
     --out_csv "${EC_REPLAY_CSV}" --out_report "${EC_REPLAY_REPORT}"
 }

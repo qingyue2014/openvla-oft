@@ -40,10 +40,21 @@ if [[ "${RUN_KIND}" == "formal" && "${COUNT}" -ne 50 ]]; then
   echo "Registered L1-C formal evaluation requires exactly 50 episodes." >&2
   exit 2
 fi
+L1C_EVAL_VARIANT="${L1C_EVAL_VARIANT:-}"
+case "${L1C_EVAL_VARIANT}" in
+  "") ;;
+  upright-posthoc)
+    if [[ "${SCENARIO}" != "l1c5" || "${RUN_KIND}" == "preview" ]]; then
+      echo "The upright-posthoc variant is authorized only for L1-C5 smoke/formal runs." >&2
+      exit 2
+    fi
+    ;;
+  *) echo "Unsupported L1-C evaluation variant: ${L1C_EVAL_VARIANT}" >&2; exit 2 ;;
+esac
 
 TASKS_DIR="experiments/robot/libero/tasks"
 LOG_DIR="experiments/logs"
-RUN_SUFFIX="${MODEL}-${RUN_KIND}"
+RUN_SUFFIX="${MODEL}-${RUN_KIND}${L1C_EVAL_VARIANT:+-${L1C_EVAL_VARIANT}}"
 RESULT_PREFIX="${LOG_DIR}/${SCENARIO}_${RUN_SUFFIX}"
 RESULTS_JSON="${RESULT_PREFIX}_results.json"
 RESULTS_REPORT="${RESULT_PREFIX}_results.md"
@@ -145,6 +156,8 @@ verify_l1c4_frozen_inputs() {
 L1C5_FROZEN_MANIFEST="${TASKS_DIR}/l1c5_frozen_gate_manifest.json"
 L1C5_EC_AMENDMENT="${TASKS_DIR}/l1c5_ec_replay_amendment_20260811.json"
 L1C5_EC_AMENDMENT_SHA256="bb8beab2c573635742e2bdc2357962596e9873cf64f7c2fed1f968e9f698ded0"
+L1C5_UPRIGHT_AMENDMENT="${TASKS_DIR}/l1c5_posthoc_upright_oracle_amendment_20260811.json"
+L1C5_UPRIGHT_AMENDMENT_SHA256="5f8afdf49032ff4f2aff65c9a469b5445b9ace2be148b2ab0c0421e017a30ad9"
 
 verify_l1c5_frozen_inputs() {
   python "${TASKS_DIR}/verify_l1c5_frozen_gate.py"
@@ -255,7 +268,33 @@ fi
 if [[ "${SCENARIO}" == "l1c5" ]]; then
   verify_l1c5_frozen_inputs
   export L1C5_EC_MATCH_MIN_RATE=1.0
-  if [[ -n "${L1C5_EC_AMENDMENT_UNLOCK:-}" ]]; then
+  if [[ "${L1C_EVAL_VARIANT}" == "upright-posthoc" && \
+        -z "${L1C5_POSTHOC_ORACLE_UNLOCK:-}" ]]; then
+    echo "The upright-posthoc label requires its hash-bound oracle amendment unlock." >&2
+    exit 2
+  fi
+  if [[ -n "${L1C5_EC_AMENDMENT_UNLOCK:-}" && \
+        -n "${L1C5_POSTHOC_ORACLE_UNLOCK:-}" ]]; then
+    echo "Select exactly one L1-C5 post-hoc amendment." >&2
+    exit 2
+  fi
+  if [[ -n "${L1C5_POSTHOC_ORACLE_UNLOCK:-}" ]]; then
+    if [[ "${L1C_EVAL_VARIANT}" != "upright-posthoc" || \
+          "${RUN_KIND}" == "preview" || \
+          "${L1C5_POSTHOC_ORACLE_UNLOCK}" != "I_ACKNOWLEDGE_POSTHOC_NO_POST_RELEASE_XY_LIMIT" ]]; then
+      echo "The no-displacement-limit amendment requires the registered L1-C5 upright-posthoc smoke/formal variant." >&2
+      exit 2
+    fi
+    assert_sha256 "${L1C5_UPRIGHT_AMENDMENT_SHA256}" "${L1C5_UPRIGHT_AMENDMENT}"
+    grep -Fq 'POSTHOC_REVISED_ORACLE_NOT_ORIGINAL_PREREGISTRATION' "${L1C5_UPRIGHT_AMENDMENT}"
+    export L1C5_MAX_TARGET_POST_RELEASE_XY_DISPLACEMENT=inf
+    export L1C5_EC_MATCH_MIN_RATE=0.98
+    PROTOCOL_AMENDMENT="${L1C5_UPRIGHT_AMENDMENT}"
+    SUMMARY_EXTRA_ARGS=(
+      --protocol_amendment "${PROTOCOL_AMENDMENT}"
+      --control_gate_min_rate "${L1C5_EC_MATCH_MIN_RATE}"
+    )
+  elif [[ -n "${L1C5_EC_AMENDMENT_UNLOCK:-}" ]]; then
     if [[ "${RUN_KIND}" != "formal" || \
           "${L1C5_EC_AMENDMENT_UNLOCK}" != "I_ACKNOWLEDGE_POSTHOC_98_PERCENT" ]]; then
       echo "The L1-C5 98% amendment is authorized only for a new formal run." >&2
@@ -287,15 +326,15 @@ if [[ "${SCENARIO}" == "l1c5" ]]; then
   fi
   if [[ "${RUN_KIND}" == "formal" ]]; then
     require_bound_human_review \
-      "review/L1-C5_task/${MODEL}_smoke/review.md" \
+      "review/L1-C5_task/${MODEL}_smoke${L1C_EVAL_VARIANT:+-${L1C_EVAL_VARIANT}}/review.md" \
       "PASS_HUMAN_${MODEL^^}_SMOKE" \
-      "experiments/logs/l1c5_${MODEL}-smoke_review_artifacts.sha256"
+      "experiments/logs/l1c5_${MODEL}-smoke${L1C_EVAL_VARIANT:+-${L1C_EVAL_VARIANT}}_review_artifacts.sha256"
   fi
   if [[ "${MODEL}" == "cosmos" ]]; then
     require_bound_human_review \
-      "review/L1-C5_task/pi05_formal/review.md" \
+      "review/L1-C5_task/pi05_formal${L1C_EVAL_VARIANT:+-${L1C_EVAL_VARIANT}}/review.md" \
       "PASS_HUMAN_PI05_FORMAL" \
-      "experiments/logs/l1c5_pi05-formal_review_artifacts.sha256"
+      "experiments/logs/l1c5_pi05-formal${L1C_EVAL_VARIANT:+-${L1C_EVAL_VARIANT}}_review_artifacts.sha256"
   fi
 fi
 
@@ -519,7 +558,7 @@ elif [[ "${SCENARIO}" == "l1c4" ]]; then
 elif [[ "${SCENARIO}" == "l1c5" ]]; then
   verify_l1c5_frozen_inputs
   MODEL_GATE_LOG_DIR="${RESULT_PREFIX}_gate"
-  MODEL_REVIEW_DIR="review/L1-C5_task/${MODEL}_${RUN_KIND}"
+  MODEL_REVIEW_DIR="review/L1-C5_task/${MODEL}_${RUN_KIND}${L1C_EVAL_VARIANT:+-${L1C_EVAL_VARIANT}}"
   if [[ -e "${MODEL_GATE_LOG_DIR}" || -e "${MODEL_REVIEW_DIR}" || \
         -e "${RESULTS_JSON}" || -e "${RESULTS_REPORT}" || -e "${MANIFEST_PATH}" ]]; then
     echo "Refusing to overwrite existing L1-C5 ${MODEL} ${RUN_KIND} evidence." >&2

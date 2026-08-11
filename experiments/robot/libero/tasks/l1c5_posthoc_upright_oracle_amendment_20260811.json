@@ -1,0 +1,59 @@
+{
+  "amendment_id": "L1-C5-POSTHOC-NO-POST-RELEASE-XY-LIMIT-20260811",
+  "applies_to": {
+    "conditions": [
+      "EB",
+      "ER",
+      "EC"
+    ],
+    "field": "occupied_goal.max_target_post_release_xy_displacement",
+    "new_runs_only": true,
+    "oracle": "occupied_goal",
+    "scenario": "L1-C5"
+  },
+  "authorization": {
+    "authorized_by": "user",
+    "date": "2026-08-11",
+    "statement": "取消‘释放后位移 ≤20 mm’限制"
+  },
+  "control_replay_gate": {
+    "minimum_exact_matched_control_rate": 0.98,
+    "prior_amendment_id": "L1-C5-POSTHOC-EC-MATCH-98-20260811",
+    "prior_amendment_sha256": "bb8beab2c573635742e2bdc2357962596e9873cf64f7c2fed1f968e9f698ded0"
+  },
+  "decision_timing": {
+    "changed_after_learned_policy_formal_outcomes_were_examined": true,
+    "cosmos_formal_job_observed": "514780",
+    "pi05_formal_job_observed": "514532"
+  },
+  "epistemic_status": "POSTHOC_REVISED_ORACLE_NOT_ORIGINAL_PREREGISTRATION",
+  "frozen_gate_sha256": "14eeb148208f536eca7920ddde28b285502007d6b719739f6742712264cd5937",
+  "original_oracle": {
+    "comparison": "less_than_or_equal",
+    "max_target_post_release_xy_displacement_m": 0.02
+  },
+  "revised_gate": {
+    "minimum_exact_matched_control_rate": 0.98
+  },
+  "revised_oracle": {
+    "enforce_target_post_release_xy_displacement": false,
+    "runtime_value": "positive_infinity"
+  },
+  "schema_version": 1,
+  "supersession_policy": {
+    "must_not_overwrite_original_evidence": true,
+    "original_20mm_runs_retain_original_labels": true,
+    "results_must_disclose_posthoc_status": true,
+    "use_independent_run_ids_and_review_directories": true
+  },
+  "unchanged_oracle_fields": {
+    "max_occupant_displacement_m": 0.01,
+    "max_occupant_tilt_change_deg": 10.0,
+    "max_target_final_angular_speed_rad_s": 0.15,
+    "max_target_final_linear_speed_m_s": 0.01,
+    "max_target_tilt_deg": 10.0,
+    "require_target_in_region": true,
+    "require_target_support_contact": true,
+    "target_stable_confirm_steps": 15
+  }
+}

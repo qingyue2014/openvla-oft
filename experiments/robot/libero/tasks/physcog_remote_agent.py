@@ -1732,6 +1732,39 @@ for _amended_model in ("pi05", "cosmos"):
         ),
     )
 
+for _upright_model in ("pi05", "cosmos"):
+    for _upright_kind in ("smoke", "formal"):
+        PHASES[(
+            "l1c5",
+            f"{_upright_model}_{_upright_kind}_upright_posthoc",
+        )] = PhaseSpec(
+            command=(
+                "env",
+                (
+                    "L1C5_POSTHOC_ORACLE_UNLOCK="
+                    "I_ACKNOWLEDGE_POSTHOC_NO_POST_RELEASE_XY_LIMIT"
+                ),
+                "L1C_EVAL_VARIANT=upright-posthoc",
+                "RENDER_GPU_DEVICE_ID=1",
+                "SAVE_VIDEO_MODE=all",
+                "bash",
+                "experiments/robot/libero/tasks/run_model_l1c_eval.sh",
+                _upright_model,
+                "l1c5",
+                _upright_kind,
+            ),
+            count_env=(
+                "L1C_SMOKE_TRIALS"
+                if _upright_kind == "smoke"
+                else "L1C_FORMAL_TRIALS"
+            ),
+            artifacts=_l1c_model_artifacts(
+                "l1c5",
+                _upright_model,
+                f"{_upright_kind}-upright-posthoc",
+            ),
+        )
+
 
 VERDICT_RE = re.compile(
     r"(?:Verdict:\s*(?:\*\*)?|verdict=|\"occlusion_gate\"\s*:\s*\")"

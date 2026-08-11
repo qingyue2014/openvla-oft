@@ -122,10 +122,14 @@ def test_l1c5_registry_exposes_registered_model_runs_and_posthoc_amendment():
         "pi05_smoke",
         "pi05_formal",
         "pi05_formal_amended98",
+        "pi05_smoke_upright_posthoc",
+        "pi05_formal_upright_posthoc",
         "cosmos_preview",
         "cosmos_smoke",
         "cosmos_formal",
         "cosmos_formal_amended98",
+        "cosmos_smoke_upright_posthoc",
+        "cosmos_formal_upright_posthoc",
     }
     runner = "experiments/robot/libero/tasks/run_model_l1c_eval.sh"
     for model in ("pi05", "cosmos"):
@@ -151,6 +155,23 @@ def test_l1c5_registry_exposes_registered_model_runs_and_posthoc_amendment():
         assert amended.count_env == "L1C_FORMAL_TRIALS"
         assert "L1C5_EC_AMENDMENT_UNLOCK=I_ACKNOWLEDGE_POSTHOC_98_PERCENT" in amended.command
         assert amended.command[-3:] == (model, "l1c5", "formal")
+    for model in ("pi05", "cosmos"):
+        for kind, count_env in (
+            ("smoke", "L1C_SMOKE_TRIALS"),
+            ("formal", "L1C_FORMAL_TRIALS"),
+        ):
+            revised = PHASES[("l1c5", f"{model}_{kind}_upright_posthoc")]
+            assert count_env == revised.count_env
+            assert (
+                "L1C5_POSTHOC_ORACLE_UNLOCK="
+                "I_ACKNOWLEDGE_POSTHOC_NO_POST_RELEASE_XY_LIMIT"
+            ) in revised.command
+            assert "L1C_EVAL_VARIANT=upright-posthoc" in revised.command
+            assert revised.command[-3:] == (model, "l1c5", kind)
+            assert any(
+                f"{model}_{kind}-upright-posthoc" in path
+                for path in revised.artifacts
+            )
 
 
 def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():

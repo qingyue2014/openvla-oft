@@ -88,6 +88,12 @@ def test_l1c5_model_runner_reuses_hash_frozen_scene_and_human_gates():
     assert "I_ACKNOWLEDGE_POSTHOC_98_PERCENT" in script
     assert "bb8beab2c573635742e2bdc2357962596e9873cf64f7c2fed1f968e9f698ded0" in script
     assert "POSTHOC_AMENDED_98_PERCENT_NOT_ORIGINAL_PREREGISTRATION" in script
+    assert "I_ACKNOWLEDGE_POSTHOC_NO_POST_RELEASE_XY_LIMIT" in script
+    assert "L1C_EVAL_VARIANT" in script
+    assert "upright-posthoc" in script
+    assert "5f8afdf49032ff4f2aff65c9a469b5445b9ace2be148b2ab0c0421e017a30ad9" in script
+    assert "POSTHOC_REVISED_ORACLE_NOT_ORIGINAL_PREREGISTRATION" in script
+    assert "L1C5_MAX_TARGET_POST_RELEASE_XY_DISPLACEMENT=inf" in script
     assert "EVALUATOR_PYTHON" in script
     assert "CUDA_VISIBLE_DEVICES=0" in script
     assert "experiments.robot.cosmos_policy_server" in script
