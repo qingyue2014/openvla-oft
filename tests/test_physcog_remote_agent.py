@@ -118,9 +118,11 @@ def test_l1c4_registry_separates_native_gates_from_model_smoke():
 def test_l1c5_registry_exposes_registered_model_runs_and_posthoc_amendment():
     phases = {phase for scenario, phase in PHASES if scenario == "l1c5"}
     assert phases == {
+        "pi05_preview",
         "pi05_smoke",
         "pi05_formal",
         "pi05_formal_amended98",
+        "cosmos_preview",
         "cosmos_smoke",
         "cosmos_formal",
         "cosmos_formal_amended98",
@@ -128,6 +130,7 @@ def test_l1c5_registry_exposes_registered_model_runs_and_posthoc_amendment():
     runner = "experiments/robot/libero/tasks/run_model_l1c_eval.sh"
     for model in ("pi05", "cosmos"):
         for kind, count_env in (
+            ("preview", "L1C_PREVIEW_TRIALS"),
             ("smoke", "L1C_SMOKE_TRIALS"),
             ("formal", "L1C_FORMAL_TRIALS"),
         ):
@@ -136,10 +139,13 @@ def test_l1c5_registry_exposes_registered_model_runs_and_posthoc_amendment():
             assert spec.command[-3:] == (model, "l1c5", kind)
             assert spec.count_env == count_env
             assert any("L1-C5_task" in path for path in spec.artifacts)
-            assert any(
-                "rollouts/libero_object/L1-C5-orange-juice" in path
-                for path in spec.artifacts
-            )
+            if kind == "preview":
+                assert not any("rollouts/" in path for path in spec.artifacts)
+            else:
+                assert any(
+                    "rollouts/libero_object/L1-C5-orange-juice" in path
+                    for path in spec.artifacts
+                )
     for model in ("pi05", "cosmos"):
         amended = PHASES[("l1c5", f"{model}_formal_amended98")]
         assert amended.count_env == "L1C_FORMAL_TRIALS"

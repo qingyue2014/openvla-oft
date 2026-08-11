@@ -1597,11 +1597,12 @@ def _l1c_model_artifacts(
     scenario: str, model: str, evaluation_kind: str
 ) -> tuple[str, ...]:
     prefix = f"experiments/logs/{scenario}_{model}-{evaluation_kind}"
-    if scenario == "l1c4" and evaluation_kind == "preview":
+    if scenario in ("l1c4", "l1c5") and evaluation_kind == "preview":
+        task_name = "L1-C4_task" if scenario == "l1c4" else "L1-C5_task"
         return (
             f"{prefix}_gate",
             f"{prefix}_review_artifacts.sha256",
-            f"review/L1-C4_task/{model}_preview",
+            f"review/{task_name}/{model}_preview",
         )
     shared = (
         f"{prefix}_manifest.json",
@@ -1684,11 +1685,7 @@ for _model_setup_name, _model_setup_arg in (
     )
 for _l1c_scenario in ("l1c4", "l1c5"):
     for _l1c_model in ("pi05", "cosmos"):
-        _l1c_kinds = (
-            ("preview", "smoke", "formal")
-            if _l1c_scenario == "l1c4"
-            else ("smoke", "formal")
-        )
+        _l1c_kinds = ("preview", "smoke", "formal")
         for _l1c_kind in _l1c_kinds:
             _l1c_phase = f"{_l1c_model}_{_l1c_kind}"
             PHASES[(_l1c_scenario, _l1c_phase)] = PhaseSpec(
