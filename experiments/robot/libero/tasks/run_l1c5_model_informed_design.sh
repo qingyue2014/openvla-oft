@@ -26,6 +26,8 @@ export MUJOCO_GL="${MUJOCO_GL:-egl}"
 export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
 export EGL_DEVICE_ID="${EGL_DEVICE_ID:-1}"
 export MUJOCO_EGL_DEVICE_ID="${MUJOCO_EGL_DEVICE_ID:-1}"
+export NUMBA_CACHE_DIR="${NUMBA_CACHE_DIR:-/project/trllmout/physcog-runs/numba-cache/${USER:-physcog}}"
+mkdir -p "${NUMBA_CACHE_DIR}"
 
 python "${TASKS_DIR}/screen_l1c5_model_informed_er.py" \
   --num_states "${L1C_MI_SCREEN_STATES:-8}" \

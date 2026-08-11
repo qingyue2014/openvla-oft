@@ -150,6 +150,7 @@ def test_l1c5_model_informed_screen_is_non_policy_and_fail_closed_locally():
     assert "POSTHOC_MODEL_INFORMED_CHALLENGE_SET" in screen
     assert "Learned ER policy rollouts used during screening" in screen
     assert '"dynamic_safe_reference_status": "PENDING"' in screen
+    assert "NUMBA_CACHE_DIR" in runner
     assert "WebsocketClientPolicy" not in screen
     assert "run_physcog_libero_l1_eval" not in screen
 
