@@ -9,6 +9,9 @@ from experiments.robot.libero.tasks import validate_l1a2_safe_reference as safe_
 from experiments.robot.libero.tasks import (
     validate_l1b3_task4_outcome_v2_v6_selection as selection_validator,
 )
+from experiments.robot.libero.tasks import (
+    validate_l1b3_task4_outcome_v2_v6_profile_canary as profile_canary,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +23,7 @@ CONTROLLER = TASKS / "l1b3_task4_outcome_v2_v6_scripted_controller_ensemble.json
 PREFLIGHT = TASKS / "validate_l1b3_task4_outcome_v2_v6_preflight.py"
 INITIAL = TASKS / "validate_l1b3_task4_outcome_v2_v6_initial_gate.py"
 SELECTION = TASKS / "validate_l1b3_task4_outcome_v2_v6_selection.py"
+PROFILE_CANARY = TASKS / "validate_l1b3_task4_outcome_v2_v6_profile_canary.py"
 CALIBRATOR = TASKS / "calibrate_l1b3_trajectory_conditioned_states.py"
 REMOTE = TASKS / "physcog_remote_agent.py"
 
@@ -119,7 +123,7 @@ def test_v6_fixed_profiles_are_obstacle_independent_and_distinct():
     } == {
         "canonical_center": [0.0, 0.0],
         "stress_x_plus": [0.06, 0.0],
-        "stress_x_minus": [-0.06, 0.0],
+        "stress_x_minus": [-0.06, 0.06],
         "holdout_y_plus": [0.0, 0.06],
         "holdout_y_minus": [0.0, -0.06],
     }
@@ -260,6 +264,67 @@ def test_v6_selection_validator_accepts_complete_synthetic_ensemble(tmp_path):
     assert record["holdout_pose_feedback_used"] is False
 
 
+def test_v6_profile_canary_fails_closed_on_collapsed_measured_paths(tmp_path):
+    controller_hash = selection_validator._sha256(CONTROLLER)
+    endpoints = {
+        "canonical_center": (0.0, 0.0),
+        "stress_x_plus": (0.04, 0.0),
+        "stress_x_minus": (-0.04, 0.04),
+        "holdout_y_plus": (0.0, 0.04),
+        "holdout_y_minus": (0.0, -0.04),
+    }
+    profile_args = []
+    for profile, endpoint in endpoints.items():
+        directory = tmp_path / profile
+        directory.mkdir()
+        metadata = {
+            "trajectory_source_label": selection_validator.SOURCE,
+            "trajectory_profile_id": profile,
+            "trajectory_source_manifest_sha256": controller_hash,
+            "model_trajectory_used": False,
+            "controller_obstacle_adaptive": False,
+            "cross_episode_grasp_cache_disabled": True,
+            "success": True,
+            "pregrasp_target_offset_xy_m": profile_canary.EXPECTED_OFFSETS[
+                profile
+            ],
+        }
+        np.savez_compressed(
+            directory / "task4_ep000.npz",
+            metadata=json.dumps(metadata),
+            actions=np.zeros((1, 7), dtype=np.float32),
+            body_pos__robot0_link6=np.asarray(
+                [[0.0, 0.0, 1.0], [endpoint[0], endpoint[1], 1.0]],
+                dtype=np.float32,
+            ),
+        )
+        profile_args.append(f"{profile}={directory}")
+    args = SimpleNamespace(
+        controller_manifest=str(CONTROLLER),
+        profile_trajectory=profile_args,
+        output_manifest=str(tmp_path / "canary.json"),
+        output_report=str(tmp_path / "canary.md"),
+        fail_on_invalid=False,
+    )
+    assert profile_canary.validate(args)["verdict"] == profile_canary.PASS_VERDICT
+
+    collapsed = tmp_path / "stress_x_minus/task4_ep000.npz"
+    with np.load(collapsed) as payload:
+        metadata = payload["metadata"].copy()
+        actions = payload["actions"].copy()
+    np.savez_compressed(
+        collapsed,
+        metadata=metadata,
+        actions=actions,
+        body_pos__robot0_link6=np.asarray(
+            [[0.0, 0.0, 1.0], [0.0, 0.0, 1.0]], dtype=np.float32
+        ),
+    )
+    record = profile_canary.validate(args)
+    assert record["verdict"] == profile_canary.FAIL_VERDICT
+    assert "path_diversity_canonical_center__stress_x_minus" in record["failures"]
+
+
 def test_v6_runner_is_superpod_prepare_only_and_remote_phase_is_registered():
     text = RUNNER.read_text()
     for token in (
@@ -269,6 +334,8 @@ def test_v6_runner_is_superpod_prepare_only_and_remote_phase_is_registered():
         "stress_x_minus",
         "holdout_y_plus",
         "holdout_y_minus",
+        "_canary",
+        "validate_l1b3_task4_outcome_v2_v6_profile_canary.py",
         "--max_contact_penetration \"${SELECTION_PENETRATION}\"",
         "STOP_AWAITING_EXPLICIT_HUMAN_REVIEW",
         '"learned_policy_executed": False',
@@ -288,5 +355,5 @@ def test_v6_runner_is_superpod_prepare_only_and_remote_phase_is_registered():
     assert '("l1b3_task4_v2_v6", "preflight")' in remote
     assert '("l1b3_task4_v2_v6", "prepare")' in remote
     assert '("l1b3_task4_v2_v6", "pi05_smoke")' not in remote
-    for path in (PREFLIGHT, INITIAL, SELECTION):
+    for path in (PREFLIGHT, INITIAL, SELECTION, PROFILE_CANARY):
         assert path.is_file()

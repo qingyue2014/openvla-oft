@@ -75,6 +75,8 @@ CALIBRATION_CSV="${LOG_DIR}/${FAMILY}_calibration.csv"
 CALIBRATION_REPORT="${LOG_DIR}/${FAMILY}_calibration.md"
 SELECTION_MANIFEST="${LOG_DIR}/${FAMILY}_selection_manifest.json"
 SELECTION_AUDIT="${LOG_DIR}/${FAMILY}_selection_audit.md"
+PROFILE_CANARY_MANIFEST="${LOG_DIR}/${FAMILY}_profile_canary.json"
+PROFILE_CANARY_REPORT="${LOG_DIR}/${FAMILY}_profile_canary.md"
 SCENE_REPORT="${LOG_DIR}/${FAMILY}_scene_check.md"
 INITIAL_REPORT="${LOG_DIR}/${FAMILY}_initial_gate.md"
 SAFE_CSV="${LOG_DIR}/${FAMILY}_safe_reference.csv"
@@ -86,7 +88,7 @@ RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:-1}"
 
 PROFILES=(canonical_center stress_x_plus stress_x_minus holdout_y_plus holdout_y_minus)
 PREGRASP_OFFSETS_X=(0.00 0.06 -0.06 0.00 0.00)
-PREGRASP_OFFSETS_Y=(0.00 0.00 0.00 0.06 -0.06)
+PREGRASP_OFFSETS_Y=(0.00 0.00 0.06 0.06 -0.06)
 
 mkdir -p "${LOG_DIR}" "${REVIEW_DIR}"
 
@@ -99,13 +101,15 @@ if [[ "${MODE}" == "preflight" ]]; then
 fi
 
 for profile in "${PROFILES[@]}"; do
-  attempts="${PHYSCG_SELECTION_ATTEMPTS_ROOT:-${TMPDIR:-/tmp}}/${FAMILY}_${SLURM_JOB_ID:-manual}_${profile}_attempts"
-  trajectories="${LOG_DIR}/${FAMILY}_${profile}_trajectories"
-  for path in "${attempts}" "${trajectories}"; do
-    if [[ -e "${path}" ]]; then
-      echo "Refusing stale v6 trajectory directory: ${path}" >&2
-      exit 2
-    fi
+  for suffix in "" "_canary"; do
+    attempts="${PHYSCG_SELECTION_ATTEMPTS_ROOT:-${TMPDIR:-/tmp}}/${FAMILY}_${SLURM_JOB_ID:-manual}_${profile}${suffix}_attempts"
+    trajectories="${LOG_DIR}/${FAMILY}_${profile}${suffix}_trajectories"
+    for path in "${attempts}" "${trajectories}"; do
+      if [[ -e "${path}" ]]; then
+        echo "Refusing stale v6 trajectory directory: ${path}" >&2
+        exit 2
+      fi
+    done
   done
 done
 
@@ -120,15 +124,17 @@ run_profile() {
   local profile="$1"
   local pregrasp_offset_x="$2"
   local pregrasp_offset_y="$3"
-  local attempts="${PHYSCG_SELECTION_ATTEMPTS_ROOT:-${TMPDIR:-/tmp}}/${FAMILY}_${SLURM_JOB_ID:-manual}_${profile}_attempts"
-  local trajectories="${LOG_DIR}/${FAMILY}_${profile}_trajectories"
+  local num_states="$4"
+  local suffix="$5"
+  local attempts="${PHYSCG_SELECTION_ATTEMPTS_ROOT:-${TMPDIR:-/tmp}}/${FAMILY}_${SLURM_JOB_ID:-manual}_${profile}${suffix}_attempts"
+  local trajectories="${LOG_DIR}/${FAMILY}_${profile}${suffix}_trajectories"
   python "${TASKS_DIR}/validate_l1b_safe_reference.py" \
     --family "${FAMILY}" \
     --state_path "${EB_STATES}" \
     --pairing_json "${PAIRING}" \
     --task_suite_name "${TASK_SUITE}" \
     --task_id "${TASK_ID}" \
-    --num_states "${POOL_COUNT}" \
+    --num_states "${num_states}" \
     --seed "${SCENE_SEED}" \
     --approach_height 0.12 \
     --lift_height 0.08 \
@@ -157,15 +163,39 @@ run_profile() {
       "akita_black_bowl_1_main,wooden_cabinet_1_main,wine_bottle_1_main,robot0_link5,robot0_link6,robot0_link7" \
     --trajectory_dir "${attempts}" \
     --canonical_success_trajectory_dir "${trajectories}" \
-    --out_csv "${LOG_DIR}/${FAMILY}_${profile}.csv" \
-    --out_report "${LOG_DIR}/${FAMILY}_${profile}.md"
+    --out_csv "${LOG_DIR}/${FAMILY}_${profile}${suffix}.csv" \
+    --out_report "${LOG_DIR}/${FAMILY}_${profile}${suffix}.md"
 }
+
+# Fail fast on real measured episode-0 wrist paths before spending the full
+# 50-state allocation. These trajectories cannot generate or refine a pose.
+for index in "${!PROFILES[@]}"; do
+  run_profile \
+    "${PROFILES[$index]}" \
+    "${PREGRASP_OFFSETS_X[$index]}" \
+    "${PREGRASP_OFFSETS_Y[$index]}" \
+    1 \
+    "_canary"
+done
+
+python "${TASKS_DIR}/validate_l1b3_task4_outcome_v2_v6_profile_canary.py" \
+  --controller_manifest "${CONTROLLER}" \
+  --profile_trajectory "canonical_center=${LOG_DIR}/${FAMILY}_canonical_center_canary_trajectories" \
+  --profile_trajectory "stress_x_plus=${LOG_DIR}/${FAMILY}_stress_x_plus_canary_trajectories" \
+  --profile_trajectory "stress_x_minus=${LOG_DIR}/${FAMILY}_stress_x_minus_canary_trajectories" \
+  --profile_trajectory "holdout_y_plus=${LOG_DIR}/${FAMILY}_holdout_y_plus_canary_trajectories" \
+  --profile_trajectory "holdout_y_minus=${LOG_DIR}/${FAMILY}_holdout_y_minus_canary_trajectories" \
+  --output_manifest "${PROFILE_CANARY_MANIFEST}" \
+  --output_report "${PROFILE_CANARY_REPORT}" \
+  --fail_on_invalid
 
 for index in "${!PROFILES[@]}"; do
   run_profile \
     "${PROFILES[$index]}" \
     "${PREGRASP_OFFSETS_X[$index]}" \
-    "${PREGRASP_OFFSETS_Y[$index]}"
+    "${PREGRASP_OFFSETS_Y[$index]}" \
+    "${POOL_COUNT}" \
+    ""
 done
 
 CANONICAL_DIR="${LOG_DIR}/${FAMILY}_canonical_center_trajectories"
@@ -371,7 +401,8 @@ print(f"Review bundle: {bundle_path}")
 PY
 
 python - "${PREPARE_MANIFEST}" "${INITIAL_MANIFEST}" "${REVIEW_DIR}" \
-  "${PREFLIGHT_MANIFEST}" "${SELECTION_MANIFEST}" "${PAIRING}" \
+  "${PREFLIGHT_MANIFEST}" "${SELECTION_MANIFEST}" \
+  "${PROFILE_CANARY_MANIFEST}" "${PAIRING}" \
   "${NATIVE_STATES}" "${EB_STATES}" "${ER_STATES}" "${EC_STATES}" <<'PY'
 import datetime
 import hashlib
@@ -379,7 +410,7 @@ import json
 from pathlib import Path
 import sys
 
-(output, initial_manifest, review_dir, preflight, selection, pairing,
+(output, initial_manifest, review_dir, preflight, selection, profile_canary, pairing,
  native_states, eb_states, er_states, ec_states) = sys.argv[1:]
 
 def sha256(path):
@@ -394,7 +425,7 @@ review_bundle = Path(review_dir) / "REVIEW_BUNDLE_MANIFEST.json"
 if json.loads(human.read_text(encoding="utf-8")).get("approved") is not False:
     raise SystemExit("prepare must stop with human approval pending")
 artifacts = [
-    preflight, selection, pairing, native_states, eb_states, er_states,
+    preflight, selection, profile_canary, pairing, native_states, eb_states, er_states,
     ec_states, initial_manifest, str(review_bundle), str(human),
 ]
 record = {

@@ -146,7 +146,7 @@ def validate(args: argparse.Namespace) -> dict:
         == {
             "canonical_center": [0.0, 0.0],
             "stress_x_plus": [0.06, 0.0],
-            "stress_x_minus": [-0.06, 0.0],
+            "stress_x_minus": [-0.06, 0.06],
             "holdout_y_plus": [0.0, 0.06],
             "holdout_y_minus": [0.0, -0.06],
         }
@@ -154,6 +154,10 @@ def validate(args: argparse.Namespace) -> dict:
             "minimum_pairwise_path_separation_m"
         )
         == MIN_LINK6_PATH_SEPARATION_M
+        and controller.get("diversity_gate", {}).get(
+            "episode_zero_canary_before_full_pool"
+        )
+        is True
     ):
         failures.append("controller_ensemble_contract_mismatch")
     conditioning = pairing.get("trajectory_conditioning", {})

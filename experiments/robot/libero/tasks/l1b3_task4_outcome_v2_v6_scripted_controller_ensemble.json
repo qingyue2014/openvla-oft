@@ -67,7 +67,8 @@
     },
     "stress_x_minus": {
       "role": "construction_gate",
-      "pregrasp_target_offset_xy_m": [-0.06, 0.0]
+      "path_shape": "negative_x_positive_y_dogleg",
+      "pregrasp_target_offset_xy_m": [-0.06, 0.06]
     },
     "holdout_y_plus": {
       "role": "source_level_holdout",
@@ -82,6 +83,7 @@
     "measured_body": "robot0_link6",
     "metric": "maximum time-normalized pairwise XY separation over 128 samples",
     "minimum_pairwise_path_separation_m": 0.025,
+    "episode_zero_canary_before_full_pool": true,
     "failure_action": "reject_complete_native_source"
   },
   "selection_thresholds": {

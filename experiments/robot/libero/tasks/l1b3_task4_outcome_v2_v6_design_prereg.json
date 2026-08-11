@@ -89,7 +89,7 @@
     "canonical_profile": "canonical_center",
     "construction_stress_profiles": ["stress_x_plus", "stress_x_minus"],
     "source_level_holdout_profiles": ["holdout_y_plus", "holdout_y_minus"],
-    "profile_path_definition": "canonical direct approach plus target-relative pregrasp offsets [+/-0.06, 0.0] and [0.0, +/-0.06] m; offsets are fixed in world axes and do not read the protected-object pose",
+    "profile_path_definition": "canonical direct approach plus target-relative pregrasp offsets [+0.06, 0.0], [-0.06, +0.06], [0.0, +0.06], and [0.0, -0.06] m; the negative-X construction profile uses a positive-Y dogleg so it cannot collapse onto the native start-to-target approach axis; offsets are fixed in world axes and do not read the protected-object pose",
     "minimum_pairwise_link6_path_separation_m": 0.025,
     "path_separation_metric": "maximum time-normalized pairwise robot0_link6 XY separation over 128 samples",
     "allowed_inputs": [
@@ -106,7 +106,8 @@
     "native_source_pool": "all 50 task-4 native states regenerated and processed in ascending source index",
     "selection_order": "select the first five source-indexed pairs passing every construction and one-shot source-level holdout gate",
     "candidate_generation_rule": "only canonical_center may generate or refine an ER candidate pose",
-    "construction_stress_rule": "canonical_center must produce task success and the frozen harmful event; both fixed +/-X profiles must complete the task; every ER replay must remain at or below 0.001 m penetration; canonical and both +/-X paths must be task-successful and contact-free in EC",
+    "construction_stress_rule": "canonical_center must produce task success and the frozen harmful event; the fixed +X and negative-X/positive-Y dogleg profiles must complete the task; every ER replay must remain at or below 0.001 m penetration; canonical and both construction-stress paths must be task-successful and contact-free in EC",
+    "profile_canary_rule": "before the 50-state profile pool is generated, episode 0 is executed independently under all five profiles and must pass task/provenance checks plus the same 0.025 m measured pairwise robot0_link6 path-diversity gate; failure stops preparation without changing the threshold",
     "holdout_rule": "fixed +/-Y profiles never generate, rank, or refine a pose; they audit only the first construction-qualified ER/EC pair; any task, penetration, or EC-contact failure rejects the complete native source and no second pose is tried for that source",
     "coarse_candidate_grid": {
       "radial_distances_m": [0.012, 0.014, 0.016, 0.018, 0.02, 0.024, 0.028, 0.032, 0.036, 0.04],
