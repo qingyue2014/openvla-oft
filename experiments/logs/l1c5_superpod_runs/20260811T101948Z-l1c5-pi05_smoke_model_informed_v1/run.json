@@ -1,0 +1,75 @@
+{
+  "classification": "validator_bug",
+  "completed_at_utc": "2026-08-11T10:26:44.301773+00:00",
+  "count": 5,
+  "count_env": "L1C_SMOKE_TRIALS",
+  "created_at_utc": "2026-08-11T10:20:21.753056+00:00",
+  "fetched_artifacts": [
+    "experiments/logs/l1c5_pi05-smoke-model-informed-v1_native_preflight.json",
+    "experiments/logs/l1c5_pi05-smoke-model-informed-v1_native_preflight.md",
+    "experiments/logs/l1c5_pi05-smoke-model-informed-v1_eb_index.jsonl",
+    "experiments/logs/l1c5_pi05-smoke-model-informed-v1_er_index.jsonl",
+    "experiments/logs/l1c5_pi05-smoke-model-informed-v1_ec_index.jsonl",
+    "experiments/logs/l1c5_pi05-smoke-model-informed-v1_videos",
+    "experiments/logs/l1c5_pi05-smoke-model-informed-v1_server.log",
+    "experiments/logs/l1c5_pi05-smoke-model-informed-v1_gate",
+    "review/L1-C5-MI-v1_task/pi05_smoke",
+    "rollouts/libero_object/L1-C5-orange-juice-occupied-basket-eb-pi05-smoke-model-informed-v1",
+    "rollouts/libero_object/L1-C5-orange-juice-occupied-basket-risk-pi05-smoke-model-informed-v1",
+    "rollouts/libero_object/L1-C5-orange-juice-occupied-basket-ec-pi05-smoke-model-informed-v1"
+  ],
+  "job_id": "515283",
+  "local_commit": "81cd88596e72a0c879f111cb143873175f880920",
+  "missing_artifacts": [
+    "experiments/logs/l1c5_pi05-smoke-model-informed-v1_manifest.json",
+    "experiments/logs/l1c5_pi05-smoke-model-informed-v1_results.json",
+    "experiments/logs/l1c5_pi05-smoke-model-informed-v1_results.md",
+    "experiments/logs/l1c5_pi05-smoke-model-informed-v1_review_artifacts.sha256"
+  ],
+  "phase": "pi05_smoke_model_informed_v1",
+  "registered_command": [
+    "env",
+    "L1C_EVAL_VARIANT=model-informed-v1",
+    "RENDER_GPU_DEVICE_ID=1",
+    "SAVE_VIDEO_MODE=all",
+    "bash",
+    "experiments/robot/libero/tasks/run_model_l1c_eval.sh",
+    "pi05",
+    "l1c5",
+    "smoke"
+  ],
+  "remote_config": {
+    "account": "trllmout",
+    "branch": "codex/l1c5-orange-juice",
+    "control_socket": "/tmp/physcog-superpod.sock",
+    "exclude_nodes": "",
+    "gpus": 2,
+    "host": "superpod.ust.hk",
+    "libero_root": "/home/drwqyhappy/04-mycode/LIBERO",
+    "nodes": 1,
+    "partition": "normal",
+    "remote_python_bin": "/home/drwqyhappy/.conda/envs/openvla_oft/bin",
+    "remote_repo": "/project/trllmout/physcog-runs/openvla-oft-l1c4/.physcog-agent/worktrees/81cd88596e72a0c879f111cb143873175f880920",
+    "time_limit": "01:00:00",
+    "user": "drwqyhappy"
+  },
+  "remote_job_script": "/project/trllmout/physcog-runs/openvla-oft-l1c4/.physcog-agent/worktrees/81cd88596e72a0c879f111cb143873175f880920/.physcog-agent/jobs/20260811T101948Z-l1c5-pi05_smoke_model_informed_v1.sh",
+  "remote_log": "/project/trllmout/physcog-runs/openvla-oft-l1c4/.physcog-agent/worktrees/81cd88596e72a0c879f111cb143873175f880920/.physcog-agent/jobs/20260811T101948Z-l1c5-pi05_smoke_model_informed_v1.out",
+  "remote_markers": {
+    "commit": "81cd88596e72a0c879f111cb143873175f880920",
+    "compute_node": "dgx-51",
+    "exit_code": "1",
+    "login_node": "slogin-02"
+  },
+  "returncode": 1,
+  "scenario": "l1c5",
+  "scheduler_state": "RUNNING",
+  "schema_version": 2,
+  "verdicts": [
+    "PASS_NATIVE_ONLY_PREFLIGHT",
+    "PASS_FROZEN_INITIAL_STATE_BUNDLE",
+    "PASS_ACTION_SEPARATION",
+    "PASS_EC_UNCHANGED_EB_REPLAY_SAFE",
+    "BENCHMARK_READY_FOR_ATTRIBUTION"
+  ]
+}

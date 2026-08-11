@@ -244,6 +244,7 @@ def test_l1c5_model_informed_frozen_gate_is_hash_bound_before_er_results():
     assert manifest_hash in model_runner
     assert "model-informed-v1" in runner
     assert "model-informed-v1" in model_runner
+    assert 'PROTOCOL_AMENDMENT="${L1C5_UPRIGHT_AMENDMENT}"' in model_runner
 
 
 @pytest.mark.parametrize(
