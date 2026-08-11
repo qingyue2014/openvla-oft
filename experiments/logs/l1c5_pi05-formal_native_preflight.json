@@ -1,0 +1,3138 @@
+{
+  "allowed_intervention": "serialized free-joint pose/state of native ketchup_1_main only",
+  "custom_assets": [],
+  "design_prereg": {
+    "path": "/project/trllmout/physcog-runs/openvla-oft-l1c5-formal98-b3bd0486/experiments/robot/libero/tasks/l1c5_design_prereg.json",
+    "sha256": "c06019da3f3dca1eb9a41c9e078608d60f49a606af8faeab879452ce68c8bafd"
+  },
+  "evaluated_conditions": {
+    "eb": {
+      "asset_inventory_sha256": "adaa4ca08be6c0b51e4e87a85910b4597c077e4f2e84d9c09e5e8aaceb1d0140",
+      "bddl": "libero_object/pick_up_the_orange_juice_and_place_it_in_the_basket.bddl",
+      "num_states": 50,
+      "prompt": "pick up the orange juice and place it in the basket",
+      "state_file": "/project/trllmout/physcog-runs/openvla-oft-l1c5-formal98-b3bd0486/experiments/robot/libero/tasks/l1c5_eb_states.hdf5",
+      "state_sha256": "9bb4c4b1d6aded5138916439c7ceb16a986c155c12299370ba9427aaa21c1eca"
+    },
+    "ec": {
+      "asset_inventory_sha256": "adaa4ca08be6c0b51e4e87a85910b4597c077e4f2e84d9c09e5e8aaceb1d0140",
+      "bddl": "libero_object/pick_up_the_orange_juice_and_place_it_in_the_basket.bddl",
+      "num_states": 50,
+      "prompt": "pick up the orange juice and place it in the basket",
+      "state_file": "/project/trllmout/physcog-runs/openvla-oft-l1c5-formal98-b3bd0486/experiments/robot/libero/tasks/l1c5_ec_states.hdf5",
+      "state_sha256": "98a9f09cce89fc5dffe82502916152aab60bb99bcf070dd73ff95b76d59fcfb4"
+    },
+    "er": {
+      "asset_inventory_sha256": "adaa4ca08be6c0b51e4e87a85910b4597c077e4f2e84d9c09e5e8aaceb1d0140",
+      "bddl": "libero_object/pick_up_the_orange_juice_and_place_it_in_the_basket.bddl",
+      "num_states": 50,
+      "prompt": "pick up the orange juice and place it in the basket",
+      "state_file": "/project/trllmout/physcog-runs/openvla-oft-l1c5-formal98-b3bd0486/experiments/robot/libero/tasks/l1c5_er_states.hdf5",
+      "state_sha256": "30f8975ab1b24d53ed4146655409e8fbca85d9c227a073de91577f0f27ff52c1"
+    }
+  },
+  "evaluated_prompt_source": "official benchmark task.language",
+  "native_asset_file_closure": {
+    "asset_root": "/home/drwqyhappy/04-mycode/LIBERO/libero/libero/assets",
+    "class_sources": {
+      "basket": [
+        "stable_scanned_objects/basket/basket.xml"
+      ],
+      "bbq_sauce": [
+        "stable_hope_objects/bbq_sauce/bbq_sauce.xml"
+      ],
+      "butter": [
+        "stable_hope_objects/butter/butter.xml"
+      ],
+      "chocolate_pudding": [
+        "stable_hope_objects/chocolate_pudding/chocolate_pudding.xml"
+      ],
+      "floor": [],
+      "ketchup": [
+        "stable_hope_objects/ketchup/ketchup.xml"
+      ],
+      "orange_juice": [
+        "stable_hope_objects/orange_juice/orange_juice.xml"
+      ],
+      "salad_dressing": [
+        "stable_hope_objects/salad_dressing/salad_dressing.xml"
+      ]
+    },
+    "closure_sha256": "1ee9ca991e700ced5cec37a6c4d4cde1baa441355b15a80c86916dc1d33a3cd6",
+    "file_sha256": {
+      "stable_hope_objects/bbq_sauce/bbq_sauce.xml": "2ec3d7d89ce3dbbe600dd5714a568efcd326104a8f786fdf0a6d1def19ae56e0",
+      "stable_hope_objects/bbq_sauce/texture_map.png": "be21c2549bc0da64ec29665e3d064fcdb1d42a9f93f89eb38eecc4b08b4a3d39",
+      "stable_hope_objects/bbq_sauce/visual/bbq_sauce_vis.msh": "8c2c8c6238e5b78c50fa7986a6de52f3c437a0e85cc1048760ed1f5fa868480c",
+      "stable_hope_objects/butter/butter.xml": "2d0d3ffd627243007e8bd8106140f9b5abbf6115a30a59c21405e8c26ffb8aa9",
+      "stable_hope_objects/butter/texture_map.png": "e344d473644d71b919484f6b93d52707ea4821fe05c14514d7cd6cc24f2486c2",
+      "stable_hope_objects/butter/visual/butter_vis.msh": "88b3916e53c813c7e06c856d7e0563e636c07247d95982c2cd05abc0ebd0cc68",
+      "stable_hope_objects/chocolate_pudding/chocolate_pudding.xml": "f2ec3318aeed8feb6b16d234149ce52127050e81c65f7d43aaa6384cdd26ecf2",
+      "stable_hope_objects/chocolate_pudding/texture_map.png": "4d2db3872437523fd5fc5611728c154d475d05642c0d2a64ce60065e3c6ffc48",
+      "stable_hope_objects/chocolate_pudding/visual/textured_vis.msh": "34c7f14b29daa9f99daafe962866e0b4ea59d38863d04e3da1d4a7ed4e6244fd",
+      "stable_hope_objects/ketchup/ketchup.xml": "9007c9658863067a55dcea588d2000c9779e9edb1ba9d816312a840cb190064b",
+      "stable_hope_objects/ketchup/texture_map.png": "01edda2f924589b0a23aac084c1270a4a39afde79131a1bec73f7a23ad592bfe",
+      "stable_hope_objects/ketchup/visual/textured_vis.msh": "52a6903d11261ef819b707241f058de28dced28746f9bbb142649a18f1d48321",
+      "stable_hope_objects/orange_juice/orange_juice.xml": "c0c9ac0596d8978fe3aceec05dde0fab3e9f5eda4fedbda6ceb5d5276806618e",
+      "stable_hope_objects/orange_juice/texture_map.png": "2488e5d72c7848db195be1d5a08d45a00b04122fff7ddcc107014d177d6d08c9",
+      "stable_hope_objects/orange_juice/visual/textured_vis.msh": "9ebfebfe88f469abd9015bea348f242ee36a93829f75975535dcb44a5c3d876d",
+      "stable_hope_objects/salad_dressing/salad_dressing.xml": "dfc46d9f59fce1f814a80d1bd476d93216e8b16489e1761e8f5506e5f30980c8",
+      "stable_hope_objects/salad_dressing/texture_map.png": "17ac6d99eebf065eaa2243ebc578da65e7d5f112bbff75f083e451578efaae22",
+      "stable_hope_objects/salad_dressing/visual/textured_vis.msh": "11e210c93786626e66c832f1d5a0178eddf88e79775cc8e59cc060b52fc0abab",
+      "stable_scanned_objects/basket/basket.xml": "9c1a8263944d17f5265de9cb5aec3cee934979dee19361d21f15e2128f22d253",
+      "stable_scanned_objects/basket/texture.png": "89c2107a39ce27d7dffc383153153e021958408cd6fffd8bf8f318a0bb2c302b",
+      "stable_scanned_objects/basket/visual/basket_vis.msh": "51ca04e71fbca8a4fdd5fa86362867d414e401923e1cb9b0daed488513b46734"
+    }
+  },
+  "native_asset_inventory_sha256": "adaa4ca08be6c0b51e4e87a85910b4597c077e4f2e84d9c09e5e8aaceb1d0140",
+  "native_bddl": "libero_object/pick_up_the_orange_juice_and_place_it_in_the_basket.bddl",
+  "native_bddl_language": "Pick the orange juice and place it in the basket",
+  "native_bddl_resolved_path": "/home/drwqyhappy/04-mycode/LIBERO/libero/libero/bddl_files/libero_object/pick_up_the_orange_juice_and_place_it_in_the_basket.bddl",
+  "native_bddl_sha256": "6298533e7bcfb83e40779a77fda39216e8cd53f22bf1af6388585dad0abb0b50",
+  "native_bddl_source": "(define (problem LIBERO_Floor_Manipulation)\n  (:domain robosuite)\n  (:language Pick the orange juice and place it in the basket)\n    (:regions\n      (bin_region\n          (:target floor)\n          (:ranges (\n              (-0.01 0.25 0.01 0.27)\n            )\n          )\n      )\n      (target_object_region\n          (:target floor)\n          (:ranges (\n              (0.025 -0.125 0.07500000000000001 -0.07500000000000001)\n            )\n          )\n      )\n      (other_object_region_0\n          (:target floor)\n          (:ranges (\n              (-0.145 -0.265 -0.095 -0.215)\n            )\n          )\n      )\n      (other_object_region_1\n          (:target floor)\n          (:ranges (\n              (-0.175 0.034999999999999996 -0.125 0.08499999999999999)\n            )\n          )\n      )\n      (other_object_region_2\n          (:target floor)\n          (:ranges (\n              (0.07500000000000001 -0.225 0.125 -0.17500000000000002)\n            )\n          )\n      )\n      (other_object_region_3\n          (:target floor)\n          (:ranges (\n              (0.125 0.0049999999999999975 0.175 0.055)\n            )\n          )\n      )\n      (other_object_region_4\n          (:target floor)\n          (:ranges (\n              (-0.225 -0.10500000000000001 -0.17500000000000002 -0.055)\n            )\n          )\n      )\n      (contain_region\n          (:target basket_1)\n      )\n    )\n\n  (:fixtures\n    floor - floor\n  )\n\n  (:objects\n    orange_juice_1 - orange_juice\n    basket_1 - basket\n    butter_1 - butter\n    chocolate_pudding_1 - chocolate_pudding\n    bbq_sauce_1 - bbq_sauce\n    ketchup_1 - ketchup\n    salad_dressing_1 - salad_dressing\n  )\n\n  (:obj_of_interest\n    orange_juice_1\n    basket_1\n  )\n\n  (:init\n    (On orange_juice_1 floor_target_object_region)\n    (On butter_1 floor_other_object_region_0)\n    (On chocolate_pudding_1 floor_other_object_region_1)\n    (On bbq_sauce_1 floor_other_object_region_2)\n    (On ketchup_1 floor_other_object_region_3)\n    (On salad_dressing_1 floor_other_object_region_4)\n    (On basket_1 floor_bin_region)\n  )\n\n  (:goal\n    (And (In orange_juice_1 basket_1_contain_region))\n  )\n\n)\n",
+  "native_declared_asset_inventory": {
+    "fixtures": [
+      {
+        "asset_class": "floor",
+        "name": "floor"
+      }
+    ],
+    "objects": [
+      {
+        "asset_class": "orange_juice",
+        "name": "orange_juice_1"
+      },
+      {
+        "asset_class": "basket",
+        "name": "basket_1"
+      },
+      {
+        "asset_class": "butter",
+        "name": "butter_1"
+      },
+      {
+        "asset_class": "chocolate_pudding",
+        "name": "chocolate_pudding_1"
+      },
+      {
+        "asset_class": "bbq_sauce",
+        "name": "bbq_sauce_1"
+      },
+      {
+        "asset_class": "ketchup",
+        "name": "ketchup_1"
+      },
+      {
+        "asset_class": "salad_dressing",
+        "name": "salad_dressing_1"
+      }
+    ]
+  },
+  "native_goal_canonical": "(:goal (And (In orange_juice_1 basket_1_contain_region)) )",
+  "native_goal_sha256": "81ad03892da97d439d2d9f7bd6cdf321f7a713357f141a90fbebf4d02979638e",
+  "native_prompt": "pick up the orange juice and place it in the basket",
+  "native_runtime_asset_inventory": {
+    "bodies": [
+      "world",
+      "floor",
+      "robot0_base",
+      "robot0_link0",
+      "robot0_link1",
+      "robot0_link2",
+      "robot0_link3",
+      "robot0_link4",
+      "robot0_link5",
+      "robot0_link6",
+      "robot0_link7",
+      "robot0_right_hand",
+      "gripper0_right_gripper",
+      "gripper0_eef",
+      "gripper0_leftfinger",
+      "gripper0_finger_joint1_tip",
+      "gripper0_rightfinger",
+      "gripper0_finger_joint2_tip",
+      "mount0_base",
+      "orange_juice_1_main",
+      "basket_1_main",
+      "butter_1_main",
+      "chocolate_pudding_1_main",
+      "bbq_sauce_1_main",
+      "ketchup_1_main",
+      "salad_dressing_1_main"
+    ],
+    "geoms": [
+      {
+        "body_id": 0,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": -1,
+        "group": 1,
+        "material_id": 3,
+        "name": "wall_leftcorner_visual",
+        "size": [
+          1.06,
+          1.5,
+          0.01
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 0,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": -1,
+        "group": 1,
+        "material_id": 3,
+        "name": "wall_rightcorner_visual",
+        "size": [
+          1.06,
+          1.5,
+          0.01
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 0,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": -1,
+        "group": 1,
+        "material_id": 3,
+        "name": "wall_left_visual",
+        "size": [
+          1.75,
+          1.5,
+          0.01
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 0,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": -1,
+        "group": 1,
+        "material_id": 3,
+        "name": "wall_right_visual",
+        "size": [
+          1.75,
+          1.5,
+          0.01
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 0,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": -1,
+        "group": 1,
+        "material_id": 3,
+        "name": "wall_rear_visual",
+        "size": [
+          1.5,
+          1.5,
+          0.01
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 0,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": -1,
+        "group": 1,
+        "material_id": 3,
+        "name": "wall_front_visual",
+        "size": [
+          3.0,
+          1.5,
+          0.01
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 1,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 1,
+        "material_id": 0,
+        "name": "floor",
+        "size": [
+          3.0,
+          3.0,
+          0.125
+        ],
+        "type": 0
+      },
+      {
+        "body_id": 3,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 9,
+        "group": 1,
+        "material_id": 16,
+        "name": "robot0_g0_vis",
+        "size": [
+          0.006721684992173892,
+          0.008500844865999418,
+          0.009017701791368652
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 3,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 10,
+        "group": 1,
+        "material_id": 15,
+        "name": "robot0_g1_vis",
+        "size": [
+          0.004812137004360298,
+          0.0049946750873458845,
+          0.004152247773008322
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 3,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 11,
+        "group": 1,
+        "material_id": 14,
+        "name": "robot0_g2_vis",
+        "size": [
+          0.008518417723243658,
+          0.009013321496773459,
+          0.010431735652768347
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 3,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 12,
+        "group": 1,
+        "material_id": 17,
+        "name": "robot0_g3_vis",
+        "size": [
+          0.004538206690946945,
+          0.005927338914337207,
+          0.00402928852288674
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 3,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 13,
+        "group": 1,
+        "material_id": 13,
+        "name": "robot0_g4_vis",
+        "size": [
+          0.013624118745585164,
+          0.01154873955229175,
+          0.011549620590304769
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 3,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 14,
+        "group": 1,
+        "material_id": 12,
+        "name": "robot0_g5_vis",
+        "size": [
+          0.002069069108583908,
+          0.011970141735760035,
+          0.011871515988352498
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 3,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 15,
+        "group": 1,
+        "material_id": 6,
+        "name": "robot0_g6_vis",
+        "size": [
+          0.007926290108905644,
+          0.0012833593019058037,
+          0.009264336209176847
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 3,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 16,
+        "group": 1,
+        "material_id": 8,
+        "name": "robot0_g7_vis",
+        "size": [
+          0.002267331238905489,
+          0.005804885281014771,
+          0.03912546239246479
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 3,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 17,
+        "group": 1,
+        "material_id": 9,
+        "name": "robot0_g8_vis",
+        "size": [
+          0.09007149695498744,
+          0.09466225184890024,
+          0.13511465702641462
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 3,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 18,
+        "group": 1,
+        "material_id": 11,
+        "name": "robot0_g9_vis",
+        "size": [
+          0.004660275466934264,
+          0.005846074226454154,
+          0.003967957374302125
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 3,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 19,
+        "group": 1,
+        "material_id": 10,
+        "name": "robot0_g10_vis",
+        "size": [
+          0.008516037962588577,
+          0.009039894676345838,
+          0.010296912382294056
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 3,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 20,
+        "group": 1,
+        "material_id": 7,
+        "name": "robot0_g11_vis",
+        "size": [
+          0.0022818088091764864,
+          0.005801434335643516,
+          0.03907364478827862
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 3,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": 1,
+        "group": 0,
+        "material_id": -1,
+        "name": "robot0_link0_collision",
+        "size": [
+          0.08795145720684315,
+          0.09678180273792582,
+          0.13696475672841646
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 4,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 21,
+        "group": 1,
+        "material_id": 18,
+        "name": "robot0_g12_vis",
+        "size": [
+          0.055027913025740165,
+          0.07550334215635823,
+          0.14811397639859558
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 4,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": 2,
+        "group": 0,
+        "material_id": -1,
+        "name": "robot0_link1_collision",
+        "size": [
+          0.055027225986022194,
+          0.07550337771580425,
+          0.14811386773643623
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 5,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 22,
+        "group": 1,
+        "material_id": 19,
+        "name": "robot0_g13_vis",
+        "size": [
+          0.05503707116698214,
+          0.07533227085326513,
+          0.1488098614587815
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 5,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": 3,
+        "group": 0,
+        "material_id": -1,
+        "name": "robot0_link2_collision",
+        "size": [
+          0.055117584567374873,
+          0.07206326213341202,
+          0.14560717062694647
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 6,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 23,
+        "group": 1,
+        "material_id": 22,
+        "name": "robot0_g14_vis",
+        "size": [
+          0.07066376607969976,
+          0.06837324468962597,
+          0.13296002363942624
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 6,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 24,
+        "group": 1,
+        "material_id": 21,
+        "name": "robot0_g15_vis",
+        "size": [
+          0.012223585385602637,
+          0.013013179254360956,
+          0.014557278269487271
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 6,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 25,
+        "group": 1,
+        "material_id": 20,
+        "name": "robot0_g16_vis",
+        "size": [
+          0.015107309611798875,
+          0.01770756830428028,
+          0.029945933447765742
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 6,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 26,
+        "group": 1,
+        "material_id": 23,
+        "name": "robot0_g17_vis",
+        "size": [
+          0.023781443960025437,
+          0.05261498963821033,
+          0.06628928054906497
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 6,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": 4,
+        "group": 0,
+        "material_id": -1,
+        "name": "robot0_link3_collision",
+        "size": [
+          0.0670002850546238,
+          0.06723617244837274,
+          0.1345223059461303
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 7,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 27,
+        "group": 1,
+        "material_id": 24,
+        "name": "robot0_g18_vis",
+        "size": [
+          0.015107011792972153,
+          0.017706146582504606,
+          0.029940828248537197
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 7,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 28,
+        "group": 1,
+        "material_id": 26,
+        "name": "robot0_g19_vis",
+        "size": [
+          0.07127172082404763,
+          0.07057997146103173,
+          0.13334616035944985
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 7,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 29,
+        "group": 1,
+        "material_id": 25,
+        "name": "robot0_g20_vis",
+        "size": [
+          0.023757967906633013,
+          0.05261209946479205,
+          0.06629550716616807
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 7,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 30,
+        "group": 1,
+        "material_id": 27,
+        "name": "robot0_g21_vis",
+        "size": [
+          0.012229588578652507,
+          0.013021346878542834,
+          0.014547230524552195
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 7,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": 5,
+        "group": 0,
+        "material_id": -1,
+        "name": "robot0_link4_collision",
+        "size": [
+          0.06759690727017202,
+          0.06833362798828592,
+          0.1349649576296325
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 8,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 31,
+        "group": 1,
+        "material_id": 29,
+        "name": "robot0_g22_vis",
+        "size": [
+          0.03401493113427978,
+          0.050423842324148434,
+          0.1807994484234784
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 8,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 32,
+        "group": 1,
+        "material_id": 30,
+        "name": "robot0_g23_vis",
+        "size": [
+          0.007150973012497071,
+          0.004314205430640886,
+          0.022765668111950035
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 8,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 33,
+        "group": 1,
+        "material_id": 28,
+        "name": "robot0_g24_vis",
+        "size": [
+          0.055006102518515794,
+          0.0709031677983642,
+          0.16921005299548839
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 8,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": 6,
+        "group": 0,
+        "material_id": -1,
+        "name": "robot0_link5_collision",
+        "size": [
+          0.0554140258916309,
+          0.06981473616232675,
+          0.17212466873427062
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 9,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 34,
+        "group": 1,
+        "material_id": 41,
+        "name": "robot0_g25_vis",
+        "size": [
+          0.04231361993986837,
+          0.0490581888948196,
+          0.10797261779702685
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 9,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 35,
+        "group": 1,
+        "material_id": 43,
+        "name": "robot0_g26_vis",
+        "size": [
+          0.0014963064085446215,
+          0.011361109083513486,
+          0.014358223435905832
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 9,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 36,
+        "group": 1,
+        "material_id": 42,
+        "name": "robot0_g27_vis",
+        "size": [
+          0.0025535126004355637,
+          0.03768593806115581,
+          0.05078916691675372
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 9,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 37,
+        "group": 1,
+        "material_id": 40,
+        "name": "robot0_g28_vis",
+        "size": [
+          0.0010624824378156345,
+          0.0006685310759858287,
+          0.0022021683260713583
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 9,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 38,
+        "group": 1,
+        "material_id": 39,
+        "name": "robot0_g29_vis",
+        "size": [
+          0.002199208223227306,
+          0.0004198785921868675,
+          0.001003818218497973
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 9,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 39,
+        "group": 1,
+        "material_id": 38,
+        "name": "robot0_g30_vis",
+        "size": [
+          0.0010650714698337144,
+          0.0006699184752974874,
+          0.0021815431955238204
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 9,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 40,
+        "group": 1,
+        "material_id": 37,
+        "name": "robot0_g31_vis",
+        "size": [
+          0.0021719890841558065,
+          0.0009385117457652581,
+          0.0010034450060686238
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 9,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 41,
+        "group": 1,
+        "material_id": 46,
+        "name": "robot0_g32_vis",
+        "size": [
+          0.001422407322318714,
+          6.401178845562294e-05,
+          0.0013501312049527185
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 9,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 42,
+        "group": 1,
+        "material_id": 47,
+        "name": "robot0_g33_vis",
+        "size": [
+          0.0015132732458000564,
+          0.0009947006266131514,
+          0.0016492481167556482
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 9,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 43,
+        "group": 1,
+        "material_id": 34,
+        "name": "robot0_g34_vis",
+        "size": [
+          0.001978376977011664,
+          0.016406260425618734,
+          0.017046396502750288
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 9,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 44,
+        "group": 1,
+        "material_id": 45,
+        "name": "robot0_g35_vis",
+        "size": [
+          0.005065375775344883,
+          0.03010890789854906,
+          0.03358690927470642
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 9,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 45,
+        "group": 1,
+        "material_id": 33,
+        "name": "robot0_g36_vis",
+        "size": [
+          0.004924394215110817,
+          0.0009299361816530599,
+          0.005012223091452672
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 9,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 46,
+        "group": 1,
+        "material_id": 32,
+        "name": "robot0_g37_vis",
+        "size": [
+          0.0014423904248808822,
+          0.00033573760308511225,
+          0.0017096121645720289
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 9,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 47,
+        "group": 1,
+        "material_id": 31,
+        "name": "robot0_g38_vis",
+        "size": [
+          0.0016133151038496274,
+          0.0005345149294995882,
+          0.0016234490067283183
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 9,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 48,
+        "group": 1,
+        "material_id": 36,
+        "name": "robot0_g39_vis",
+        "size": [
+          0.01202709763668687,
+          0.043262186127746294,
+          0.056246319343110834
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 9,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 49,
+        "group": 1,
+        "material_id": 35,
+        "name": "robot0_g40_vis",
+        "size": [
+          0.004435408003983945,
+          0.034078711157908136,
+          0.03586756452300596
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 9,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 50,
+        "group": 1,
+        "material_id": 44,
+        "name": "robot0_g41_vis",
+        "size": [
+          0.047014264479715115,
+          0.07669176188903727,
+          0.10707661775922976
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 9,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": 7,
+        "group": 0,
+        "material_id": -1,
+        "name": "robot0_link6_collision",
+        "size": [
+          0.047435059937893764,
+          0.07280865823682829,
+          0.10055312654987442
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 10,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 51,
+        "group": 1,
+        "material_id": 51,
+        "name": "robot0_g42_vis",
+        "size": [
+          0.01870151314265507,
+          0.04140710849875716,
+          0.04111653262357748
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 10,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 52,
+        "group": 1,
+        "material_id": 48,
+        "name": "robot0_g43_vis",
+        "size": [
+          0.0016177576003690037,
+          0.013455290512608964,
+          0.018323059009296712
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 10,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 53,
+        "group": 1,
+        "material_id": 54,
+        "name": "robot0_g44_vis",
+        "size": [
+          0.005737661062185137,
+          0.005813812388866018,
+          0.007919129983107707
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 10,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 54,
+        "group": 1,
+        "material_id": 53,
+        "name": "robot0_g45_vis",
+        "size": [
+          0.0031393078255446336,
+          0.0031382705554492407,
+          0.004264280074530419
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 10,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 55,
+        "group": 1,
+        "material_id": 52,
+        "name": "robot0_g46_vis",
+        "size": [
+          0.0031227325268849138,
+          0.0031149868182369436,
+          0.004094642088363895
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 10,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 56,
+        "group": 1,
+        "material_id": 50,
+        "name": "robot0_g47_vis",
+        "size": [
+          0.0016190384132055951,
+          0.01349652915385169,
+          0.01831119969207991
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 10,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 57,
+        "group": 1,
+        "material_id": 49,
+        "name": "robot0_g48_vis",
+        "size": [
+          0.002482894185513425,
+          0.006248718230325744,
+          0.011833365161670013
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 10,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 58,
+        "group": 1,
+        "material_id": 55,
+        "name": "robot0_g49_vis",
+        "size": [
+          0.029148562826292586,
+          0.044129128006677176,
+          0.044023072054410056
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 10,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": 8,
+        "group": 0,
+        "material_id": -1,
+        "name": "robot0_link7_collision",
+        "size": [
+          0.0300797952290783,
+          0.043901876581363145,
+          0.0736713533372809
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 12,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 60,
+        "group": 1,
+        "material_id": -1,
+        "name": "gripper0_hand_visual",
+        "size": [
+          0.03155447034471325,
+          0.04967135106352347,
+          0.10407923162648289
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 12,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": 59,
+        "group": 0,
+        "material_id": -1,
+        "name": "gripper0_hand_collision",
+        "size": [
+          0.03164141294671461,
+          0.04867201353885377,
+          0.10394595560976386
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 14,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 62,
+        "group": 1,
+        "material_id": -1,
+        "name": "gripper0_finger1_visual",
+        "size": [
+          0.015366376598150471,
+          0.010503388935908962,
+          0.031318271574445104
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 14,
+        "conaffinity": 1,
+        "contype": 0,
+        "data_id": 61,
+        "group": 0,
+        "material_id": -1,
+        "name": "gripper0_finger1_collision",
+        "size": [
+          0.010680920153990948,
+          0.013564667215135846,
+          0.03158571144548577
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 15,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "gripper0_finger1_pad_collision",
+        "size": [
+          0.008,
+          0.004,
+          0.008
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 16,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 62,
+        "group": 1,
+        "material_id": -1,
+        "name": "gripper0_finger2_visual",
+        "size": [
+          0.015366376598150471,
+          0.010503388935908962,
+          0.031318271574445104
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 16,
+        "conaffinity": 1,
+        "contype": 0,
+        "data_id": 61,
+        "group": 0,
+        "material_id": -1,
+        "name": "gripper0_finger2_collision",
+        "size": [
+          0.010680920153990948,
+          0.013564667215135846,
+          0.03158571144548577
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 17,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "gripper0_finger2_pad_collision",
+        "size": [
+          0.008,
+          0.004,
+          0.008
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 19,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 64,
+        "group": 1,
+        "material_id": 56,
+        "name": "orange_juice_1_g0",
+        "size": [
+          0.032343158878823684,
+          0.03241255399089149,
+          0.08061678875859321
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 19,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "orange_juice_1_g1",
+        "size": [
+          0.02625,
+          0.02625,
+          0.05475
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 19,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "orange_juice_1_g2",
+        "size": [
+          0.00218,
+          0.01381,
+          0.02631
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 19,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "orange_juice_1_g3",
+        "size": [
+          0.00218,
+          0.01381,
+          0.02631
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 19,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "orange_juice_1_g4",
+        "size": [
+          0.00295,
+          0.00348,
+          0.0265
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 20,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 65,
+        "group": 1,
+        "material_id": 57,
+        "name": "basket_1_g0",
+        "size": [
+          0.08010875679951439,
+          0.08471022158749962,
+          0.08825201039126766
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 20,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "basket_1_g1",
+        "size": [
+          0.0085,
+          0.0724,
+          0.07658
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 20,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "basket_1_g2",
+        "size": [
+          0.00667,
+          0.06368,
+          0.0724
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 20,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "basket_1_g3",
+        "size": [
+          0.00667,
+          0.06368,
+          0.0724
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 20,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "basket_1_g4",
+        "size": [
+          0.00667,
+          0.06368,
+          0.0724
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 20,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "basket_1_g5",
+        "size": [
+          0.00667,
+          0.06368,
+          0.0724
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 21,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 66,
+        "group": 1,
+        "material_id": 58,
+        "name": "butter_1_g0",
+        "size": [
+          0.009045870773850209,
+          0.019854811332268324,
+          0.03888620385436667
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 21,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "butter_1_g1",
+        "size": [
+          0.00871,
+          0.01977,
+          0.03809
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 22,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 67,
+        "group": 1,
+        "material_id": 59,
+        "name": "chocolate_pudding_1_g0",
+        "size": [
+          0.014914975110209758,
+          0.024976533645114127,
+          0.042035630774609145
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 22,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "chocolate_pudding_1_g1",
+        "size": [
+          0.01371,
+          0.02316,
+          0.0401
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 23,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 68,
+        "group": 1,
+        "material_id": 60,
+        "name": "bbq_sauce_1_g0",
+        "size": [
+          0.0168209682852989,
+          0.024946851971881567,
+          0.06555087583485025
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 23,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "bbq_sauce_1_g1",
+        "size": [
+          0.01447,
+          0.02349,
+          0.02682
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 23,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "bbq_sauce_1_g2",
+        "size": [
+          0.01428,
+          0.01459,
+          0.0181
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 23,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "bbq_sauce_1_g3",
+        "size": [
+          0.0131,
+          0.01336,
+          0.01336
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 24,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 69,
+        "group": 1,
+        "material_id": 61,
+        "name": "ketchup_1_g0",
+        "size": [
+          0.021759058061753638,
+          0.03228613019215615,
+          0.08507675330154038
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 24,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "ketchup_1_g1",
+        "size": [
+          0.01695,
+          0.02811,
+          0.03307
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 24,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "ketchup_1_g2",
+        "size": [
+          0.01126,
+          0.01834,
+          0.02393
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 24,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "ketchup_1_g3",
+        "size": [
+          0.01126,
+          0.01834,
+          0.01869
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 24,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "ketchup_1_g4",
+        "size": [
+          0.01032,
+          0.01414,
+          0.01848
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 24,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "ketchup_1_g5",
+        "size": [
+          0.00292,
+          0.00405,
+          0.01848
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 24,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "ketchup_1_g6",
+        "size": [
+          0.00315,
+          0.0046,
+          0.01848
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 24,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "ketchup_1_g7",
+        "size": [
+          0.00209,
+          0.00685,
+          0.01848
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 24,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "ketchup_1_g8",
+        "size": [
+          0.00186,
+          0.0074,
+          0.01848
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 24,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "ketchup_1_g9",
+        "size": [
+          0.00259,
+          0.00413,
+          0.01848
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 24,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "ketchup_1_g10",
+        "size": [
+          0.00259,
+          0.00392,
+          0.01848
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 24,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "ketchup_1_g11",
+        "size": [
+          0.00259,
+          0.00405,
+          0.01848
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 24,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "ketchup_1_g12",
+        "size": [
+          0.00259,
+          0.0038,
+          0.01848
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 25,
+        "conaffinity": 0,
+        "contype": 0,
+        "data_id": 70,
+        "group": 1,
+        "material_id": 62,
+        "name": "salad_dressing_1_g0",
+        "size": [
+          0.022113433763420853,
+          0.0321841687659817,
+          0.08480523326312885
+        ],
+        "type": 7
+      },
+      {
+        "body_id": 25,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "salad_dressing_1_g1",
+        "size": [
+          0.01237,
+          0.01277,
+          0.01865
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 25,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "salad_dressing_1_g2",
+        "size": [
+          0.01733,
+          0.02097,
+          0.02637
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 25,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "salad_dressing_1_g3",
+        "size": [
+          0.01294,
+          0.01494,
+          0.02738
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 25,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "salad_dressing_1_g4",
+        "size": [
+          0.00208,
+          0.0078,
+          0.01865
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 25,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "salad_dressing_1_g5",
+        "size": [
+          0.00208,
+          0.0078,
+          0.01865
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 25,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "salad_dressing_1_g6",
+        "size": [
+          0.00208,
+          0.0078,
+          0.01865
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 25,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "salad_dressing_1_g7",
+        "size": [
+          0.00208,
+          0.0078,
+          0.01865
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 25,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "salad_dressing_1_g8",
+        "size": [
+          0.00208,
+          0.0078,
+          0.01865
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 25,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "salad_dressing_1_g9",
+        "size": [
+          0.00208,
+          0.0078,
+          0.01865
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 25,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "salad_dressing_1_g10",
+        "size": [
+          0.00208,
+          0.0078,
+          0.01865
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 25,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "salad_dressing_1_g11",
+        "size": [
+          0.00208,
+          0.0078,
+          0.01865
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 25,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "salad_dressing_1_g12",
+        "size": [
+          0.00325,
+          0.01729,
+          0.01733
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 25,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "salad_dressing_1_g13",
+        "size": [
+          0.00558,
+          0.01733,
+          0.02217
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 25,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "salad_dressing_1_g14",
+        "size": [
+          0.00558,
+          0.01733,
+          0.0229
+        ],
+        "type": 6
+      },
+      {
+        "body_id": 25,
+        "conaffinity": 1,
+        "contype": 1,
+        "data_id": -1,
+        "group": 0,
+        "material_id": -1,
+        "name": "salad_dressing_1_g15",
+        "size": [
+          0.00558,
+          0.01712,
+          0.01733
+        ],
+        "type": 6
+      }
+    ],
+    "joints": [
+      "robot0_joint1",
+      "robot0_joint2",
+      "robot0_joint3",
+      "robot0_joint4",
+      "robot0_joint5",
+      "robot0_joint6",
+      "robot0_joint7",
+      "gripper0_finger_joint1",
+      "gripper0_finger_joint2",
+      "orange_juice_1_joint0",
+      "basket_1_joint0",
+      "butter_1_joint0",
+      "chocolate_pudding_1_joint0",
+      "bbq_sauce_1_joint0",
+      "ketchup_1_joint0",
+      "salad_dressing_1_joint0"
+    ],
+    "material_count": 63,
+    "mesh_count": 71,
+    "sites": [
+      "floor_bin_region",
+      "floor_target_object_region",
+      "floor_other_object_region_0",
+      "floor_other_object_region_1",
+      "floor_other_object_region_2",
+      "floor_other_object_region_3",
+      "floor_other_object_region_4",
+      "gripper0_ft_frame",
+      "gripper0_grip_site",
+      "gripper0_ee_x",
+      "gripper0_ee_y",
+      "gripper0_ee_z",
+      "gripper0_grip_site_cylinder",
+      "orange_juice_1_default_site",
+      "basket_1_contain_region",
+      "basket_1_default_site",
+      "butter_1_default_site",
+      "chocolate_pudding_1_default_site",
+      "bbq_sauce_1_default_site",
+      "ketchup_1_default_site",
+      "salad_dressing_1_default_site"
+    ],
+    "texture_count": 14
+  },
+  "native_suite": "libero_object",
+  "native_task_id": 9,
+  "paired_observed_diff_audit": [
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 0,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 0,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 1,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 1,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 2,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 2,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 3,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 3,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 4,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 4,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 5,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 5,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 6,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 6,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 7,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 7,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 8,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 8,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 9,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 9,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 10,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 10,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 11,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 11,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 12,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 12,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 13,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 13,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 14,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 14,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 15,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 15,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 16,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 16,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 17,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 17,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 18,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 18,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 19,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 19,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 20,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 20,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 21,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 21,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 22,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 22,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 23,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 23,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 24,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 24,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 25,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 25,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 26,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 26,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 27,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 27,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 28,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 28,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 29,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 29,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 30,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 30,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 31,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 31,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 32,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 32,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 33,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 33,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 34,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 34,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 35,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 35,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 36,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 36,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 37,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 37,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 38,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 38,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 39,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 39,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 40,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 40,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 41,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 41,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 42,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 42,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 43,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 43,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 44,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 44,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 45,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 45,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 46,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 46,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 47,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 47,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 48,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 48,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_er",
+      "episode": 49,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    },
+    {
+      "act_shape_match": true,
+      "comparison": "eb_to_ec",
+      "episode": 49,
+      "max_act_abs_diff": 0.0,
+      "max_non_occupant_qpos_abs_diff": 0.0,
+      "max_non_occupant_qvel_abs_diff": 0.0,
+      "time_abs_diff": 0.0,
+      "udd_state_match": true,
+      "verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"
+    }
+  ],
+  "project_bddl": null,
+  "scenario": "L1-C5",
+  "schema_version": 1,
+  "source_to_project_inventory_delta": [],
+  "source_to_project_layout_delta": [
+    "Revision 3 ER changes only the serialized free-joint pose and velocity of ketchup_1_main so it rests inside basket_1.",
+    "Revision 3 EC changes only that same ketchup_1_main free-joint pose and velocity to a stable, visible non-basket location selected by the frozen local search order.",
+    "Revision 3 EB retains the official native placement of ketchup_1_main, with only its allowed joint settled before every non-occupant qpos/qvel value is restored exactly."
+  ],
+  "verdict": "PASS_NATIVE_ONLY_PREFLIGHT"
+}

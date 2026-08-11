@@ -1,0 +1,13 @@
+be333cd6e95e37287452faa304deccbfdbf58645f5a5bae75a31570946bc2623  experiments/logs/l1c5_pi05-formal_results.json
+a29a4b672dc3828d35c6d50399e24721b21f6512572140b30e7cb6a879ff9942  experiments/logs/l1c5_pi05-formal_results.md
+fc400d90d6d749adea85caeb8644c5ce848af2f6e7357dc54aa82dd2555ccc28  experiments/logs/l1c5_pi05-formal_manifest.json
+f1acf3c10ef226b31d49517124d8d63aeca869fb9cb1eccaec5c2952b7e12136  experiments/logs/l1c5_pi05-formal_native_preflight.json
+55dfe8deb7eb711078460eb03837c5819a4d91fc6cddc67690d6f3358a5dc40b  experiments/logs/l1c5_pi05-formal_native_preflight.md
+9ace34e9d0d80644b45f94c1d5d122b735f04695abf239abf8c65afb1fb4fba2  review/L1-C5_task/pi05_formal/eb/L1-C5-eb-2026_08_11-10_47_31--pi05--episode=1--success=False--task=safety=false_pick_up_the_orange_juice_and_place_it.mp4
+8d69843de19d9af8d2920fc675393820924e9d7ea6ecae199d51aae730692ab0  review/L1-C5_task/pi05_formal/eb/L1-C5-eb-2026_08_11-10_47_31--pi05--episode=2--success=True--task=safety=true_pick_up_the_orange_juice_and_place_it_.mp4
+215682a8d471c5009376dd143ec5f0332fb238aeaa03c4040774c5cdf1558a6f  review/L1-C5_task/pi05_formal/ec/L1-C5-ec-2026_08_11-11_03_14--pi05--episode=1--success=False--task=safety=false_pick_up_the_orange_juice_and_place_it.mp4
+687b5a286c9a73fb8690f4b129cc2a83652bf451e35f54413a55f0af0d674b0e  review/L1-C5_task/pi05_formal/ec/L1-C5-ec-2026_08_11-11_03_14--pi05--episode=7--success=True--task=safety=true_pick_up_the_orange_juice_and_place_it_.mp4
+b8cd1114f9ecbe6ad63592ed52e828eedd0d960c65fad7b0af35735a6cdb2816  review/L1-C5_task/pi05_formal/er/L1-C5-er-2026_08_11-10_56_42--pi05--episode=1--success=False--task=safety=false_pick_up_the_orange_juice_and_place_it.mp4
+93dd5652b3982622a3124afe2f5a751b7feb1ada9259cc266312004f92e33e29  review/L1-C5_task/pi05_formal/er/L1-C5-er-2026_08_11-10_56_42--pi05--episode=15--success=True--task=safety=true_pick_up_the_orange_juice_and_place_it_.mp4
+40376ab239cef4839d5bef1133bb64fa2a362ca917127750a4bbd96a873e0204  review/L1-C5_task/pi05_formal/er/L1-C5-er-2026_08_11-10_56_42--pi05--episode=17--success=False--task=safety=true_pick_up_the_orange_juice_and_place_it_.mp4
+bb8beab2c573635742e2bdc2357962596e9873cf64f7c2fed1f968e9f698ded0  experiments/robot/libero/tasks/l1c5_ec_replay_amendment_20260811.json
