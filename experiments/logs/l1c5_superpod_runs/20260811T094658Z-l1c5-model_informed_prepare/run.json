@@ -1,0 +1,58 @@
+{
+  "classification": "pass",
+  "completed_at_utc": "2026-08-11T09:51:55.525372+00:00",
+  "count": 50,
+  "count_env": "L1C_MI_PREPARE_STATES",
+  "created_at_utc": "2026-08-11T09:47:05.722357+00:00",
+  "fetched_artifacts": [
+    "experiments/robot/libero/tasks/l1c5_mi_v1_eb_states.hdf5",
+    "experiments/robot/libero/tasks/l1c5_mi_v1_er_states.hdf5",
+    "experiments/robot/libero/tasks/l1c5_mi_v1_ec_states.hdf5",
+    "experiments/robot/libero/tasks/l1c5_mi_v1_source_indices.json",
+    "experiments/robot/libero/tasks/l1c5_mi_v1_state_bundle.json",
+    "experiments/logs/l1c5_mi_v1_prepare",
+    "review/L1-C5-MI-v1_task/initialization",
+    "review/L1-C5-MI-v1_task/safe_reference"
+  ],
+  "job_id": "515228",
+  "local_commit": "8a2a288c935b092095c2df55357e21fe9e70851b",
+  "missing_artifacts": [],
+  "phase": "model_informed_prepare",
+  "registered_command": [
+    "env",
+    "RENDER_GPU_DEVICE_ID=1",
+    "bash",
+    "experiments/robot/libero/tasks/run_l1c5_model_informed_prepare.sh"
+  ],
+  "remote_config": {
+    "account": "trllmout",
+    "branch": "codex/l1c5-orange-juice",
+    "control_socket": "/tmp/physcog-superpod.sock",
+    "exclude_nodes": "",
+    "gpus": 2,
+    "host": "superpod.ust.hk",
+    "libero_root": "/home/drwqyhappy/04-mycode/LIBERO",
+    "nodes": 1,
+    "partition": "normal",
+    "remote_python_bin": "/home/drwqyhappy/.conda/envs/openvla_oft/bin",
+    "remote_repo": "/project/trllmout/physcog-runs/openvla-oft-l1c5-formal98-b3bd0486/.physcog-agent/worktrees/8a2a288c935b092095c2df55357e21fe9e70851b",
+    "time_limit": "01:00:00",
+    "user": "drwqyhappy"
+  },
+  "remote_job_script": "/project/trllmout/physcog-runs/openvla-oft-l1c5-formal98-b3bd0486/.physcog-agent/worktrees/8a2a288c935b092095c2df55357e21fe9e70851b/.physcog-agent/jobs/20260811T094658Z-l1c5-model_informed_prepare.sh",
+  "remote_log": "/project/trllmout/physcog-runs/openvla-oft-l1c5-formal98-b3bd0486/.physcog-agent/worktrees/8a2a288c935b092095c2df55357e21fe9e70851b/.physcog-agent/jobs/20260811T094658Z-l1c5-model_informed_prepare.out",
+  "remote_markers": {
+    "commit": "8a2a288c935b092095c2df55357e21fe9e70851b",
+    "compute_node": "dgx-54",
+    "exit_code": "0",
+    "login_node": "slogin-02"
+  },
+  "returncode": 0,
+  "scenario": "l1c5",
+  "scheduler_state": "RUNNING",
+  "schema_version": 2,
+  "verdicts": [
+    "PASS_EXACT_STATE_PREVIEW",
+    "PASS_MODEL_INFORMED_SCENE_PREPARATION"
+  ]
+}

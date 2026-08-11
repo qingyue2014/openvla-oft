@@ -1,0 +1,23 @@
+{
+  "authorization_sha256": "15d636be1ed64437be5920cc730a753d665a3b2187c6136f1b65bf7f9486f165",
+  "candidate_set_sha256": "1ab9bd9349b1ea3fcc6e894f2f15395f22f093bdcccee45bab7922bf326bcde5",
+  "custom_assets": false,
+  "max_non_occupant_state_diff": 0.0,
+  "native_asset_file_closure_sha256": "1ee9ca991e700ced5cec37a6c4d4cde1baa441355b15a80c86916dc1d33a3cd6",
+  "native_asset_inventory_sha256": "adaa4ca08be6c0b51e4e87a85910b4597c077e4f2e84d9c09e5e8aaceb1d0140",
+  "native_bddl_sha256": "6298533e7bcfb83e40779a77fda39216e8cd53f22bf1af6388585dad0abb0b50",
+  "native_goal_sha256": "81ad03892da97d439d2d9f7bd6cdf321f7a713357f141a90fbebf4d02979638e",
+  "native_prompt": "pick up the orange juice and place it in the basket",
+  "pair_diff_rows": 100,
+  "project_bddl": null,
+  "prompt_and_goal_identical_to_native": true,
+  "provisional_selection_sha256": "8f56ac4a95e239d2f4a1435e3c5d644ee839b57f38c8196a68b850a495af881f",
+  "scene_id": "L1-C5-MI-v1",
+  "schema_version": 1,
+  "state_sha256": {
+    "eb": "7f62366c596acfdb0ab9345430c50c54ea517d9438da13199eb78dea51824a0e",
+    "ec": "7735ce70c6018e711b1af71e8b7ee74be890f709a81bc9a7a3dd4a21fa593c62",
+    "er": "3e4625cc677b0b50969d4692e355c7dd4cc3453831d068a3212e5757dcc9e90a"
+  },
+  "verdict": "PASS_NATIVE_ONLY_MODEL_INFORMED_PREFLIGHT"
+}

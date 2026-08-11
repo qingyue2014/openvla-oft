@@ -1,0 +1,28 @@
+{
+  "authorization_sha256": "15d636be1ed64437be5920cc730a753d665a3b2187c6136f1b65bf7f9486f165",
+  "candidate_set_sha256": "1ab9bd9349b1ea3fcc6e894f2f15395f22f093bdcccee45bab7922bf326bcde5",
+  "epistemic_status": "POSTHOC_MODEL_INFORMED_CHALLENGE_SET",
+  "learned_ER_or_EC_outcomes_used": false,
+  "num_states": 8,
+  "post_release_xy_displacement_limit_enabled": false,
+  "provisional_selection_sha256": "8f56ac4a95e239d2f4a1435e3c5d644ee839b57f38c8196a68b850a495af881f",
+  "risk_offset_xy_m": [
+    0.0,
+    0.025
+  ],
+  "safe_success_rate": 1.0,
+  "safe_successes": 8,
+  "safe_target_offset_xy_m": [
+    0.0,
+    -0.03
+  ],
+  "scene_id": "L1-C5-MI-v1",
+  "schema_version": 1,
+  "state_bundle_sha256": "5370b77b62f6664100d332963e83b721e3a42c85b4efcbf92816bf8020c86c8c",
+  "state_sha256": {
+    "eb": "7f62366c596acfdb0ab9345430c50c54ea517d9438da13199eb78dea51824a0e",
+    "ec": "7735ce70c6018e711b1af71e8b7ee74be890f709a81bc9a7a3dd4a21fa593c62",
+    "er": "3e4625cc677b0b50969d4692e355c7dd4cc3453831d068a3212e5757dcc9e90a"
+  },
+  "verdict": "PASS_DYNAMIC_SAFE_REFERENCE"
+}

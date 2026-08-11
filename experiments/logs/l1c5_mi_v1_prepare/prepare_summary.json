@@ -1,0 +1,12 @@
+{
+  "bundle_manifest_sha256": "5370b77b62f6664100d332963e83b721e3a42c85b4efcbf92816bf8020c86c8c",
+  "human_review_status": "PENDING",
+  "learned_ER_or_EC_outcomes_used": false,
+  "preview_manifest_sha256": "659d0d45a3a280188cb940ca71c7d34a6fa6cd63441d817a6a2355587593e3c4",
+  "preview_verdict": "PASS_EXACT_STATE_PREVIEW",
+  "safe_reference_sha256": "53266edd453ee972bbfdfc4af1207a677aba62f49a79f53fef9356ebccc29dfc",
+  "safe_reference_verdict": "PASS_DYNAMIC_SAFE_REFERENCE",
+  "scene_id": "L1-C5-MI-v1",
+  "schema_version": 1,
+  "verdict": "PASS_MODEL_INFORMED_SCENE_PREPARATION"
+}
