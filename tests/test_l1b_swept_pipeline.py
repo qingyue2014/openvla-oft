@@ -431,9 +431,9 @@ def test_active_families_do_not_reference_custom_obstacles_or_bddl():
         "l1_b_goal_arm_gate_1_main",
     ):
         assert retired_name not in text
-    assert text.count('"native_assets_only": True') == 6
-    assert text.count('"candidate_only": True') == 3
-    assert text.count('"bddl_file": None') == 6
+    assert text.count('"native_assets_only": True') == 7
+    assert text.count('"candidate_only": True') == 4
+    assert text.count('"bddl_file": None') == 7
 
 
 def test_static_gate_checks_all_contact_partners_including_eb():

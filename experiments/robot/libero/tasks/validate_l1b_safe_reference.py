@@ -260,6 +260,17 @@ def main() -> None:
         help="Optional comma-separated grasp heights searched before XY offsets",
     )
     parser.add_argument("--grasp_offset_fractions", default="0.60,0.80")
+    parser.add_argument(
+        "--grasp_candidate_order",
+        choices=(
+            "center_then_axes",
+            "positive_x_then_center",
+            "negative_x_then_center",
+            "positive_y_then_center",
+            "negative_y_then_center",
+        ),
+        default="center_then_axes",
+    )
     parser.add_argument("--grasp_seat_steps", type=int, default=15)
     parser.add_argument("--grasp_seat_max_command", type=float, default=0.08)
     parser.add_argument("--lift_height", type=float, default=0.16)
@@ -323,6 +334,7 @@ def main() -> None:
         "--trajectory_source_label",
         default="scripted_safe_reference",
     )
+    parser.add_argument("--trajectory_profile_id", default="")
     parser.add_argument(
         "--trajectory_source_manifest",
         default="",

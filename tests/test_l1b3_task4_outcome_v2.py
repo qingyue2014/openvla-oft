@@ -166,6 +166,23 @@ def test_ungrasped_target_contact_is_physics_evidence_not_causal_event():
     assert not metrics["swept_contact_seen"]
     assert metrics["swept_max_contact_penetration_m"] == 0.0
     assert metrics["swept_max_any_contact_penetration_m"] == 0.003
+    assert metrics["swept_max_any_contact_penetration_step"] == 1
+    assert metrics["swept_max_any_contact_penetration_component"] == "held_object"
+    assert metrics["swept_max_any_contact_penetration_phase"] == "pre_grasp"
+    assert metrics["swept_contact_penetration_trace"] == [
+        {
+            "step": 1,
+            "penetration_m": 0.003,
+            "component": "held_object",
+            "phase": "pre_grasp",
+            "causal_eligible": False,
+            "body_names": [
+                "akita_black_bowl_1_main",
+                "wine_bottle_1_main",
+            ],
+            "geom_names": ["geom_id_4", "geom_id_5"],
+        }
+    ]
 
 
 def test_outcome_factory_is_public_and_records_all_components():

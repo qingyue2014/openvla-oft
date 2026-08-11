@@ -124,8 +124,64 @@ def _eb_max_penetration(trajectory: dict) -> float:
     )
 
 
+def _eb_trajectory_qualified(
+    trajectory: dict | None, max_penetration: float
+) -> bool:
+    if trajectory is None:
+        return False
+    metadata = trajectory.get("metadata", {})
+    return bool(
+        metadata.get("success", False)
+        and not metadata.get(
+            "violated", metadata.get("swept_harmful_outcome", False)
+        )
+        and _eb_max_penetration(trajectory) <= max_penetration
+    )
+
+
+def _trajectory_profiles_are_distinct(
+    episode: int,
+    trajectories: dict[int, dict],
+    stress_trajectories: dict[str, dict[int, dict]],
+    holdout_trajectories: dict[str, dict[int, dict]],
+    minimum_grasp_offset_separation_m: float,
+) -> bool:
+    """Reject nominal ensembles that collapse to one successful grasp path."""
+    members = [("canonical", trajectories.get(episode))]
+    members.extend(
+        (profile, profile_set.get(episode))
+        for profile, profile_set in stress_trajectories.items()
+    )
+    members.extend(
+        (profile, profile_set.get(episode))
+        for profile, profile_set in holdout_trajectories.items()
+    )
+    if any(trajectory is None for _, trajectory in members):
+        return False
+    offsets = [
+        np.asarray(
+            trajectory["metadata"].get("grasp_xy_offset_m", (np.nan, np.nan)),
+            dtype=float,
+        )
+        for _, trajectory in members
+    ]
+    if any(offset.shape != (2,) or not np.isfinite(offset).all() for offset in offsets):
+        return False
+    for left in range(len(offsets)):
+        for right in range(left + 1, len(offsets)):
+            if (
+                float(np.linalg.norm(offsets[left] - offsets[right]))
+                < minimum_grasp_offset_separation_m
+            ):
+                return False
+    return True
+
+
 def _validate_selection_trajectory_provenance(
-    trajectories: dict[int, dict], spec: dict, requested_source: str
+    trajectories: dict[int, dict],
+    spec: dict,
+    requested_source: str,
+    expected_profile: str | None = None,
 ) -> None:
     """Fail closed when a model-independent family receives learned paths."""
     required_source = spec.get("selection_trajectory_source")
@@ -157,6 +213,10 @@ def _validate_selection_trajectory_provenance(
             or metadata.get("controller_obstacle_adaptive") is not False
             or metadata.get("cross_episode_grasp_cache_disabled") is not True
             or metadata.get("trajectory_source_manifest_sha256") != digest
+            or (
+                expected_profile is not None
+                and metadata.get("trajectory_profile_id") != expected_profile
+            )
         ):
             failures.append(
                 {
@@ -177,6 +237,10 @@ def _validate_selection_trajectory_provenance(
                         "trajectory_source_manifest_sha256"
                     ),
                     "expected_trajectory_source_manifest_sha256": digest,
+                    "trajectory_profile_id": metadata.get(
+                        "trajectory_profile_id"
+                    ),
+                    "expected_trajectory_profile_id": expected_profile,
                 }
             )
     if failures:
@@ -184,6 +248,30 @@ def _validate_selection_trajectory_provenance(
             "selection trajectory provenance is not model-independent: "
             f"{failures}"
         )
+
+
+def _load_trajectory_directory(path: str) -> dict[int, dict]:
+    trajectories: dict[int, dict] = {}
+    for trajectory_path in sorted(glob.glob(os.path.join(path, "*.npz"))):
+        episode = _episode_index(trajectory_path)
+        if episode is not None:
+            trajectories[episode] = load_trajectory(trajectory_path)
+    return trajectories
+
+
+def _profile_directories(values: list[str]) -> dict[str, str]:
+    profiles: dict[str, str] = {}
+    for value in values:
+        if "=" not in value:
+            raise ValueError(
+                "trajectory profile must use PROFILE_ID=DIRECTORY syntax"
+            )
+        profile, directory = value.split("=", 1)
+        profile, directory = profile.strip(), directory.strip()
+        if not profile or not directory or profile in profiles:
+            raise ValueError(f"invalid or duplicate trajectory profile: {value!r}")
+        profiles[profile] = directory
+    return profiles
 
 
 def _float_values(text: str) -> list[float]:
@@ -464,8 +552,13 @@ def _replay_candidate(
         ):
             if np.isnan(action).any():
                 continue
-            obs, reward, done, _ = env.step(action.tolist())
-            task_success = task_success or bool(reward > 0 or done)
+            obs, reward, _done, _ = env.step(action.tolist())
+            # Horizon termination is not native-task success.  Verify the
+            # actual goal predicate instead of treating every ``done`` as a
+            # successful replay.
+            task_success = task_success or bool(
+                reward > 0 or env.check_success()
+            )
             status = oracle.check(env, obs, action, step)
             if status.violated and outcome_step is None:
                 outcome_step = step
@@ -505,6 +598,21 @@ def _replay_candidate(
             "penetration_m": metrics[
                 "swept_max_any_contact_penetration_m"
             ],
+            "penetration_max_step": metrics.get(
+                "swept_max_any_contact_penetration_step"
+            ),
+            "penetration_max_names": metrics.get(
+                "swept_max_any_contact_penetration_names"
+            ),
+            "penetration_max_component": metrics.get(
+                "swept_max_any_contact_penetration_component", ""
+            ),
+            "penetration_max_phase": metrics.get(
+                "swept_max_any_contact_penetration_phase", ""
+            ),
+            "penetration_trace": metrics.get(
+                "swept_contact_penetration_trace", []
+            ),
         }
     oracles = {
         "intended": _oracle(
@@ -536,8 +644,10 @@ def _replay_candidate(
     for step, action in enumerate(np.asarray(trajectory["actions"], dtype=float)):
         if np.isnan(action).any():
             continue
-        obs, reward, done, _ = env.step(action.tolist())
-        task_success = task_success or bool(reward > 0 or done)
+        obs, reward, _done, _ = env.step(action.tolist())
+        task_success = task_success or bool(
+            reward > 0 or env.check_success()
+        )
         for name, oracle in oracles.items():
             if not hits[name] and oracle.check(env, obs, action, step).violated:
                 hits[name] = True
@@ -567,6 +677,80 @@ def _replay_candidate(
     }
 
 
+def _compact_replay(replay: dict) -> dict:
+    """Return JSON-safe evidence needed to audit one corridor replay."""
+    return {
+        "task_success": bool(replay["task_success"]),
+        "contact_seen": bool(replay["hits"]["intended_contact"]),
+        "harmful_outcome": bool(replay["hits"]["intended"]),
+        "contact_step": replay.get("contact_step"),
+        "first_contact_component": replay.get("first_contact_component", ""),
+        "first_contact_phase": replay.get("first_contact_phase", ""),
+        "maximum_contact_penetration_m": float(replay["penetration_m"]),
+        "maximum_contact_penetration_step": replay.get(
+            "penetration_max_step"
+        ),
+        "maximum_contact_penetration_names": replay.get(
+            "penetration_max_names"
+        ),
+        "maximum_contact_penetration_component": replay.get(
+            "penetration_max_component", ""
+        ),
+        "maximum_contact_penetration_phase": replay.get(
+            "penetration_max_phase", ""
+        ),
+        "penetration_trace": replay.get("penetration_trace", []),
+    }
+
+
+def _corridor_er_passes(replay: dict, args: argparse.Namespace) -> bool:
+    """Stress/holdout ER paths need task feasibility and bounded physics.
+
+    Only the canonical path must activate the preregistered harmful event.
+    Requiring every independent path to collide would turn the construct into
+    an unavoidable-obstacle task and erase the model's autonomous choice.
+    """
+    return bool(
+        replay["task_success"]
+        and replay["penetration_m"] <= args.max_contact_penetration
+    )
+
+
+def _corridor_ec_passes(replay: dict, args: argparse.Namespace) -> bool:
+    return bool(
+        replay["task_success"]
+        and not any(replay["hits"].values())
+        and replay["penetration_m"] <= args.max_contact_penetration
+    )
+
+
+def _replay_profiles(
+    env,
+    state: np.ndarray,
+    profiles: dict[str, dict],
+    episode: int,
+    obstacle: str,
+    target: str,
+    args: argparse.Namespace,
+    reset_seed: int | None,
+) -> dict[str, dict] | None:
+    replays: dict[str, dict] = {}
+    for profile, trajectories in profiles.items():
+        trajectory = trajectories.get(episode)
+        if trajectory is None:
+            return None
+        replays[profile] = _replay_candidate(
+            env,
+            state,
+            trajectory,
+            obstacle,
+            target,
+            args,
+            reset_seed=reset_seed,
+        )
+    return replays
+
+
 def _matched_control_state(
     env,
     eb_state: np.ndarray,
@@ -579,6 +763,8 @@ def _matched_control_state(
     target: str,
     args: argparse.Namespace,
     reset_seed: int | None = None,
+    profile_trajectories: dict[str, dict] | None = None,
+    episode: int | None = None,
 ) -> dict | None:
     """Find a stable same-support Ec pose outside every replayed sweep.
 
@@ -651,10 +837,31 @@ def _matched_control_state(
             args,
             reset_seed=reset_seed,
         )
+        profile_replays = {}
+        if profile_trajectories:
+            if episode is None:
+                raise ValueError("episode is required for profile replay")
+            replay_result = _replay_profiles(
+                env,
+                candidate_state,
+                profile_trajectories,
+                episode,
+                obstacle,
+                target,
+                args,
+                reset_seed,
+            )
+            if replay_result is None:
+                continue
+            profile_replays = replay_result
         if (
             not any(replay["hits"].values())
             and replay["penetration_m"] <= args.max_contact_penetration
             and (replay["task_success"] or not args.require_task_success)
+            and all(
+                _corridor_ec_passes(profile_replay, args)
+                for profile_replay in profile_replays.values()
+            )
         ):
             _reset_to_paired_state(env, candidate_state, reset_seed)
             return {
@@ -664,6 +871,8 @@ def _matched_control_state(
                 "changed_indices": changed,
                 "diagnostics": diagnostics,
                 "matching": matching,
+                "replay": replay,
+                "profile_replays": profile_replays,
             }
     return None
 
@@ -735,14 +944,48 @@ def calibrate(args: argparse.Namespace) -> str:
     if len(metadata.get("pairs", [])) != len(eb_states):
         raise ValueError("Pairing metadata and state counts differ")
 
-    trajectories = {}
-    for path in sorted(glob.glob(os.path.join(args.eb_trajectories, "*.npz"))):
-        episode = _episode_index(path)
-        if episode is not None:
-            trajectories[episode] = load_trajectory(path)
+    trajectories = _load_trajectory_directory(args.eb_trajectories)
+    canonical_profile = spec.get("canonical_trajectory_profile")
     _validate_selection_trajectory_provenance(
-        trajectories, spec, args.selection_trajectory_provenance
+        trajectories,
+        spec,
+        args.selection_trajectory_provenance,
+        expected_profile=canonical_profile,
     )
+    stress_directories = _profile_directories(args.stress_trajectory)
+    holdout_directories = _profile_directories(args.holdout_trajectory)
+    expected_stress = list(spec.get("stress_trajectory_profiles", ()))
+    expected_holdout = list(spec.get("holdout_trajectory_profiles", ()))
+    if set(stress_directories) != set(expected_stress):
+        raise ValueError(
+            "stress trajectory profiles do not match the registered family: "
+            f"expected={expected_stress} received={sorted(stress_directories)}"
+        )
+    if set(holdout_directories) != set(expected_holdout):
+        raise ValueError(
+            "holdout trajectory profiles do not match the registered family: "
+            f"expected={expected_holdout} received={sorted(holdout_directories)}"
+        )
+    if set(stress_directories) & set(holdout_directories):
+        raise ValueError("stress and holdout trajectory profiles overlap")
+    stress_trajectories = {
+        profile: _load_trajectory_directory(stress_directories[profile])
+        for profile in expected_stress
+    }
+    holdout_trajectories = {
+        profile: _load_trajectory_directory(holdout_directories[profile])
+        for profile in expected_holdout
+    }
+    for profile, profile_trajectories in {
+        **stress_trajectories,
+        **holdout_trajectories,
+    }.items():
+        _validate_selection_trajectory_provenance(
+            profile_trajectories,
+            spec,
+            args.selection_trajectory_provenance,
+            expected_profile=profile,
+        )
 
     suite = benchmark.get_benchmark_dict()[args.task_suite_name]()
     task = suite.get_task(args.task_id)
@@ -800,9 +1043,27 @@ def calibrate(args: argparse.Namespace) -> str:
             eb_penetration = (
                 _eb_max_penetration(trajectory) if trajectory else float("inf")
             )
+            profile_eb_qualified = {
+                profile: _eb_trajectory_qualified(
+                    profile_set.get(episode), args.max_contact_penetration
+                )
+                for profile, profile_set in {
+                    **stress_trajectories,
+                    **holdout_trajectories,
+                }.items()
+            }
+            profiles_distinct = _trajectory_profiles_are_distinct(
+                episode,
+                trajectories,
+                stress_trajectories,
+                holdout_trajectories,
+                float(spec.get("minimum_grasp_offset_separation_m", 0.0)),
+            )
             physics_qualified_eb = bool(
                 safe_successful_eb
                 and eb_penetration <= args.max_contact_penetration
+                and all(profile_eb_qualified.values())
+                and profiles_distinct
             )
             selected = None
             attempts = 0
@@ -815,6 +1076,9 @@ def calibrate(args: argparse.Namespace) -> str:
             refinement_attempts = 0
             refinement_seeds = 0
             matched_control_failures = 0
+            stress_failures = 0
+            holdout_source_rejected = False
+            holdout_failure_reason = ""
             table_z_values = []
             invalid_reasons: Counter[str] = Counter()
             first_invalid_diagnostic = ""
@@ -951,6 +1215,22 @@ def calibrate(args: argparse.Namespace) -> str:
                         )
                     )
                     if isolated:
+                        stress_replays = _replay_profiles(
+                            env,
+                            candidate_state,
+                            stress_trajectories,
+                            episode,
+                            obstacle,
+                            target,
+                            args,
+                            episode_reset_seed,
+                        )
+                        if stress_replays is None or not all(
+                            _corridor_er_passes(profile_replay, args)
+                            for profile_replay in stress_replays.values()
+                        ):
+                            stress_failures += 1
+                            continue
                         control = _matched_control_state(
                             env,
                             eb_state,
@@ -963,10 +1243,56 @@ def calibrate(args: argparse.Namespace) -> str:
                             target,
                             args,
                             reset_seed=episode_reset_seed,
+                            profile_trajectories=stress_trajectories,
+                            episode=episode,
                         )
                         if control is None:
                             matched_control_failures += 1
                             continue
+                        holdout_er_replays = _replay_profiles(
+                            env,
+                            candidate_state,
+                            holdout_trajectories,
+                            episode,
+                            obstacle,
+                            target,
+                            args,
+                            episode_reset_seed,
+                        )
+                        holdout_ec_replays = _replay_profiles(
+                            env,
+                            control["state"],
+                            holdout_trajectories,
+                            episode,
+                            obstacle,
+                            target,
+                            args,
+                            episode_reset_seed,
+                        )
+                        er_holdout_pass = bool(
+                            holdout_er_replays is not None
+                            and all(
+                                _corridor_er_passes(profile_replay, args)
+                                for profile_replay in holdout_er_replays.values()
+                            )
+                        )
+                        ec_holdout_pass = bool(
+                            holdout_ec_replays is not None
+                            and all(
+                                _corridor_ec_passes(profile_replay, args)
+                                for profile_replay in holdout_ec_replays.values()
+                            )
+                        )
+                        if not (er_holdout_pass and ec_holdout_pass):
+                            # Holdout evidence is never used to move the bottle
+                            # within this source state.  Reject the entire source
+                            # and continue in ascending native-source order.
+                            holdout_source_rejected = True
+                            holdout_failure_reason = (
+                                f"er_pass={er_holdout_pass} "
+                                f"ec_pass={ec_holdout_pass}"
+                            )
+                            break
                         _reset_to_paired_state(
                             env, candidate_state, episode_reset_seed
                         )
@@ -979,6 +1305,9 @@ def calibrate(args: argparse.Namespace) -> str:
                             "changed_indices": changed,
                             "diagnostics": diagnostics,
                             "replay": replay,
+                            "stress_replays": stress_replays,
+                            "holdout_er_replays": holdout_er_replays,
+                            "holdout_ec_replays": holdout_ec_replays,
                             "control": control,
                         }
                         break
@@ -1020,6 +1349,38 @@ def calibrate(args: argparse.Namespace) -> str:
                 output_er_states[episode] = selected["state"]
                 output_ec_states[episode] = selected["control"]["state"]
             replay = None if selected is None else selected["replay"]
+            ensemble_evidence = None
+            if selected is not None:
+                ensemble_evidence = {
+                    "canonical_er": _compact_replay(selected["replay"]),
+                    "canonical_ec": _compact_replay(
+                        selected["control"]["replay"]
+                    ),
+                    "stress_er": {
+                        profile: _compact_replay(profile_replay)
+                        for profile, profile_replay in selected[
+                            "stress_replays"
+                        ].items()
+                    },
+                    "stress_ec": {
+                        profile: _compact_replay(profile_replay)
+                        for profile, profile_replay in selected["control"][
+                            "profile_replays"
+                        ].items()
+                    },
+                    "holdout_er": {
+                        profile: _compact_replay(profile_replay)
+                        for profile, profile_replay in selected[
+                            "holdout_er_replays"
+                        ].items()
+                    },
+                    "holdout_ec": {
+                        profile: _compact_replay(profile_replay)
+                        for profile, profile_replay in selected[
+                            "holdout_ec_replays"
+                        ].items()
+                    },
+                }
             row = {
                 "episode_idx": episode,
                 "eb_success": int(task_successful_eb),
@@ -1027,6 +1388,10 @@ def calibrate(args: argparse.Namespace) -> str:
                 "eb_safe_success": int(safe_successful_eb),
                 "eb_physics_qualified": int(physics_qualified_eb),
                 "eb_penetration_m": eb_penetration,
+                "profile_eb_qualified": json.dumps(
+                    profile_eb_qualified, sort_keys=True
+                ),
+                "trajectory_profiles_distinct": int(profiles_distinct),
                 "calibrated": int(selected is not None),
                 "attempts": attempts,
                 "invalid_candidates": invalid_candidates,
@@ -1042,6 +1407,14 @@ def calibrate(args: argparse.Namespace) -> str:
                 "refinement_attempts": refinement_attempts,
                 "refinement_seeds": refinement_seeds,
                 "matched_control_failures": matched_control_failures,
+                "stress_failures": stress_failures,
+                "holdout_source_rejected": int(holdout_source_rejected),
+                "holdout_failure_reason": holdout_failure_reason,
+                "ensemble_evidence": (
+                    ""
+                    if ensemble_evidence is None
+                    else json.dumps(ensemble_evidence, sort_keys=True)
+                ),
                 "invalid_reasons": ";".join(
                     f"{reason}={count}"
                     for reason, count in sorted(invalid_reasons.items())
@@ -1190,10 +1563,27 @@ def calibrate(args: argparse.Namespace) -> str:
             selected_indices,
             args.task_id,
         )
+        pool_profile_trajectory_dirs = {}
+        for profile, directory in {
+            **stress_directories,
+            **holdout_directories,
+        }.items():
+            pool_profile_trajectory_dirs[profile] = str(
+                _rewrite_selected_trajectories(
+                    Path(directory),
+                    (
+                        stress_trajectories.get(profile)
+                        or holdout_trajectories[profile]
+                    ),
+                    selected_indices,
+                    args.task_id,
+                )
+            )
     else:
         _save_hdf5(Path(args.er_states), task.language, output_er_states)
         _save_hdf5(Path(args.ec_states), task.language, output_ec_states)
         pool_trajectory_dir = None
+        pool_profile_trajectory_dirs = {}
 
     out_csv = Path(args.out_csv)
     out_csv.parent.mkdir(parents=True, exist_ok=True)
@@ -1223,6 +1613,9 @@ def calibrate(args: argparse.Namespace) -> str:
                 "maximum_contact_penetration_m": float(row["penetration_m"]),
                 "admission_limit_m": float(args.max_contact_penetration),
             }
+            pair["trajectory_ensemble_replay"] = json.loads(
+                row["ensemble_evidence"]
+            )
             pair["er_placement"] = [
                 float(row["risk_x"]),
                 float(row["risk_y"]),
@@ -1306,6 +1699,21 @@ def calibrate(args: argparse.Namespace) -> str:
         "selected_count": args.select_count,
         "pool_trajectory_dir": (
             None if pool_trajectory_dir is None else str(pool_trajectory_dir)
+        ),
+        "canonical_trajectory_profile": canonical_profile,
+        "stress_trajectory_profiles": expected_stress,
+        "holdout_trajectory_profiles": expected_holdout,
+        "profile_trajectory_dirs": {
+            **stress_directories,
+            **holdout_directories,
+        },
+        "pool_profile_trajectory_dirs": pool_profile_trajectory_dirs,
+        "holdout_contract": (
+            "holdout paths never generate or refine a pose; the first "
+            "construction-qualified pose is audited once, and any holdout "
+            "failure rejects the complete native source state"
+            if expected_holdout
+            else None
         ),
         "intended_links": list(INTENDED_LINKS),
         "candidate_path_bodies": list(INTENDED_LINKS),
@@ -1402,10 +1810,25 @@ def main() -> None:
             "l1b3_task4_candidate",
             "l1b3_task4_outcome_v2",
             "l1b3_task4_outcome_v2_v5",
+            "l1b3_task4_outcome_v2_v6",
         ),
         default="l1b3_native_arm",
     )
     parser.add_argument("--eb_trajectories", required=True)
+    parser.add_argument(
+        "--stress_trajectory",
+        action="append",
+        default=[],
+        metavar="PROFILE_ID=DIRECTORY",
+        help="Preregistered construction-stress trajectory directory",
+    )
+    parser.add_argument(
+        "--holdout_trajectory",
+        action="append",
+        default=[],
+        metavar="PROFILE_ID=DIRECTORY",
+        help="Preregistered source-level holdout trajectory directory",
+    )
     parser.add_argument(
         "--selection_trajectory_provenance",
         default="legacy_learned_or_unspecified",

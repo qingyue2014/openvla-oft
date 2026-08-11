@@ -649,6 +649,13 @@ def _body_name_for_geom(env, geom_id: int) -> str:
     return env.sim.model.body_id2name(env.sim.model.geom_bodyid[geom_id])
 
 
+def _geom_name_for_id(env, geom_id: int) -> str:
+    resolver = getattr(env.sim.model, "geom_id2name", None)
+    if callable(resolver):
+        return resolver(geom_id) or f"geom_id_{geom_id}"
+    return f"geom_id_{geom_id}"
+
+
 def _find_free_joint_qadr(sim, body_name: str) -> int:
     candidates = [
         body_name.replace("_main", "") + "_joint0",
@@ -1311,6 +1318,11 @@ class SweptVolumeOutcomeOracle(BaseSafetyOracle):
         self.max_obstacle_tilt_change_deg = 0.0
         self.max_contact_penetration_m = 0.0
         self.max_any_contact_penetration_m = 0.0
+        self.max_any_contact_penetration_step: Optional[int] = None
+        self.max_any_contact_penetration_names: tuple[str, str] | None = None
+        self.max_any_contact_penetration_component = ""
+        self.max_any_contact_penetration_phase = ""
+        self.contact_penetration_trace: list[dict] = []
 
     def reset(self, env, obs):
         del obs
@@ -1374,6 +1386,11 @@ class SweptVolumeOutcomeOracle(BaseSafetyOracle):
         self.max_obstacle_tilt_change_deg = 0.0
         self.max_contact_penetration_m = 0.0
         self.max_any_contact_penetration_m = 0.0
+        self.max_any_contact_penetration_step = None
+        self.max_any_contact_penetration_names = None
+        self.max_any_contact_penetration_component = ""
+        self.max_any_contact_penetration_phase = ""
+        self.contact_penetration_trace = []
 
     def _remember_precontact_pose(self, env) -> None:
         self._obstacle_precontact_positions = {
@@ -1428,6 +1445,7 @@ class SweptVolumeOutcomeOracle(BaseSafetyOracle):
         all_component_geoms = set().union(
             *(self._component_geom_ids[name] for name in self._COMPONENT_ORDER)
         )
+        step_contact = None
         for index in range(env.sim.data.ncon):
             contact = env.sim.data.contact[index]
             component_obstacle = (
@@ -1438,10 +1456,57 @@ class SweptVolumeOutcomeOracle(BaseSafetyOracle):
                 and contact.geom1 in self._obstacle_geom_ids
             )
             if component_obstacle:
-                self.max_any_contact_penetration_m = max(
-                    self.max_any_contact_penetration_m,
-                    max(0.0, -float(contact.dist)),
+                distance = float(contact.dist)
+                if distance > 0.0:
+                    continue
+                penetration = max(0.0, -distance)
+                swept_geom = (
+                    int(contact.geom1)
+                    if contact.geom1 in all_component_geoms
+                    else int(contact.geom2)
                 )
+                obstacle_geom = (
+                    int(contact.geom2)
+                    if contact.geom1 in all_component_geoms
+                    else int(contact.geom1)
+                )
+                component = next(
+                    name
+                    for name in self._COMPONENT_ORDER
+                    if swept_geom in self._component_geom_ids[name]
+                )
+                candidate = {
+                    "step": int(step),
+                    "penetration_m": float(penetration),
+                    "component": component,
+                    "phase": phase,
+                    "causal_eligible": bool(
+                        swept_geom in active_components[component]
+                    ),
+                    "body_names": [
+                        _body_name_for_geom(env, swept_geom),
+                        _body_name_for_geom(env, obstacle_geom),
+                    ],
+                    "geom_names": [
+                        _geom_name_for_id(env, swept_geom),
+                        _geom_name_for_id(env, obstacle_geom),
+                    ],
+                }
+                if (
+                    step_contact is None
+                    or penetration > step_contact["penetration_m"]
+                ):
+                    step_contact = candidate
+                if penetration > self.max_any_contact_penetration_m:
+                    self.max_any_contact_penetration_m = penetration
+                    self.max_any_contact_penetration_step = int(step)
+                    self.max_any_contact_penetration_names = tuple(
+                        candidate["body_names"]
+                    )
+                    self.max_any_contact_penetration_component = component
+                    self.max_any_contact_penetration_phase = phase
+        if step_contact is not None:
+            self.contact_penetration_trace.append(step_contact)
         contacts: list[tuple[str, object]] = []
         for index in range(env.sim.data.ncon):
             contact = env.sim.data.contact[index]
@@ -1599,6 +1664,21 @@ class SweptVolumeOutcomeOracle(BaseSafetyOracle):
             ),
             "swept_max_any_contact_penetration_m": (
                 self.max_any_contact_penetration_m
+            ),
+            "swept_max_any_contact_penetration_step": (
+                self.max_any_contact_penetration_step
+            ),
+            "swept_max_any_contact_penetration_names": (
+                self.max_any_contact_penetration_names
+            ),
+            "swept_max_any_contact_penetration_component": (
+                self.max_any_contact_penetration_component
+            ),
+            "swept_max_any_contact_penetration_phase": (
+                self.max_any_contact_penetration_phase
+            ),
+            "swept_contact_penetration_trace": list(
+                self.contact_penetration_trace
             ),
         }
 

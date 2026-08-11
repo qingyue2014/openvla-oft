@@ -713,6 +713,44 @@ def _order_grasp_candidates_away(candidates, target_xy, obstacle_xy):
     )
 
 
+def _order_grasp_candidates_fixed(candidates, order):
+    """Apply a preregistered, obstacle-independent grasp-lane priority.
+
+    The order is expressed in world axes and depends on neither the protected
+    object's pose nor a learned-policy trajectory.  L1-B3 v6 uses these fixed
+    priorities to obtain distinct deterministic corridor probes from one
+    native state.  Parser order breaks ties, keeping the result reproducible.
+    """
+    order = str(order or "center_then_axes")
+    if order == "center_then_axes":
+        return list(candidates)
+    axis_sign = {
+        "positive_x_then_center": (0, 1.0),
+        "negative_x_then_center": (0, -1.0),
+        "positive_y_then_center": (1, 1.0),
+        "negative_y_then_center": (1, -1.0),
+    }
+    if order not in axis_sign:
+        raise ValueError(f"unsupported fixed grasp-candidate order: {order!r}")
+    axis, sign = axis_sign[order]
+
+    def priority(offset):
+        offset = np.asarray(offset, dtype=float)
+        if sign * offset[axis] > 0 and abs(offset[axis]) >= abs(offset[1 - axis]):
+            return 0
+        if np.allclose(offset, 0.0):
+            return 1
+        return 2
+
+    return [
+        candidate
+        for _, candidate in sorted(
+            enumerate(candidates),
+            key=lambda item: (priority(item[1]), item[0]),
+        )
+    ]
+
+
 def _replay_grasp_prefix(env, obs, oracle, recorder, actions, source, step, args):
     """Replay a paired successful-Eb prefix until the target is securely lifted.
 
@@ -1824,6 +1862,9 @@ def _run_episode(
             "trajectory_source_label": getattr(
                 args, "trajectory_source_label", "scripted_safe_reference"
             ),
+            "trajectory_profile_id": getattr(
+                args, "trajectory_profile_id", ""
+            ),
             "trajectory_source_manifest": getattr(
                 args, "trajectory_source_manifest", ""
             ),
@@ -2012,6 +2053,10 @@ def run(args):
                             np.array([-reach[0], -reach[1]]),
                         ]
                     )
+            candidates = _order_grasp_candidates_fixed(
+                candidates,
+                getattr(args, "grasp_candidate_order", "center_then_axes"),
+            )
             grasp_order_away = bool(
                 getattr(args, "grasp_order_away_from_obstacle", False)
             )
@@ -2282,6 +2327,18 @@ def main():
         default="0.60,0.80",
         help="Bowl half-extent fractions searched along world +/-x and +/-y for rim grasps",
     )
+    parser.add_argument(
+        "--grasp_candidate_order",
+        choices=(
+            "center_then_axes",
+            "positive_x_then_center",
+            "negative_x_then_center",
+            "positive_y_then_center",
+            "negative_y_then_center",
+        ),
+        default="center_then_axes",
+        help="Fixed world-axis grasp-lane priority; never obstacle adaptive",
+    )
     parser.add_argument("--grasp_seat_steps", type=int, default=15)
     parser.add_argument("--grasp_seat_max_command", type=float, default=0.08)
     parser.add_argument("--lift_height", type=float, default=0.12)
@@ -2347,6 +2404,11 @@ def main():
         "--trajectory_source_label",
         default="scripted_safe_reference",
         help="Auditable provenance label embedded in every saved trajectory",
+    )
+    parser.add_argument(
+        "--trajectory_profile_id",
+        default="",
+        help="Preregistered deterministic controller-profile identifier",
     )
     parser.add_argument(
         "--trajectory_source_manifest",

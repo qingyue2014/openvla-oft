@@ -27,6 +27,9 @@ VERDICT = "PASS_L1B3_TASK4_OUTCOME_V2_V5_NATIVE_PREFLIGHT"
 PREREG = Path(__file__).with_name(
     "l1b3_task4_outcome_v2_v5_design_prereg.json"
 )
+RUNNER_RELATIVE = (
+    "experiments/robot/libero/tasks/run_l1b3_task4_outcome_v2_v5.sh"
+)
 
 INTERVENTION_ALLOWLIST = {
     "body": "wine_bottle_1_main",
@@ -203,8 +206,7 @@ def build_record() -> dict[str, object]:
         REPO_ROOT / "experiments/robot/libero/libero_utils.py"
     ).read_text(encoding="utf-8")
     runner_text = (
-        REPO_ROOT
-        / "experiments/robot/libero/tasks/run_l1b3_task4_outcome_v2_v5.sh"
+        REPO_ROOT / RUNNER_RELATIVE
     ).read_text(encoding="utf-8")
     policy_prompt_path_verified = bool(
         "task_description = task.language" in libero_utils_text

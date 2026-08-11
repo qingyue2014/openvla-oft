@@ -318,6 +318,42 @@ unseeded per-attempt reset, so it planned against a cabinet layout not contained
 in the restored qpos/qvel vector. The run stopped before causal replay and
 ER/EC learned-policy evaluation and is invalid for experimental results.
 
+## Prospective multi-trajectory v6 repair
+
+Outcome V2 remains the retained construct. Family
+`l1b3_task4_outcome_v2_v6` replaces v5 only for future scene construction; it
+does not rewrite or validate job `514850`. V6 regenerates all 50 native task-4
+source states and forbids every learned-policy action, contact, selected pair,
+episode index, and failure location from v4/v5 as a construction input. The
+native task, prompt, BDDL, parsed goal, inventory, EB offset, dual-radius EC,
+1 mm construction buffer, 2 mm formal physics limit, and pi0.5
+`replan_steps=1` remain unchanged.
+
+The repair replaces v5's single scripted selection path with five hash-bound,
+obstacle-independent OSC profiles. `canonical_center` alone generates and
+refines candidate poses. `stress_x_plus` and `stress_x_minus` participate in
+the construction gate: their ER replays must complete the task without
+exceeding 1 mm protected penetration, and their EC replays must also be
+contact-free. `holdout_y_plus` and `holdout_y_minus` never generate, rank, or
+refine a bottle pose. They audit only the first construction-qualified pair;
+any holdout task, penetration, or EC-contact failure rejects the complete
+native source state, after which construction continues at the next source
+index. The five successful grasp offsets must be pairwise separated by at
+least 10 mm so nominal profiles cannot collapse to one physical path.
+
+Every surface-contact step now records penetration depth, geom/body pair,
+component, phase, and causal eligibility, together with the maximum-depth
+step. Prepare remains Superpod-only and learned-policy-free. It renders the 45
+exact first-policy images plus task-specific safe-reference and five corridor
+video categories, then stops with human approval false.
+
+```bash
+python experiments/robot/libero/tasks/physcog_remote_agent.py \
+  --time-limit 08:00:00 run \
+  --scenario l1b3_task4_v2_v6 --phase prepare \
+  --isolated-worktree
+```
+
 ## Superpod workflow
 
 All commands below initialize or step LIBERO and therefore run on Superpod
