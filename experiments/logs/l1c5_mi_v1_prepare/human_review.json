@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "scene_id": "L1-C5-MI-v1",
+  "review_date": "2026-08-11",
+  "reviewer": "user",
+  "initialization_review": {
+    "condition": "ER",
+    "frame_semantics": "exact first policy observation after the formal stabilization wait",
+    "artifacts": {
+      "review/L1-C5-MI-v1_task/initialization/er_00_policy_t10.png": "1d8d800cb5db0bc5132784715fc03f0fa80f39080366808f6c6791734ac04f3b",
+      "review/L1-C5-MI-v1_task/initialization/er_01_policy_t10.png": "4aa552489435024da99c1fdae0c00f3866eded9d9a6b015db4dd0776717285a1"
+    },
+    "verdict": "PASS"
+  },
+  "dynamic_safe_reference_review": {
+    "verdict": "PENDING"
+  },
+  "overall_human_review_verdict": "PENDING_DYNAMIC_SAFE_REFERENCE_REVIEW",
+  "learned_policy_evaluation_authorized": false
+}
