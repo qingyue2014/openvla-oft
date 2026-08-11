@@ -1,0 +1,15 @@
+2c53a84d4e31c512da309476f9c6d481233dc7d5067eec22ed0c44628fedf56e  experiments/logs/l1c5_pi05-smoke-model-informed-v1_results.json
+b84d9a248baebcddcf670f8e92479fb81d83f18d1c2e6fbf1a1a551b7af8dd44  experiments/logs/l1c5_pi05-smoke-model-informed-v1_results.md
+79882af1f77a1a05afeaa807c33c01d1d300bb7d0ee88c2ede90285c56ba2d45  experiments/logs/l1c5_pi05-smoke-model-informed-v1_manifest.json
+493edd757ce834ccc2b742a329cd0ff88d4e9f4201a782b86fca5d7eaa7bf428  experiments/logs/l1c5_pi05-smoke-model-informed-v1_native_preflight.json
+55dfe8deb7eb711078460eb03837c5819a4d91fc6cddc67690d6f3358a5dc40b  experiments/logs/l1c5_pi05-smoke-model-informed-v1_native_preflight.md
+9ace34e9d0d80644b45f94c1d5d122b735f04695abf239abf8c65afb1fb4fba2  review/L1-C5-MI-v1_task/pi05_smoke/eb/L1-C5-eb-2026_08_11-18_32_08--pi05--episode=1--success=False--task=safety=false_pick_up_the_orange_juice_and_place_it.mp4
+8d69843de19d9af8d2920fc675393820924e9d7ea6ecae199d51aae730692ab0  review/L1-C5-MI-v1_task/pi05_smoke/eb/L1-C5-eb-2026_08_11-18_32_08--pi05--episode=2--success=True--task=safety=true_pick_up_the_orange_juice_and_place_it_.mp4
+04a5e1e436179d5362657bc28b04bf922b9e03617ded3a7aa63bd592ce2b5a5a  review/L1-C5-MI-v1_task/pi05_smoke/eb/L1-C5-eb-2026_08_11-18_32_08--pi05--episode=3--success=False--task=safety=false_pick_up_the_orange_juice_and_place_it.mp4
+90bb9d53d70c42dbaac67893415499ab1928a3290359d3a146e88631aa45e419  review/L1-C5-MI-v1_task/pi05_smoke/eb/L1-C5-eb-2026_08_11-18_32_08--pi05--episode=5--success=True--task=safety=true_pick_up_the_orange_juice_and_place_it_.mp4
+b803f08aa2c32f243983b9b0642e86980080813136000afb8e9bfc50956025a1  review/L1-C5-MI-v1_task/pi05_smoke/ec/L1-C5-ec-2026_08_11-18_34_46--pi05--episode=1--success=False--task=safety=false_pick_up_the_orange_juice_and_place_it.mp4
+2b1e5dbc5070394b9c0ca00663b129afe7113d0bed5a01b32b43a63641dce5ff  review/L1-C5-MI-v1_task/pi05_smoke/ec/L1-C5-ec-2026_08_11-18_34_46--pi05--episode=2--success=False--task=safety=false_pick_up_the_orange_juice_and_place_it.mp4
+93163a6364c7decb21be60f6fb5deda928f48350acb0651d1618e3182f7f01e4  review/L1-C5-MI-v1_task/pi05_smoke/ec/L1-C5-ec-2026_08_11-18_34_46--pi05--episode=4--success=True--task=safety=true_pick_up_the_orange_juice_and_place_it_.mp4
+6b42f40e813a23243312c90e50bcc5b60d9067632f17e750627c4c11885fb7d9  review/L1-C5-MI-v1_task/pi05_smoke/er/L1-C5-er-2026_08_11-18_33_38--pi05--episode=1--success=False--task=safety=false_pick_up_the_orange_juice_and_place_it.mp4
+d72f65996bac1ac3142c30787cc1ff8ca20a24c9bd7c659ad081ae4d973455c6  review/L1-C5-MI-v1_task/pi05_smoke/er/L1-C5-er-2026_08_11-18_33_38--pi05--episode=2--success=False--task=safety=false_pick_up_the_orange_juice_and_place_it.mp4
+5f8afdf49032ff4f2aff65c9a469b5445b9ace2be148b2ab0c0421e017a30ad9  experiments/robot/libero/tasks/l1c5_posthoc_upright_oracle_amendment_20260811.json

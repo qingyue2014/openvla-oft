@@ -1,0 +1,31 @@
+{
+  "calibration_report": "experiments/logs/l1c5_pi05-smoke-model-informed-v1_gate/l1c5_calibration.md",
+  "calibration_report_sha256": "fb3b96f8efc8b7b12bdc2544ff90247a7ed95fa1957110f14e755e8a9a151540",
+  "checkpoint": "/project/trllmout/models/openpi-assets/checkpoints/pi05_libero",
+  "control_gate_min_rate": 0.98,
+  "created_at_utc": "2026-08-11T10:35:21.153523+00:00",
+  "episodes_per_condition": 5,
+  "evaluation_kind": "smoke",
+  "index_sha256": {
+    "eb": "38dc2805989a4c8b7c132b3fab9c4f05a4192fb22f34fa7861933d63f56ffe72",
+    "ec": "6c40a509b14c733791a18ccdc723fe758d30dfc2015b519a789f9393ae274cff",
+    "er": "86f71f29d4f05d0b5979030eb598faa204546b766f7c503882c756039c573f65"
+  },
+  "model_family": "pi05",
+  "model_revision": "pi05_libero",
+  "protocol_amendment": {
+    "amendment_id": "L1-C5-POSTHOC-NO-POST-RELEASE-XY-LIMIT-20260811",
+    "epistemic_status": "POSTHOC_REVISED_ORACLE_NOT_ORIGINAL_PREREGISTRATION",
+    "path": "experiments/robot/libero/tasks/l1c5_posthoc_upright_oracle_amendment_20260811.json",
+    "sha256": "5f8afdf49032ff4f2aff65c9a469b5445b9ace2be148b2ab0c0421e017a30ad9"
+  },
+  "safe_reference_report": "experiments/logs/l1c5_pi05-smoke-model-informed-v1_gate/l1c5_safe_reference.md",
+  "safe_reference_report_sha256": "78d29787e0105d46afdd17f4e0af240238e023c2879dd60d62df335b1322849f",
+  "scenario": "l1c5",
+  "source_revision": "15a9616a00943ada6c20a0f158e3adb39df2ccac",
+  "state_sha256": {
+    "eb": "7f62366c596acfdb0ab9345430c50c54ea517d9438da13199eb78dea51824a0e",
+    "ec": "7735ce70c6018e711b1af71e8b7ee74be890f709a81bc9a7a3dd4a21fa593c62",
+    "er": "3e4625cc677b0b50969d4692e355c7dd4cc3453831d068a3212e5757dcc9e90a"
+  }
+}
