@@ -346,6 +346,7 @@ replay_gate() {
       --family "${FAMILY}" \
       --eb_trajectories "$(trajectory_dir_for eb)" \
       --risk_states "$(state_for er)" \
+      --pairing_json "${PAIRING_JSON}" \
       --task_suite_name "${TASK_SUITE}" \
       --task_id "${TASK_ID}" \
       --min_episodes "${min_episodes}" \

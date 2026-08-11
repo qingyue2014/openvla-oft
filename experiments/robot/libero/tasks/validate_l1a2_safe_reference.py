@@ -16,8 +16,10 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import os
+import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -300,6 +302,19 @@ def _body_linear_speed(env, name):
     except AttributeError:
         velocity = np.asarray(env.sim.data.cvel[body_id][3:6], dtype=float)
     return float(np.linalg.norm(velocity))
+
+
+def _file_sha256(path_value: str) -> str:
+    if not path_value:
+        return ""
+    path = Path(path_value)
+    if not path.is_file():
+        raise FileNotFoundError(f"Missing trajectory source manifest: {path}")
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _target_support_contact(env):
@@ -760,9 +775,16 @@ def _run_episode(
     )
     oracle = _TaskOnlyOracle(env, TARGET)
     oracle.reset(env, obs)
+    extra_track_bodies = tuple(
+        value.strip()
+        for value in str(
+            getattr(args, "trajectory_track_bodies", "")
+        ).split(",")
+        if value.strip()
+    )
     recorder = _TrajectoryAndPolicyVideoRecorder(
         env,
-        [TARGET, PLATE, OCCLUDER],
+        list(dict.fromkeys((TARGET, PLATE, OCCLUDER, *extra_track_bodies))),
         capture_video=capture_video,
         video_stride=args.video_stride,
     )
@@ -840,7 +862,7 @@ def _run_episode(
         # executes its configured dummy open-gripper action for 10 steps and only
         # then captures agentview. Keep these settling actions in the trajectory,
         # but start the safe-reference MP4 at the corresponding post-wait frame.
-        if capture_video and args.video_match_wait_steps:
+        if args.video_match_wait_steps:
             obs, step, failure = _hold(
                 env,
                 obs,
@@ -1799,6 +1821,25 @@ def _run_episode(
         str(out_path),
         {
             "condition": "safe_reference",
+            "trajectory_source_label": getattr(
+                args, "trajectory_source_label", "scripted_safe_reference"
+            ),
+            "trajectory_source_manifest": getattr(
+                args, "trajectory_source_manifest", ""
+            ),
+            "trajectory_source_manifest_sha256": _file_sha256(
+                getattr(args, "trajectory_source_manifest", "")
+            ),
+            "model_trajectory_used": False,
+            "controller_obstacle_adaptive": bool(
+                getattr(args, "grasp_order_away_from_obstacle", False)
+                or float(getattr(args, "transport_obstacle_clearance", 0.0))
+                > 0.0
+                or bool(getattr(args, "grasp_action_path", ""))
+            ),
+            "cross_episode_grasp_cache_disabled": bool(
+                getattr(args, "disable_cross_episode_grasp_cache", False)
+            ),
             "episode_idx": episode_idx,
             "attempt_idx": attempt_idx,
             "grasp_xy_offset_m": grasp_xy_offset.tolist(),
@@ -2000,7 +2041,11 @@ def run(args):
                 # The paired policy prefix defines the grasp; scripted grasp
                 # height/offset enumeration would only replay the same prefix.
                 grasp_candidates = [(args.grasp_height, np.zeros(2))]
-            if selected_grasp is not None and not grasp_order_away:
+            if (
+                selected_grasp is not None
+                and not grasp_order_away
+                and not getattr(args, "disable_cross_episode_grasp_cache", False)
+            ):
                 selected_height, selected_offset = selected_grasp
                 grasp_candidates = [selected_grasp] + [
                     (height, offset)
@@ -2044,8 +2089,24 @@ def run(args):
                 ) > _reference_attempt_score(row):
                     row = candidate_row
                 if candidate_row["safe_success"]:
-                    selected_grasp = (grasp_height, offset.copy())
+                    if not getattr(
+                        args, "disable_cross_episode_grasp_cache", False
+                    ):
+                        selected_grasp = (grasp_height, offset.copy())
                     break
+            canonical_dir = str(
+                getattr(args, "canonical_success_trajectory_dir", "")
+            )
+            if canonical_dir and row["safe_success"]:
+                source = Path(args.trajectory_dir) / (
+                    f"task{args.task_id}_ep{idx:03d}_"
+                    f"attempt{int(row['attempt']):02d}.npz"
+                )
+                destination = Path(canonical_dir) / (
+                    f"task{args.task_id}_ep{idx:03d}.npz"
+                )
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, destination)
             rows.append(row)
             print(
                 f"state={idx:02d} safe={row['safe_success']} "
@@ -2132,6 +2193,11 @@ def main():
     parser.add_argument("--transport_target_eef_quat", default="")
     parser.add_argument("--grasp_include_diagonal_offsets", action="store_true")
     parser.add_argument("--grasp_order_away_from_obstacle", action="store_true")
+    parser.add_argument(
+        "--disable_cross_episode_grasp_cache",
+        action="store_true",
+        help="Restart the fixed grasp-candidate order for every source state",
+    )
     parser.add_argument("--orient_before_grasp", action="store_true")
     parser.add_argument("--skip_transport_orientation", action="store_true")
     parser.add_argument("--preorientation_path_fraction", type=float, default=0.0)
@@ -2268,6 +2334,29 @@ def main():
     parser.add_argument("--environment_horizon", type=int, default=1000)
     parser.add_argument(
         "--trajectory_dir", default="experiments/logs/l1a2_safe_reference_trajectories"
+    )
+    parser.add_argument(
+        "--canonical_success_trajectory_dir",
+        default="",
+        help=(
+            "Optional directory receiving one canonical task<ID>_ep<NNN>.npz "
+            "copy for each successful scripted episode"
+        ),
+    )
+    parser.add_argument(
+        "--trajectory_source_label",
+        default="scripted_safe_reference",
+        help="Auditable provenance label embedded in every saved trajectory",
+    )
+    parser.add_argument(
+        "--trajectory_source_manifest",
+        default="",
+        help="Optional hash-bound JSON manifest for the scripted controller",
+    )
+    parser.add_argument(
+        "--trajectory_track_bodies",
+        default="",
+        help="Comma-separated extra MuJoCo body names recorded for calibration",
     )
     parser.add_argument("--out_csv", default="experiments/logs/l1a2_safe_reference.csv")
     parser.add_argument("--out_report", default="experiments/logs/l1a2_safe_reference.md")

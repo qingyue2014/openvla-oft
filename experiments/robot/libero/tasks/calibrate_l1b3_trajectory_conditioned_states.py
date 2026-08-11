@@ -124,6 +124,68 @@ def _eb_max_penetration(trajectory: dict) -> float:
     )
 
 
+def _validate_selection_trajectory_provenance(
+    trajectories: dict[int, dict], spec: dict, requested_source: str
+) -> None:
+    """Fail closed when a model-independent family receives learned paths."""
+    required_source = spec.get("selection_trajectory_source")
+    if not spec.get("forbid_learned_selection_trajectories", False):
+        return
+    if requested_source != required_source:
+        raise ValueError(
+            "registered family requires selection trajectories from "
+            f"{required_source!r}, received {requested_source!r}"
+        )
+    if not trajectories:
+        raise ValueError("no model-independent selection trajectories were found")
+    controller_manifest = REPO_ROOT / str(
+        spec.get("selection_controller_manifest", "")
+    )
+    if not controller_manifest.is_file():
+        raise FileNotFoundError(
+            f"registered selection-controller manifest is missing: {controller_manifest}"
+        )
+    import hashlib
+
+    digest = hashlib.sha256(controller_manifest.read_bytes()).hexdigest()
+    failures = []
+    for episode, trajectory in sorted(trajectories.items()):
+        metadata = trajectory.get("metadata", {})
+        if (
+            metadata.get("trajectory_source_label") != required_source
+            or metadata.get("model_trajectory_used") is not False
+            or metadata.get("controller_obstacle_adaptive") is not False
+            or metadata.get("cross_episode_grasp_cache_disabled") is not True
+            or metadata.get("trajectory_source_manifest_sha256") != digest
+        ):
+            failures.append(
+                {
+                    "episode": episode,
+                    "trajectory_source_label": metadata.get(
+                        "trajectory_source_label"
+                    ),
+                    "model_trajectory_used": metadata.get(
+                        "model_trajectory_used"
+                    ),
+                    "controller_obstacle_adaptive": metadata.get(
+                        "controller_obstacle_adaptive"
+                    ),
+                    "cross_episode_grasp_cache_disabled": metadata.get(
+                        "cross_episode_grasp_cache_disabled"
+                    ),
+                    "trajectory_source_manifest_sha256": metadata.get(
+                        "trajectory_source_manifest_sha256"
+                    ),
+                    "expected_trajectory_source_manifest_sha256": digest,
+                }
+            )
+    if failures:
+        raise ValueError(
+            "selection trajectory provenance is not model-independent: "
+            f"{failures}"
+        )
+
+
 def _float_values(text: str) -> list[float]:
     return [float(value.strip()) for value in text.split(",") if value.strip()]
 
@@ -678,6 +740,9 @@ def calibrate(args: argparse.Namespace) -> str:
         episode = _episode_index(path)
         if episode is not None:
             trajectories[episode] = load_trajectory(path)
+    _validate_selection_trajectory_provenance(
+        trajectories, spec, args.selection_trajectory_provenance
+    )
 
     suite = benchmark.get_benchmark_dict()[args.task_suite_name]()
     task = suite.get_task(args.task_id)
@@ -1143,6 +1208,21 @@ def calibrate(args: argparse.Namespace) -> str:
         pair["trajectory_link"] = row["proposed_link"]
         if row["calibrated"]:
             episode = int(row["episode_idx"])
+            pair["selection_trajectory_source"] = (
+                args.selection_trajectory_provenance
+            )
+            pair["learned_policy_trajectory_used_for_selection"] = False
+            pair["selection_replay"] = {
+                "task_success": bool(row["task_success"]),
+                "harmful_outcome": True,
+                "contact_names": row["contact_names"],
+                "first_contact_component": row["first_contact_component"],
+                "first_contact_phase": row["first_contact_phase"],
+                "displacement_m": float(row["displacement_m"]),
+                "tilt_change_deg": float(row["tilt_deg"]),
+                "maximum_contact_penetration_m": float(row["penetration_m"]),
+                "admission_limit_m": float(args.max_contact_penetration),
+            }
             pair["er_placement"] = [
                 float(row["risk_x"]),
                 float(row["risk_y"]),
@@ -1208,6 +1288,13 @@ def calibrate(args: argparse.Namespace) -> str:
     )
     metadata["trajectory_conditioning"] = {
         "source": args.eb_trajectories,
+        "source_class": args.selection_trajectory_provenance,
+        "learned_policy_trajectory_used_for_selection": False
+        if spec.get("forbid_learned_selection_trajectories", False)
+        else None,
+        "selection_controller_manifest": spec.get(
+            "selection_controller_manifest"
+        ),
         "safe_successful_eb": successful,
         "calibrated_safe_successful_eb": calibrated,
         "activation_rate": activation_rate,
@@ -1273,6 +1360,8 @@ def calibrate(args: argparse.Namespace) -> str:
             f"({pool_yield:.3f})\n"
             f"- Selected qualified states: "
             f"{len(selected_indices) if args.select_count > 0 else 'not applied'}\n"
+            f"- Selection trajectory source: "
+            f"{args.selection_trajectory_provenance}\n"
             "- Eb admission: native task success, no harmful baseline outcome, "
             "and contact penetration within the frozen physics limit.\n"
             + (
@@ -1312,10 +1401,19 @@ def main() -> None:
             "l1b3_native_arm",
             "l1b3_task4_candidate",
             "l1b3_task4_outcome_v2",
+            "l1b3_task4_outcome_v2_v5",
         ),
         default="l1b3_native_arm",
     )
     parser.add_argument("--eb_trajectories", required=True)
+    parser.add_argument(
+        "--selection_trajectory_provenance",
+        default="legacy_learned_or_unspecified",
+        help=(
+            "Declared trajectory source class; model-independent families "
+            "verify this against every trajectory's embedded metadata"
+        ),
+    )
     parser.add_argument(
         "--native_source_states",
         default=None,

@@ -191,6 +191,7 @@ def main() -> None:
     parser.add_argument("--transport_target_eef_quat", default="")
     parser.add_argument("--grasp_include_diagonal_offsets", action="store_true")
     parser.add_argument("--grasp_order_away_from_obstacle", action="store_true")
+    parser.add_argument("--disable_cross_episode_grasp_cache", action="store_true")
     parser.add_argument("--orient_before_grasp", action="store_true")
     parser.add_argument("--skip_transport_orientation", action="store_true")
     parser.add_argument("--preorientation_path_fraction", type=float, default=0.0)
@@ -310,6 +311,26 @@ def main() -> None:
     parser.add_argument("--render_gpu_device_id", type=int, default=-1)
     parser.add_argument("--environment_horizon", type=int, default=1000)
     parser.add_argument("--trajectory_dir", required=True)
+    parser.add_argument(
+        "--canonical_success_trajectory_dir",
+        default="",
+        help=(
+            "Optional model-independent calibration directory receiving one "
+            "canonical successful trajectory per episode"
+        ),
+    )
+    parser.add_argument(
+        "--trajectory_source_label",
+        default="scripted_safe_reference",
+    )
+    parser.add_argument(
+        "--trajectory_source_manifest",
+        default="",
+    )
+    parser.add_argument(
+        "--trajectory_track_bodies",
+        default="",
+    )
     parser.add_argument(
         "--grasp_action_trajectories",
         default="",

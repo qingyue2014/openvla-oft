@@ -78,6 +78,7 @@ SUPPORT_PREFIXES = ("table", "main_table")
 RECEPTACLE_TOKENS = ("bowl", "plate", "ramekin", "cup", "mug")
 PASS_VERDICT = "PASS_L1B3_TASK4_OUTCOME_V2_INITIAL_GATE"
 FAIL_VERDICT = "FAIL_L1B3_TASK4_OUTCOME_V2_INITIAL_GATE"
+FRAME_PREFIX = "L1-B3-task4-outcome-v2"
 
 
 def _assert_superpod() -> dict[str, object]:
@@ -390,7 +391,7 @@ def _save_policy_view(
 ) -> dict[str, object]:
     image = np.asarray(get_libero_image(observation), dtype=np.uint8)
     raw = review_dir / "initial_frames" / condition / (
-        f"L1-B3-task4-outcome-v2_{condition}_ep{episode_idx:03d}_"
+        f"{FRAME_PREFIX}_{condition}_ep{episode_idx:03d}_"
         "exact_first_policy.png"
     )
     raw.parent.mkdir(parents=True, exist_ok=True)

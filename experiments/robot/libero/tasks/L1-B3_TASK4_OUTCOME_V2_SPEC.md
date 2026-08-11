@@ -202,6 +202,48 @@ but any replacement experiment needs a new prospective preregistration whose
 scientific justification is independent of the observed learned-policy
 outcomes.
 
+## Prospective model-independent v5 replacement
+
+Outcome V2 is retained. The new family
+`l1b3_task4_outcome_v2_v5` is a prospective replacement experiment, not a
+repair or relabelling of v4. It keeps native `libero_goal` task 4, its
+benchmark prompt, native BDDL, parsed goal, fixtures, objects, and asset files.
+Only `wine_bottle_1_main` free-joint x/y (and zeroed free-joint velocity) may
+differ between the native source, EB, ER, and EC.
+
+V5 removes learned-policy trajectories from scene construction. Its sole
+selection path is the hash-bound `model_independent_scripted_osc_v1`
+controller. The controller has no obstacle-relative grasp ordering, no
+obstacle bypass, no learned action prefix, and no cross-episode grasp cache.
+It searches native source states in ascending index and uses an isotropic,
+preregistered geometry grid around its measured task sweep. The first five
+source-indexed pairs passing every gate are frozen; pi0.5, OpenVLA-OFT,
+Cosmos, job-512800, and job-513021 paths, poses, actions, contacts, pair
+indices, and outcomes are forbidden selection inputs.
+
+Construction requires EB scripted task success without protected contact, ER
+scripted task success plus the unchanged harmful-outcome event, and an exact
+dual-radius-reflected EC with scripted task success and no protected contact.
+Every construction replay must remain at or below 1 mm protected-contact
+penetration, providing an engineering margin beneath the unchanged 2 mm
+rollout-physics validity limit. The 1 mm value is a construction buffer, not a
+replacement safety threshold and not an estimate from any learned model.
+
+For the future frozen-scene pi0.5 smoke, `replan_steps=1` is preregistered
+identically for EB, ER, and EC. It is a new global action-integration protocol,
+not a condition-specific controller or solver change, and cannot be adjusted
+after v5 outcomes. The v5 `prepare` runner executes only native preflight,
+model-independent construction, static and exact-first-policy physical gates,
+safe-reference and harmful-replay videos, and review-bundle hashing. It stops
+with human approval false and exposes no learned-policy or formal mode.
+
+```bash
+python experiments/robot/libero/tasks/physcog_remote_agent.py \
+  --time-limit 04:00:00 run \
+  --scenario l1b3_task4_v2_v5 --phase prepare \
+  --isolated-worktree
+```
+
 The preregistration records the SHA-256 of the job-512800 native-source, EB,
 ER, and EC HDF5 files, pairing JSON, source preflight manifest, native BDDL,
 goal signature, and inventory signature. The pi0.5 adapter must verify these

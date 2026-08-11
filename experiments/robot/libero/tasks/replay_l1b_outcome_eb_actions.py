@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import csv
 import glob
+import json
 import os
 import re
 import sys
@@ -77,6 +78,17 @@ def replay(args: argparse.Namespace) -> str:
             f"No Eb .npz trajectories in {args.eb_trajectories}"
         )
     states = _load_states(Path(args.risk_states))
+    pairing = None
+    if args.pairing_json:
+        pairing = json.loads(Path(args.pairing_json).read_text(encoding="utf-8"))
+        if (
+            "seed" not in pairing
+            or len(pairing.get("pairs", [])) != len(states)
+        ):
+            raise ValueError(
+                "paired replay requires one source-indexed native fixture "
+                "reset record per risk state"
+            )
     suite = benchmark.get_benchmark_dict()[args.task_suite_name]()
     task = suite.get_task(args.task_id)
     if spec.get("bddl_file"):
@@ -112,6 +124,13 @@ def replay(args: argparse.Namespace) -> str:
                 continue
             actions = np.asarray(trajectory["actions"], dtype=float)
             phases = np.asarray(trajectory["phases"])
+            if pairing is not None:
+                pair = pairing["pairs"][episode_idx]
+                if "source_state_index" not in pair:
+                    raise ValueError(
+                        f"pairing metadata is missing source_state_index for {episode_idx}"
+                    )
+                env.seed(int(pairing["seed"]) + int(pair["source_state_index"]))
             env.reset()
             obs = env.set_init_state(states[episode_idx])
             frames = [_policy_frame(obs)] if capture_video else []
@@ -146,6 +165,12 @@ def replay(args: argparse.Namespace) -> str:
             row = {
                 "episode": os.path.basename(path),
                 "episode_idx": episode_idx,
+                "paired_reset_seed": (
+                    ""
+                    if pairing is None
+                    else int(pairing["seed"])
+                    + int(pairing["pairs"][episode_idx]["source_state_index"])
+                ),
                 "eb_success": int(bool(metadata.get("success", False))),
                 "actions_replayed": len(actions),
                 "policy_actions_replayed": int(np.sum(phases == "policy")),
@@ -297,6 +322,11 @@ def main() -> None:
     parser.add_argument("--family", choices=sorted(FAMILIES), required=True)
     parser.add_argument("--eb_trajectories", required=True)
     parser.add_argument("--risk_states", required=True)
+    parser.add_argument(
+        "--pairing_json",
+        default="",
+        help="Paired native-layout metadata restored before every replay",
+    )
     parser.add_argument("--task_suite_name", default="libero_goal")
     parser.add_argument("--task_id", type=int, default=4)
     parser.add_argument(
