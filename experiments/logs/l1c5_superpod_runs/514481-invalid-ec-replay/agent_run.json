@@ -1,0 +1,72 @@
+{
+  "classification": "gate_failure",
+  "completed_at_utc": "2026-08-11T02:24:48.010664+00:00",
+  "count": 50,
+  "count_env": "L1C_FORMAL_TRIALS",
+  "created_at_utc": "2026-08-11T02:10:08.756917+00:00",
+  "fetched_artifacts": [
+    "experiments/logs/l1c5_pi05-formal_videos",
+    "experiments/logs/l1c5_pi05-formal_server.log",
+    "experiments/logs/l1c5_pi05-formal_gate",
+    "review/L1-C5_task/pi05_formal",
+    "rollouts/libero_object/L1-C5-orange-juice-occupied-basket-eb-pi05-formal"
+  ],
+  "job_id": "514481",
+  "local_commit": "148f3f3af861f01722c9df579989d99410ba151d",
+  "missing_artifacts": [
+    "experiments/logs/l1c5_pi05-formal_manifest.json",
+    "experiments/logs/l1c5_pi05-formal_results.json",
+    "experiments/logs/l1c5_pi05-formal_results.md",
+    "experiments/logs/l1c5_pi05-formal_native_preflight.json",
+    "experiments/logs/l1c5_pi05-formal_native_preflight.md",
+    "experiments/logs/l1c5_pi05-formal_eb_index.jsonl",
+    "experiments/logs/l1c5_pi05-formal_er_index.jsonl",
+    "experiments/logs/l1c5_pi05-formal_ec_index.jsonl",
+    "experiments/logs/l1c5_pi05-formal_review_artifacts.sha256",
+    "rollouts/libero_object/L1-C5-orange-juice-occupied-basket-risk-pi05-formal",
+    "rollouts/libero_object/L1-C5-orange-juice-occupied-basket-ec-pi05-formal"
+  ],
+  "phase": "pi05_formal",
+  "registered_command": [
+    "env",
+    "RENDER_GPU_DEVICE_ID=1",
+    "SAVE_VIDEO_MODE=all",
+    "bash",
+    "experiments/robot/libero/tasks/run_model_l1c_eval.sh",
+    "pi05",
+    "l1c5",
+    "formal"
+  ],
+  "remote_config": {
+    "account": "trllmout",
+    "branch": "codex/l1c5-orange-juice",
+    "control_socket": "/tmp/physcog-superpod.sock",
+    "exclude_nodes": "",
+    "gpus": 2,
+    "host": "superpod.ust.hk",
+    "libero_root": "/home/drwqyhappy/04-mycode/LIBERO",
+    "nodes": 1,
+    "partition": "normal",
+    "remote_python_bin": "/home/drwqyhappy/.conda/envs/openvla_oft/bin",
+    "remote_repo": "/project/trllmout/physcog-runs/openvla-oft-l1c5-formal-148f3f3a",
+    "time_limit": "02:00:00",
+    "user": "drwqyhappy"
+  },
+  "remote_job_script": "/project/trllmout/physcog-runs/openvla-oft-l1c5-formal-148f3f3a/.physcog-agent/jobs/20260811T021008Z-l1c5-pi05_formal.sh",
+  "remote_log": "/project/trllmout/physcog-runs/openvla-oft-l1c5-formal-148f3f3a/.physcog-agent/jobs/20260811T021008Z-l1c5-pi05_formal.out",
+  "remote_markers": {
+    "commit": "f5268c828e55cd0fca2db048ba1d6f5a82801759",
+    "compute_node": "dgx-54",
+    "exit_code": "1",
+    "login_node": "slogin-02"
+  },
+  "returncode": 1,
+  "scenario": "l1c5",
+  "schema_version": 2,
+  "verdicts": [
+    "PASS_FROZEN_INITIAL_STATE_BUNDLE",
+    "PASS_NATIVE_ONLY_PREFLIGHT",
+    "PASS_ACTION_SEPARATION",
+    "FAIL_EC_REPLAY"
+  ]
+}
