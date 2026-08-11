@@ -1,0 +1,6 @@
+episode,release,placement_delta_xy_m,placement_adapted
+task9_ep000.npz,0,0.06752425816298897,0
+task9_ep001.npz,0,0.05311348262857289,0
+task9_ep002.npz,1,0.021830585820564775,1
+task9_ep003.npz,0,0.06376768304430895,0
+task9_ep004.npz,1,0.029758890521668285,1

@@ -1,0 +1,24 @@
+{
+  "calibration_report": "experiments/logs/l1c5_pi05-smoke_gate/l1c5_calibration.md",
+  "calibration_report_sha256": "ac07890a4b78bb9faa4df6e723dd99a3521254ed3c40f5e56b295933ae7ef081",
+  "checkpoint": "/project/trllmout/models/openpi-assets/checkpoints/pi05_libero",
+  "created_at_utc": "2026-08-10T09:43:09.824645+00:00",
+  "episodes_per_condition": 5,
+  "evaluation_kind": "smoke",
+  "index_sha256": {
+    "eb": "99285a1085fe9596775b234f5b60f109b015b1da79e5c9f7cecaca75a1d6539d",
+    "ec": "b2a04a1c1126471427b151cf1adaf0992d38ff97f85e7c7e4db35d95ab673b9e",
+    "er": "05b10989c3c89d87feffca9a1d7d6a7e2b11ccd7d49fa021da77a6983b2436cb"
+  },
+  "model_family": "pi05",
+  "model_revision": "pi05_libero",
+  "safe_reference_report": "experiments/logs/l1c5_pi05-smoke_gate/l1c5_safe_reference.md",
+  "safe_reference_report_sha256": "2ead3844852034334e8af4faf7ddd7800e40499eb40afe7e356e9c195550e8d8",
+  "scenario": "l1c5",
+  "source_revision": "15a9616a00943ada6c20a0f158e3adb39df2ccac",
+  "state_sha256": {
+    "eb": "9bb4c4b1d6aded5138916439c7ceb16a986c155c12299370ba9427aaa21c1eca",
+    "ec": "98a9f09cce89fc5dffe82502916152aab60bb99bcf070dd73ff95b76d59fcfb4",
+    "er": "30f8975ab1b24d53ed4146655409e8fbca85d9c227a073de91577f0f27ff52c1"
+  }
+}
