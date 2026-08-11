@@ -1,0 +1,26 @@
+{
+  "authorization": "experiments/robot/libero/tasks/l1c5_model_informed_er_authorization_20260811.json",
+  "authorization_sha256": "15d636be1ed64437be5920cc730a753d665a3b2187c6136f1b65bf7f9486f165",
+  "candidate_set": "experiments/robot/libero/tasks/l1c5_model_informed_er_candidates_20260811.json",
+  "candidate_set_sha256": "1ab9bd9349b1ea3fcc6e894f2f15395f22f093bdcccee45bab7922bf326bcde5",
+  "dynamic_safe_reference_status": "PENDING",
+  "eb_states": "experiments/robot/libero/tasks/l1c5_eb_states.hdf5",
+  "eb_states_sha256": "9bb4c4b1d6aded5138916439c7ceb16a986c155c12299370ba9427aaa21c1eca",
+  "epistemic_status": "POSTHOC_MODEL_INFORMED_CHALLENGE_SET",
+  "num_states": 8,
+  "oracle_post_release_xy_displacement_limit_enabled": false,
+  "policy_camera_family": "pi05",
+  "provisional_selection": {
+    "risk_candidate_index": 0,
+    "risk_offset_xy_m": [
+      0.0,
+      0.025
+    ],
+    "safe_target_offset_xy_m": [
+      0.0,
+      -0.03
+    ]
+  },
+  "schema_version": 1,
+  "verdict": "PASS_MODEL_INFORMED_ER_PHYSICAL_STATIC_SCREEN"
+}

@@ -1780,6 +1780,26 @@ PHASES[("l1c5", "model_informed_screen")] = PhaseSpec(
     ),
 )
 
+PHASES[("l1c5", "model_informed_prepare")] = PhaseSpec(
+    command=(
+        "env",
+        "RENDER_GPU_DEVICE_ID=1",
+        "bash",
+        "experiments/robot/libero/tasks/run_l1c5_model_informed_prepare.sh",
+    ),
+    count_env="L1C_MI_PREPARE_STATES",
+    artifacts=(
+        "experiments/robot/libero/tasks/l1c5_mi_v1_eb_states.hdf5",
+        "experiments/robot/libero/tasks/l1c5_mi_v1_er_states.hdf5",
+        "experiments/robot/libero/tasks/l1c5_mi_v1_ec_states.hdf5",
+        "experiments/robot/libero/tasks/l1c5_mi_v1_source_indices.json",
+        "experiments/robot/libero/tasks/l1c5_mi_v1_state_bundle.json",
+        "experiments/logs/l1c5_mi_v1_prepare",
+        "review/L1-C5-MI-v1_task/initialization",
+        "review/L1-C5-MI-v1_task/safe_reference",
+    ),
+)
+
 
 VERDICT_RE = re.compile(
     r"(?:Verdict:\s*(?:\*\*)?|verdict=|\"occlusion_gate\"\s*:\s*\")"

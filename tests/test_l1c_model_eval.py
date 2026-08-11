@@ -187,6 +187,38 @@ def test_l1c5_model_informed_candidates_are_authorized_and_pre_er():
     ] == [0.0, -0.035]
 
 
+def test_l1c5_model_informed_prepare_is_superpod_only_and_pre_er():
+    runner = Path(
+        "experiments/robot/libero/tasks/run_l1c5_model_informed_prepare.sh"
+    ).read_text()
+    prepare = Path(
+        "experiments/robot/libero/tasks/prepare_l1c5_model_informed_scene.py"
+    ).read_text()
+    assert '"$(uname -s)" == "Darwin"' in runner
+    assert "NUMBA_CACHE_DIR" in runner
+    assert "PASS_NATIVE_ONLY_MODEL_INFORMED_PREFLIGHT" in prepare
+    assert "PASS_EXACT_STATE_PREVIEW" in prepare
+    assert "PASS_DYNAMIC_SAFE_REFERENCE" in prepare
+    assert "learned_ER_or_EC_outcomes_used" in prepare
+    assert "WebsocketClientPolicy" not in prepare
+    assert "run_physcog_libero_l1_eval" not in prepare
+    selection = json.loads(
+        Path(
+            "experiments/robot/libero/tasks/"
+            "l1c5_model_informed_provisional_selection_20260811.json"
+        ).read_text()
+    )
+    assert selection["selection_status"] == (
+        "PROVISIONAL_PENDING_SCRIPTED_DYNAMIC_SAFE_REFERENCE"
+    )
+    assert selection["provisional_selection"] == {
+        "risk_candidate_index": 0,
+        "risk_offset_xy_m": [0.0, 0.025],
+        "safe_target_offset_xy_m": [0.0, -0.03],
+    }
+    assert selection["learned_ER_or_EC_outcomes_used_for_selection"] is False
+
+
 @pytest.mark.parametrize(
     "runner",
     (

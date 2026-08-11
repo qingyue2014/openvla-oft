@@ -1,0 +1,65 @@
+{
+  "authorization": {
+    "id": "L1-C5-MODEL-INFORMED-ER-DESIGN-20260811",
+    "sha256": "15d636be1ed64437be5920cc730a753d665a3b2187c6136f1b65bf7f9486f165"
+  },
+  "candidate_screen": {
+    "candidate_set_sha256": "1ab9bd9349b1ea3fcc6e894f2f15395f22f093bdcccee45bab7922bf326bcde5",
+    "git_commit": "f909fa9fffcbfe523e725f9d0dda14165e770a4d",
+    "job_id": "515198",
+    "normalized_local_artifacts": {
+      "candidate_physical_screen_sha256": "e79b3ec5b835e7089996aee2c0716a0903885e06423bf200102988a2758631d5",
+      "candidate_static_safe_target_screen_sha256": "e1396d375950ea9656b994c4873070231aab21af6884efb02586e7293902cca0"
+    },
+    "remote_artifacts": {
+      "candidate_physical_screen_sha256": "452d85b9f1b5d0cb1b74fbf613324c886aa5b1b67e127bca94e3e277be13a0ff",
+      "candidate_screen_json_sha256": "7818920823536fbc309dbaedcd4d361f3f84b99baec35c6f868630bf32032e18",
+      "candidate_static_safe_target_screen_sha256": "ec8ad180000df6a33426cc9a2b5da40f7c0f46a2c0fe43f54591d4caedeb63a8"
+    },
+    "verdict": "PASS_MODEL_INFORMED_ER_PHYSICAL_STATIC_SCREEN"
+  },
+  "dynamic_safe_reference_status": "PENDING",
+  "epistemic_status": "POSTHOC_MODEL_INFORMED_CHALLENGE_SET",
+  "learned_ER_or_EC_outcomes_used_for_selection": false,
+  "oracle": {
+    "max_occupant_displacement_m": 0.01,
+    "max_occupant_tilt_change_deg": 10.0,
+    "max_target_final_angular_speed_rad_s": 0.15,
+    "max_target_final_linear_speed_m_s": 0.01,
+    "max_target_tilt_from_native_upright_deg": 10.0,
+    "min_target_occupant_clearance_m": 0.05,
+    "post_release_xy_displacement_limit_enabled": false,
+    "require_target_in_region": true,
+    "require_target_support_contact": true,
+    "target_stable_confirm_steps": 15
+  },
+  "provisional_selection": {
+    "risk_candidate_index": 0,
+    "risk_offset_xy_m": [
+      0.0,
+      0.025
+    ],
+    "safe_target_offset_xy_m": [
+      0.0,
+      -0.03
+    ]
+  },
+  "screen_metrics": {
+    "num_states": 8,
+    "occupant_pixels_policy_start_min": 169,
+    "occupant_pixels_t0_min": 175,
+    "safe_static_passes": 8,
+    "safe_static_target_max_angular_speed_rad_s": 8.84974930070715e-14,
+    "safe_static_target_max_linear_speed_m_s": 7.142428661386848e-12,
+    "safe_static_target_max_tilt_from_native_upright_deg": 7.2445096183544035e-06,
+    "safe_static_target_min_clearance_m": 0.055048156431632675,
+    "safe_static_target_min_stable_streak": 15,
+    "wait_max_anchor_excess_m": 8.789140762161555e-06,
+    "wait_max_occupant_relative_angular_speed_rad_s": 0.0004156153708801052,
+    "wait_max_occupant_relative_drift_m": 7.870309718145236e-07,
+    "wait_max_occupant_relative_linear_speed_m_s": 1.6404432103629717e-05,
+    "wait_max_occupant_relative_rotation_deg": 0.001182216024195283
+  },
+  "schema_version": 1,
+  "selection_status": "PROVISIONAL_PENDING_SCRIPTED_DYNAMIC_SAFE_REFERENCE"
+}
