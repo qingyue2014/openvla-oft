@@ -77,6 +77,8 @@ SELECTION_MANIFEST="${LOG_DIR}/${FAMILY}_selection_manifest.json"
 SELECTION_AUDIT="${LOG_DIR}/${FAMILY}_selection_audit.md"
 PROFILE_CANARY_MANIFEST="${LOG_DIR}/${FAMILY}_profile_canary.json"
 PROFILE_CANARY_REPORT="${LOG_DIR}/${FAMILY}_profile_canary.md"
+PROFILE_CANARY_PAIRING="${LOG_DIR}/${FAMILY}_profile_canary_pairing.json"
+NATIVE_POOL_PAIRING="${LOG_DIR}/${FAMILY}_native_pool_pairing.json"
 SCENE_REPORT="${LOG_DIR}/${FAMILY}_scene_check.md"
 INITIAL_REPORT="${LOG_DIR}/${FAMILY}_initial_gate.md"
 SAFE_CSV="${LOG_DIR}/${FAMILY}_safe_reference.csv"
@@ -120,18 +122,54 @@ python "${TASKS_DIR}/generate_l1b_swept_initial_states.py" \
   --num_states "${POOL_COUNT}" \
   --seed "${SCENE_SEED}"
 
+python - "${PAIRING}" "${NATIVE_POOL_PAIRING}" \
+  "${PROFILE_CANARY_PAIRING}" <<'PY'
+import copy
+import hashlib
+import json
+from pathlib import Path
+import sys
+
+source, pool_output, canary_output = map(Path, sys.argv[1:])
+raw = source.read_bytes()
+pairing = json.loads(raw)
+pairs = pairing.get("pairs", [])
+if pairing.get("seed") is None or len(pairs) != 50:
+    raise SystemExit("expected the complete 50-state native pairing pool")
+pool_output.write_bytes(raw)
+canary = copy.deepcopy(pairing)
+canary["num_states"] = 1
+canary["unique_source_state_indices"] = 1
+canary["unique_source_state_hashes"] = 1
+canary["pairs"] = [pairs[0]]
+canary["canary_contract"] = {
+    "purpose": "profile_diversity_fail_fast_only",
+    "may_generate_or_refine_scene": False,
+    "source_state_indices": [pairs[0]["source_state_index"]],
+    "parent_pairing": str(pool_output),
+    "parent_pairing_sha256": hashlib.sha256(raw).hexdigest(),
+}
+canary_output.write_text(json.dumps(canary, indent=2) + "\n", encoding="utf-8")
+print(f"Native pool pairing: {pool_output}")
+print(f"Profile canary pairing: {canary_output}")
+PY
+
 run_profile() {
   local profile="$1"
   local pregrasp_offset_x="$2"
   local pregrasp_offset_y="$3"
   local num_states="$4"
   local suffix="$5"
+  local pairing_json="${PAIRING}"
+  if [[ "${suffix}" == "_canary" ]]; then
+    pairing_json="${PROFILE_CANARY_PAIRING}"
+  fi
   local attempts="${PHYSCG_SELECTION_ATTEMPTS_ROOT:-${TMPDIR:-/tmp}}/${FAMILY}_${SLURM_JOB_ID:-manual}_${profile}${suffix}_attempts"
   local trajectories="${LOG_DIR}/${FAMILY}_${profile}${suffix}_trajectories"
   python "${TASKS_DIR}/validate_l1b_safe_reference.py" \
     --family "${FAMILY}" \
     --state_path "${EB_STATES}" \
-    --pairing_json "${PAIRING}" \
+    --pairing_json "${pairing_json}" \
     --task_suite_name "${TASK_SUITE}" \
     --task_id "${TASK_ID}" \
     --num_states "${num_states}" \
@@ -180,6 +218,7 @@ done
 
 python "${TASKS_DIR}/validate_l1b3_task4_outcome_v2_v6_profile_canary.py" \
   --controller_manifest "${CONTROLLER}" \
+  --pairing_json "${PROFILE_CANARY_PAIRING}" \
   --profile_trajectory "canonical_center=${LOG_DIR}/${FAMILY}_canonical_center_canary_trajectories" \
   --profile_trajectory "stress_x_plus=${LOG_DIR}/${FAMILY}_stress_x_plus_canary_trajectories" \
   --profile_trajectory "stress_x_minus=${LOG_DIR}/${FAMILY}_stress_x_minus_canary_trajectories" \
@@ -402,7 +441,8 @@ PY
 
 python - "${PREPARE_MANIFEST}" "${INITIAL_MANIFEST}" "${REVIEW_DIR}" \
   "${PREFLIGHT_MANIFEST}" "${SELECTION_MANIFEST}" \
-  "${PROFILE_CANARY_MANIFEST}" "${PAIRING}" \
+  "${PROFILE_CANARY_MANIFEST}" "${PROFILE_CANARY_PAIRING}" \
+  "${NATIVE_POOL_PAIRING}" "${PAIRING}" \
   "${NATIVE_STATES}" "${EB_STATES}" "${ER_STATES}" "${EC_STATES}" <<'PY'
 import datetime
 import hashlib
@@ -410,7 +450,8 @@ import json
 from pathlib import Path
 import sys
 
-(output, initial_manifest, review_dir, preflight, selection, profile_canary, pairing,
+(output, initial_manifest, review_dir, preflight, selection, profile_canary,
+ profile_canary_pairing, native_pool_pairing, pairing,
  native_states, eb_states, er_states, ec_states) = sys.argv[1:]
 
 def sha256(path):
@@ -425,7 +466,8 @@ review_bundle = Path(review_dir) / "REVIEW_BUNDLE_MANIFEST.json"
 if json.loads(human.read_text(encoding="utf-8")).get("approved") is not False:
     raise SystemExit("prepare must stop with human approval pending")
 artifacts = [
-    preflight, selection, profile_canary, pairing, native_states, eb_states, er_states,
+    preflight, selection, profile_canary, profile_canary_pairing,
+    native_pool_pairing, pairing, native_states, eb_states, er_states,
     ec_states, initial_manifest, str(review_bundle), str(human),
 ]
 record = {

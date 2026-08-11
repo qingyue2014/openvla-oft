@@ -423,8 +423,9 @@ FAMILIES = {
         "geometry_contract": (
             "native task-4 tabletop wine bottle; candidate poses are generated "
             "only from the canonical deterministic OSC sweep, admitted only "
-            "after canonical and fixed +/-X construction stress replays remain "
-            "within 1 mm, then audited once by fixed +/-Y holdout paths; a "
+            "after canonical, fixed +X, and negative-X/positive-Y dogleg "
+            "construction stress replays remain within 1 mm, then audited "
+            "once by fixed +/-Y holdout paths; a "
             "holdout failure rejects the native source rather than moving the "
             "pose; Ec is the dual-radius reflection of Er"
         ),

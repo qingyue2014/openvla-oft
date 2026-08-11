@@ -1073,6 +1073,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1b3_task4_outcome_v2_v6_native_preflight.md",
             "experiments/logs/l1b3_task4_outcome_v2_v6_profile_canary.json",
             "experiments/logs/l1b3_task4_outcome_v2_v6_profile_canary.md",
+            "experiments/logs/l1b3_task4_outcome_v2_v6_profile_canary_pairing.json",
+            "experiments/logs/l1b3_task4_outcome_v2_v6_native_pool_pairing.json",
             "experiments/logs/l1b3_task4_outcome_v2_v6_canonical_center_canary.csv",
             "experiments/logs/l1b3_task4_outcome_v2_v6_canonical_center_canary.md",
             "experiments/logs/l1b3_task4_outcome_v2_v6_canonical_center_canary_trajectories",

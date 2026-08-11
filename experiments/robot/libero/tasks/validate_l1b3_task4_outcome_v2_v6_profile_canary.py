@@ -43,12 +43,32 @@ def _resample_link6_xy(trajectory: dict) -> np.ndarray | None:
 
 def validate(args: argparse.Namespace) -> dict:
     controller_path = Path(args.controller_manifest)
-    if not controller_path.is_file():
-        raise FileNotFoundError(controller_path)
+    pairing_path = Path(args.pairing_json)
+    missing = [path for path in (controller_path, pairing_path) if not path.is_file()]
+    if missing:
+        raise FileNotFoundError(missing)
     controller = json.loads(controller_path.read_text(encoding="utf-8"))
+    pairing = json.loads(pairing_path.read_text(encoding="utf-8"))
     profile_dirs = selection._profile_paths(args.profile_trajectory)
     controller_hash = selection._sha256(controller_path)
     failures: list[str] = []
+    canary_contract = pairing.get("canary_contract", {})
+    parent_pairing = Path(str(canary_contract.get("parent_pairing", "")))
+    parent_hash = (
+        selection._sha256(parent_pairing) if parent_pairing.is_file() else None
+    )
+    if not (
+        pairing.get("family") == selection.FAMILY
+        and pairing.get("seed") == 42
+        and pairing.get("num_states") == 1
+        and len(pairing.get("pairs", ())) == 1
+        and pairing["pairs"][0].get("source_state_index") == 0
+        and canary_contract.get("purpose") == "profile_diversity_fail_fast_only"
+        and canary_contract.get("may_generate_or_refine_scene") is False
+        and canary_contract.get("source_state_indices") == [0]
+        and parent_hash == canary_contract.get("parent_pairing_sha256")
+    ):
+        failures.append("canary_pairing_contract_mismatch")
     observed_offsets = {
         profile: controller.get("profiles", {})
         .get(profile, {})
@@ -150,6 +170,10 @@ def validate(args: argparse.Namespace) -> dict:
         "pairwise_records": pairwise,
         "controller_manifest": str(controller_path),
         "controller_manifest_sha256": controller_hash,
+        "canary_pairing": str(pairing_path),
+        "canary_pairing_sha256": selection._sha256(pairing_path),
+        "native_pool_pairing": str(parent_pairing),
+        "native_pool_pairing_sha256": parent_hash,
         "failures": sorted(set(failures)),
     }
     output = Path(args.output_manifest)
@@ -189,6 +213,10 @@ def main() -> None:
         default=str(
             tasks / f"{selection.FAMILY}_scripted_controller_ensemble.json"
         ),
+    )
+    parser.add_argument(
+        "--pairing_json",
+        default="experiments/logs/l1b3_task4_outcome_v2_v6_profile_canary_pairing.json",
     )
     parser.add_argument(
         "--profile_trajectory",

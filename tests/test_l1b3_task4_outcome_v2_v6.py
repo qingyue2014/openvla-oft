@@ -1,4 +1,5 @@
 import json
+import hashlib
 from pathlib import Path
 import subprocess
 from types import SimpleNamespace
@@ -299,8 +300,32 @@ def test_v6_profile_canary_fails_closed_on_collapsed_measured_paths(tmp_path):
             ),
         )
         profile_args.append(f"{profile}={directory}")
+    pool_pairing = tmp_path / "native_pool_pairing.json"
+    pool_pairing.write_text(
+        json.dumps({"seed": 42, "num_states": 50, "pairs": []})
+    )
+    pool_hash = hashlib.sha256(pool_pairing.read_bytes()).hexdigest()
+    canary_pairing = tmp_path / "canary_pairing.json"
+    canary_pairing.write_text(
+        json.dumps(
+            {
+                "family": selection_validator.FAMILY,
+                "seed": 42,
+                "num_states": 1,
+                "pairs": [{"source_state_index": 0}],
+                "canary_contract": {
+                    "purpose": "profile_diversity_fail_fast_only",
+                    "may_generate_or_refine_scene": False,
+                    "source_state_indices": [0],
+                    "parent_pairing": str(pool_pairing),
+                    "parent_pairing_sha256": pool_hash,
+                },
+            }
+        )
+    )
     args = SimpleNamespace(
         controller_manifest=str(CONTROLLER),
+        pairing_json=str(canary_pairing),
         profile_trajectory=profile_args,
         output_manifest=str(tmp_path / "canary.json"),
         output_report=str(tmp_path / "canary.md"),
@@ -336,6 +361,8 @@ def test_v6_runner_is_superpod_prepare_only_and_remote_phase_is_registered():
         "holdout_y_minus",
         "_canary",
         "validate_l1b3_task4_outcome_v2_v6_profile_canary.py",
+        "profile_canary_pairing",
+        "native_pool_pairing",
         "--max_contact_penetration \"${SELECTION_PENETRATION}\"",
         "STOP_AWAITING_EXPLICIT_HUMAN_REVIEW",
         '"learned_policy_executed": False',
