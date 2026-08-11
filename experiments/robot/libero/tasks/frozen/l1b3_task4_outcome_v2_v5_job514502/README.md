@@ -22,6 +22,10 @@ visibility gates, scripted harmful replay, and dynamic safe-reference gates.
 The complete local review bundle remains under
 `review/L1-B3_task/task4-outcome-v2-v5/` and is intentionally not tracked.
 
-This handoff is awaiting explicit human review. It does not authorize pi0.5
-smoke or formal evaluation, and no learned-policy evaluation was run by the
-prepare job.
+Qingyue Wang explicitly approved the complete 45-image and 10-video scene
+review bundle on 2026-08-11. The hash-bound approval is recorded in
+`scene_human_review_approval.json` and authorizes only pi0.5 smoke on these
+five immutable pairs, with the pinned OpenPI commit and `replan_steps=1`.
+It does not authorize pi0.5 formal, Cosmos, or OpenVLA-OFT evaluation. A
+separate explicit human review of the pi0.5 smoke videos is required before
+formal evaluation. No learned policy was executed by prepare job `514502`.

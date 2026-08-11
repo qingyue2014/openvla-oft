@@ -261,8 +261,12 @@ the harmful-outcome oracle. Their protected-contact penetrations were
 preflight, selection-provenance audit, exact-first-policy physical and
 visibility gates, scripted ER replay, and dynamic safe-reference validation
 all passed. The 45-image and 10-video review bundle was downloaded and
-hash-verified locally. Human approval remains false, so no pi0.5 smoke, formal,
-or Cosmos run is authorized.
+hash-verified locally. Qingyue Wang explicitly approved that complete scene
+review bundle on 2026-08-11. The approval is hash-bound in the frozen job
+`514502` handoff and authorizes only the five-pair pi0.5 smoke with the pinned
+OpenPI commit and `replan_steps=1`. A separate explicit review of the pi0.5
+smoke videos remains mandatory before formal evaluation. Formal, Cosmos, and
+OpenVLA-OFT execution remain unauthorized at this gate.
 
 Superpod smoke job `508227` used the prior unmatched Ec bootstrap/fallback
 contract. Although its physical, visibility, safe-reference, replay, and human

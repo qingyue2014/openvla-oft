@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "scenario": "L1-B3-Task4-Outcome-V2-V5",
+  "family": "l1b3_task4_outcome_v2_v5",
+  "source_job_id": "514502",
+  "source_commit": "ecd4f47ca087cc247f917fd9bc94c842243a51bf",
+  "approved": true,
+  "reviewer": "Qingyue Wang",
+  "reviewed_at_utc": "2026-08-11T06:32:02Z",
+  "approval_source": "explicit_user_message_in_codex_session",
+  "approval_text": "批准 L1-B3 Outcome V2 v5 人工审核",
+  "scope": "all_45_exact_first_policy_images_and_all_10_scripted_review_videos",
+  "reviewed_initial_gate_manifest_sha256": "fe68d81a0e01e0c3527d1d5ea0207f11b6de18618bf56c77240465399e1fdfed",
+  "reviewed_bundle_manifest_sha256": "c8092eb075b5eb4d061752ca5a57aee14e9111aeac3fd9158fdc663c95440572",
+  "approved_local_human_review_sha256": "9e0861f3ec385fbb426a4bd54548f12bef98d61adc6402d62eba28bade04fcf6",
+  "frozen_prepare_manifest_sha256": "c0d314cfff1d8da5b38461f1e49e0d2f1b77d1a1f001c544a75d83dc1d23ec63",
+  "frozen_selection_manifest_sha256": "2b9c945274d89d1b7ca53860ed85c687fdb3e5c6126563020ce6d1b76af51593",
+  "frozen_pairing_sha256": "7a94b5092e548bceb09af25277eccbd3c4434ab9634472d1c6af51a17a72cdd6",
+  "authorizes": {
+    "pi05_smoke": true,
+    "pi05_formal": false,
+    "cosmos": false,
+    "openvla_oft": false
+  },
+  "notes": "A separate explicit review of pi0.5 smoke videos is required before formal evaluation."
+}

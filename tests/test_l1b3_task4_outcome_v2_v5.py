@@ -1,12 +1,17 @@
 import json
 from pathlib import Path
+import shutil
 import subprocess
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from experiments.robot.libero.tasks import (
     validate_l1b3_task4_outcome_v2_v5_selection as selection_validator,
+)
+from experiments.robot.libero.tasks import (
+    verify_l1b3_task4_outcome_v2_v5_pi05_handoff as handoff_verifier,
 )
 
 
@@ -24,6 +29,9 @@ SELECTION = TASKS / "validate_l1b3_task4_outcome_v2_v5_selection.py"
 PREFLIGHT = TASKS / "validate_l1b3_task4_outcome_v2_v5_preflight.py"
 INITIAL = TASKS / "validate_l1b3_task4_outcome_v2_v5_initial_gate.py"
 REMOTE = TASKS / "physcog_remote_agent.py"
+PI05_RUNNER = TASKS / "run_l1b3_task4_outcome_v2_v5_pi05.sh"
+FROZEN = TASKS / "frozen/l1b3_task4_outcome_v2_v5_job514502"
+SCENE_APPROVAL = FROZEN / "scene_human_review_approval.json"
 
 
 def _family_block(text: str) -> str:
@@ -156,6 +164,71 @@ def test_v5_static_auditors_and_remote_phase_are_registered():
     assert "shared.PREFLIGHT_VERDICT = (" in initial
     assert '("l1b3_task4_v2_v5", "preflight")' in remote
     assert '("l1b3_task4_v2_v5", "prepare")' in remote
+    assert '("l1b3_task4_v2_v5", "pi05_preflight")' in remote
+    assert '("l1b3_task4_v2_v5", "pi05_smoke")' in remote
+    assert '("l1b3_task4_v2_v5", "pi05_formal")' not in remote
+
+
+def test_v5_scene_approval_is_hash_bound_and_authorizes_smoke_only():
+    approval = json.loads(SCENE_APPROVAL.read_text())
+    assert approval["approved"] is True
+    assert approval["reviewer"] == "Qingyue Wang"
+    assert approval["source_job_id"] == "514502"
+    assert approval["approval_text"] == "批准 L1-B3 Outcome V2 v5 人工审核"
+    assert approval["authorizes"] == {
+        "pi05_smoke": True,
+        "pi05_formal": False,
+        "cosmos": False,
+        "openvla_oft": False,
+    }
+    record = handoff_verifier.verify_handoff(FROZEN, PREREG, SCENE_APPROVAL)
+    assert record["verdict"] == handoff_verifier.VERDICT
+    assert record["source_state_indices"] == [2, 4, 5, 7, 8]
+    assert record["pi05_replan_steps"] == 1
+    assert record["pi05_smoke_authorized"] is True
+    assert record["formal_authorized"] is False
+    assert record["cosmos_authorized"] is False
+    assert record["openvla_oft_authorized"] is False
+
+
+def test_v5_pi05_handoff_fails_closed_if_approval_scope_is_widened(tmp_path):
+    frozen = tmp_path / "frozen"
+    shutil.copytree(FROZEN, frozen)
+    approval_path = frozen / SCENE_APPROVAL.name
+    approval = json.loads(approval_path.read_text())
+    approval["authorizes"]["pi05_formal"] = True
+    approval_path.write_text(json.dumps(approval, indent=2, sort_keys=True) + "\n")
+    with pytest.raises(ValueError, match="must not authorize formal"):
+        handoff_verifier.verify_handoff(frozen, PREREG, approval_path)
+
+
+def test_v5_pi05_runner_freezes_protocol_and_blocks_formal():
+    text = PI05_RUNNER.read_text()
+    for token in (
+        'FROZEN_DIR="${TASKS_DIR}/frozen/${FAMILY}_job514502"',
+        "scene_human_review_approval.json",
+        "verify_l1b3_task4_outcome_v2_v5_pi05_handoff.py",
+        "validate_l1b3_task4_outcome_v2_v5_preflight.py",
+        "validate_l1b3_task4_outcome_v2_v5_initial_gate.py",
+        "--pi05_replan_steps 1",
+        'if len(images) != 45:',
+        'if len(policy_videos) != 30:',
+        '"human_approval_present": False',
+        '"formal_authorized": False',
+        '"cosmos_authorized": False',
+    ):
+        assert token in text
+    assert "--pi05_replan_steps 5" not in text
+    assert "openvla_oft" not in text.lower()
+    blocked = subprocess.run(
+        ["bash", str(PI05_RUNNER), "formal"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert blocked.returncode == 2
+    assert "not authorized" in blocked.stderr.lower()
 
 
 def test_v5_selection_validator_accepts_only_hash_bound_scripted_evidence(tmp_path):
