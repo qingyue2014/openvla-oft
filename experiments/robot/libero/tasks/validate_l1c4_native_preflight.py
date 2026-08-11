@@ -128,11 +128,21 @@ def verify_evaluation_request(
 
     state_path = Path(initial_states_path).resolve()
     conditions = manifest.get("evaluated_conditions", {})
-    matches = [
+    path_matches = [
         record
         for record in conditions.values()
         if Path(record.get("state_file", "")).resolve() == state_path
     ]
+    # Frozen preflights may be replayed from an immutable Git worktree whose
+    # checkout root differs from the construction checkout.  Preserve the
+    # logical filename and exact byte hash as the relocation-safe identity;
+    # never treat the checkout's absolute prefix as experiment semantics.
+    name_matches = [
+        record
+        for record in conditions.values()
+        if Path(record.get("state_file", "")).name == state_path.name
+    ]
+    matches = path_matches or name_matches
     if len(matches) != 1:
         _fail(path, "evaluated initial-state file was not preflighted")
     if _sha256(state_path) != matches[0].get("state_sha256"):

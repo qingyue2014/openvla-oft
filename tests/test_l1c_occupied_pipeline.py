@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 
@@ -214,6 +215,86 @@ def test_l1c4_runtime_preflight_rejects_libero_90_and_marks_outputs_invalid(
         "tables",
         "html",
     }
+
+
+def _write_relocatable_l1c_preflight(tmp_path, state_bytes=b"frozen-state"):
+    prompt = "pick up the orange juice and place it in the basket"
+    bddl_relpath = (
+        "libero_object/pick_up_the_orange_juice_and_place_it_in_the_basket.bddl"
+    )
+    bddl_path = tmp_path / "native.bddl"
+    bddl_path.write_text("(define (problem native))\n")
+    original_state = tmp_path / "construction" / "l1c5_eb_states.hdf5"
+    original_state.parent.mkdir()
+    original_state.write_bytes(state_bytes)
+    manifest_path = tmp_path / "l1c5_native_preflight.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "verdict": "PASS_NATIVE_ONLY_PREFLIGHT",
+                "scenario": "L1-C5",
+                "native_suite": "libero_object",
+                "native_task_id": 9,
+                "native_prompt": prompt,
+                "native_goal_canonical": "(And (In orange_juice_1 basket_1_contain_region))",
+                "native_goal_sha256": "goal-hash",
+                "native_bddl": bddl_relpath,
+                "native_bddl_resolved_path": str(bddl_path.resolve()),
+                "native_bddl_sha256": hashlib.sha256(bddl_path.read_bytes()).hexdigest(),
+                "custom_assets": [],
+                "paired_observed_diff_audit": [
+                    {"verdict": "PASS_ALLOWLISTED_OCCUPANT_JOINT_ONLY"}
+                ],
+                "design_prereg": {"sha256": "design-hash"},
+                "evaluated_conditions": {
+                    "eb": {
+                        "state_file": str(original_state.resolve()),
+                        "state_sha256": hashlib.sha256(state_bytes).hexdigest(),
+                        "prompt": prompt,
+                        "bddl": bddl_relpath,
+                    }
+                },
+            }
+        )
+    )
+    return manifest_path, bddl_path, prompt
+
+
+def test_l1c_runtime_preflight_accepts_exact_state_in_relocated_worktree(tmp_path):
+    manifest_path, bddl_path, prompt = _write_relocatable_l1c_preflight(tmp_path)
+    relocated_state = tmp_path / "immutable-worktree" / "l1c5_eb_states.hdf5"
+    relocated_state.parent.mkdir()
+    relocated_state.write_bytes(b"frozen-state")
+
+    verify_evaluation_request(
+        str(manifest_path),
+        task_suite_name="libero_object",
+        task_id=9,
+        task_language=prompt,
+        task_bddl=str(bddl_path),
+        policy_prompt=prompt,
+        initial_states_path=str(relocated_state),
+    )
+    assert not manifest_path.with_suffix(".invalid.json").exists()
+
+
+def test_l1c_runtime_preflight_rejects_changed_state_after_relocation(tmp_path):
+    manifest_path, bddl_path, prompt = _write_relocatable_l1c_preflight(tmp_path)
+    relocated_state = tmp_path / "immutable-worktree" / "l1c5_eb_states.hdf5"
+    relocated_state.parent.mkdir()
+    relocated_state.write_bytes(b"changed-state")
+
+    with pytest.raises(ValueError, match="changed after preflight"):
+        verify_evaluation_request(
+            str(manifest_path),
+            task_suite_name="libero_object",
+            task_id=9,
+            task_language=prompt,
+            task_bddl=str(bddl_path),
+            policy_prompt=prompt,
+            initial_states_path=str(relocated_state),
+        )
+    assert manifest_path.with_suffix(".invalid.json").exists()
 
 
 def test_occupied_goal_oracle_flags_protected_occupant_displacement():

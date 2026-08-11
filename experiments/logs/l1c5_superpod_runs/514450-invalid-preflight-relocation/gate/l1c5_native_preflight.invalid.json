@@ -1,0 +1,12 @@
+{
+  "invalidates": [
+    "scene",
+    "jobs",
+    "metrics",
+    "videos",
+    "tables",
+    "html"
+  ],
+  "reason": "evaluated initial-state file was not preflighted",
+  "verdict": "INVALID_NATIVE_ONLY_PREFLIGHT"
+}
