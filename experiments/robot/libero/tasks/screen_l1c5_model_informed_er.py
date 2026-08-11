@@ -157,8 +157,10 @@ def _candidate_state(
 
     wait_max_drift = 0.0
     wait_max_rotation = 0.0
-    wait_max_linear_speed = 0.0
-    wait_max_angular_speed = 0.0
+    wait_max_relative_linear_speed = 0.0
+    wait_max_relative_angular_speed = 0.0
+    wait_max_world_linear_speed = 0.0
+    wait_max_world_angular_speed = 0.0
     wait_max_anchor_excess = 0.0
     full_window_inside = body_in_anchor_region(env, spec, spec.occupant_body)
     full_window_support = _body_contact(
@@ -169,13 +171,30 @@ def _candidate_state(
     )
     forbidden_robot_contact = _robot_contact(env, spec.occupant_body)
     wait_finite = _finite(env)
+    previous_relative = relative_t0.copy()
+    previous_rotation = rotation_t0.copy()
+    inner_env = getattr(env, "env", env)
+    control_dt = float(getattr(inner_env, "control_timestep", 0.05))
     for step in range(1, args.policy_wait_steps + 1):
         obs, _, _, _ = env.step(NOOP)
         wait_finite &= _finite(env)
         relative, rotation = _body_pose_relative_to_anchor(
             env, spec.occupant_body, spec.anchor_body
         )
-        linear_speed, angular_speed = body_speeds(env, spec.occupant_body)
+        world_linear_speed, world_angular_speed = body_speeds(
+            env, spec.occupant_body
+        )
+        relative_linear_speed = float(
+            np.linalg.norm(relative - previous_relative) / control_dt
+        )
+        relative_angular_speed = float(
+            np.radians(
+                _rotation_matrix_separation_deg(rotation, previous_rotation)
+            )
+            / control_dt
+        )
+        previous_relative = relative.copy()
+        previous_rotation = rotation.copy()
         wait_max_drift = max(
             wait_max_drift, float(np.linalg.norm(relative - relative_t0))
         )
@@ -183,8 +202,18 @@ def _candidate_state(
             wait_max_rotation,
             _rotation_matrix_separation_deg(rotation, rotation_t0),
         )
-        wait_max_linear_speed = max(wait_max_linear_speed, linear_speed)
-        wait_max_angular_speed = max(wait_max_angular_speed, angular_speed)
+        wait_max_relative_linear_speed = max(
+            wait_max_relative_linear_speed, relative_linear_speed
+        )
+        wait_max_relative_angular_speed = max(
+            wait_max_relative_angular_speed, relative_angular_speed
+        )
+        wait_max_world_linear_speed = max(
+            wait_max_world_linear_speed, world_linear_speed
+        )
+        wait_max_world_angular_speed = max(
+            wait_max_world_angular_speed, world_angular_speed
+        )
         wait_max_anchor_excess = max(
             wait_max_anchor_excess,
             float(
@@ -231,8 +260,8 @@ def _candidate_state(
         and settle_inside
         and wait_max_drift <= spec.max_initial_drift
         and wait_max_rotation <= spec.max_initial_tilt_deg
-        and wait_max_linear_speed <= spec.max_initial_linear_speed
-        and wait_max_angular_speed <= spec.max_initial_angular_speed
+        and wait_max_relative_linear_speed <= spec.max_initial_linear_speed
+        and wait_max_relative_angular_speed <= spec.max_initial_angular_speed
         and wait_max_anchor_excess <= args.max_anchor_excess
         and full_window_inside
         and full_window_support
@@ -255,8 +284,10 @@ def _candidate_state(
         "settle_full_window_finite": int(settle_finite),
         "wait_max_relative_drift_m": wait_max_drift,
         "wait_max_relative_rotation_deg": wait_max_rotation,
-        "wait_max_linear_speed_m_s": wait_max_linear_speed,
-        "wait_max_angular_speed_rad_s": wait_max_angular_speed,
+        "wait_max_relative_linear_speed_m_s": wait_max_relative_linear_speed,
+        "wait_max_relative_angular_speed_rad_s": wait_max_relative_angular_speed,
+        "wait_max_world_linear_speed_m_s": wait_max_world_linear_speed,
+        "wait_max_world_angular_speed_rad_s": wait_max_world_angular_speed,
         "wait_max_anchor_excess_m": wait_max_anchor_excess,
         "wait_full_window_finite": int(wait_finite),
         "full_window_inside": int(full_window_inside),

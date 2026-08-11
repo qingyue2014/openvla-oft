@@ -151,6 +151,8 @@ def test_l1c5_model_informed_screen_is_non_policy_and_fail_closed_locally():
     assert "Learned ER policy rollouts used during screening" in screen
     assert '"dynamic_safe_reference_status": "PENDING"' in screen
     assert "NUMBA_CACHE_DIR" in runner
+    assert "wait_max_relative_linear_speed" in screen
+    assert "control_timestep" in screen
     assert "WebsocketClientPolicy" not in screen
     assert "run_physcog_libero_l1_eval" not in screen
 
