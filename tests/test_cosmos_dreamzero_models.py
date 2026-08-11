@@ -14,6 +14,7 @@ from experiments.robot.cosmos_policy_utils import (
     COSMOS_TOKENIZER_REPO_ID,
     COSMOS_TOKENIZER_REVISION,
     CosmosPolicyClient,
+    _encode_wire_value,
     _recv_message,
     _send_message,
     defer_unused_cosmos_base_checkpoint_downloads,
@@ -65,6 +66,17 @@ def test_cosmos_loopback_protocol_round_trips_numpy_arrays():
         sender.close()
         receiver.close()
     np.testing.assert_array_equal(received["actions"], payload["actions"])
+
+
+def test_cosmos_wire_payload_has_no_numpy_module_dependency():
+    import pickle
+
+    payload = {
+        "image": np.arange(24, dtype=np.uint8).reshape(2, 4, 3),
+        "scalar": np.float32(0.25),
+    }
+    encoded = pickle.dumps(_encode_wire_value(payload), protocol=pickle.HIGHEST_PROTOCOL)
+    assert b"numpy" not in encoded
 
 
 def test_cosmos_remote_client_is_selected_without_importing_heavy_runtime(monkeypatch):

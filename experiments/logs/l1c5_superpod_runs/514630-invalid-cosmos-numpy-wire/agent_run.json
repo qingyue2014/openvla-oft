@@ -1,0 +1,73 @@
+{
+  "classification": "validator_bug",
+  "completed_at_utc": "2026-08-11T06:03:31.445449+00:00",
+  "count": 5,
+  "count_env": "L1C_SMOKE_TRIALS",
+  "created_at_utc": "2026-08-11T04:19:41.499214+00:00",
+  "fetched_artifacts": [
+    "experiments/logs/l1c5_cosmos-smoke_videos",
+    "experiments/logs/l1c5_cosmos-smoke_server.log",
+    "experiments/logs/l1c5_cosmos-smoke_gate",
+    "review/L1-C5_task/cosmos_smoke",
+    "rollouts/libero_object/L1-C5-orange-juice-occupied-basket-eb-cosmos-smoke",
+    "rollouts/libero_object/L1-C5-orange-juice-occupied-basket-risk-cosmos-smoke",
+    "rollouts/libero_object/L1-C5-orange-juice-occupied-basket-ec-cosmos-smoke"
+  ],
+  "job_id": "514630",
+  "local_commit": "5ef6069163d7591091a4c32ead6233003a31f760",
+  "missing_artifacts": [
+    "experiments/logs/l1c5_cosmos-smoke_manifest.json",
+    "experiments/logs/l1c5_cosmos-smoke_results.json",
+    "experiments/logs/l1c5_cosmos-smoke_results.md",
+    "experiments/logs/l1c5_cosmos-smoke_native_preflight.json",
+    "experiments/logs/l1c5_cosmos-smoke_native_preflight.md",
+    "experiments/logs/l1c5_cosmos-smoke_eb_index.jsonl",
+    "experiments/logs/l1c5_cosmos-smoke_er_index.jsonl",
+    "experiments/logs/l1c5_cosmos-smoke_ec_index.jsonl",
+    "experiments/logs/l1c5_cosmos-smoke_review_artifacts.sha256"
+  ],
+  "phase": "cosmos_smoke",
+  "registered_command": [
+    "env",
+    "RENDER_GPU_DEVICE_ID=1",
+    "SAVE_VIDEO_MODE=all",
+    "bash",
+    "experiments/robot/libero/tasks/run_model_l1c_eval.sh",
+    "cosmos",
+    "l1c5",
+    "smoke"
+  ],
+  "remote_config": {
+    "account": "trllmout",
+    "branch": "codex/l1c5-orange-juice",
+    "control_socket": "/tmp/physcog-superpod.sock",
+    "exclude_nodes": "",
+    "gpus": 2,
+    "host": "superpod.ust.hk",
+    "libero_root": "/home/drwqyhappy/04-mycode/LIBERO",
+    "nodes": 1,
+    "partition": "normal",
+    "remote_python_bin": "/home/drwqyhappy/.conda/envs/openvla_oft/bin",
+    "remote_repo": "/project/trllmout/physcog-runs/openvla-oft-l1c5-formal98-b3bd0486/.physcog-agent/worktrees/5ef6069163d7591091a4c32ead6233003a31f760",
+    "time_limit": "02:00:00",
+    "user": "drwqyhappy"
+  },
+  "remote_job_script": "/project/trllmout/physcog-runs/openvla-oft-l1c5-formal98-b3bd0486/.physcog-agent/worktrees/5ef6069163d7591091a4c32ead6233003a31f760/.physcog-agent/jobs/20260811T041930Z-l1c5-cosmos_smoke.sh",
+  "remote_log": "/project/trllmout/physcog-runs/openvla-oft-l1c5-formal98-b3bd0486/.physcog-agent/worktrees/5ef6069163d7591091a4c32ead6233003a31f760/.physcog-agent/jobs/20260811T041930Z-l1c5-cosmos_smoke.out",
+  "remote_markers": {
+    "commit": "5ef6069163d7591091a4c32ead6233003a31f760",
+    "compute_node": "dgx-54",
+    "exit_code": "1",
+    "login_node": "slogin-02"
+  },
+  "returncode": 1,
+  "scenario": "l1c5",
+  "scheduler_state": "RUNNING",
+  "schema_version": 2,
+  "verdicts": [
+    "PASS_FROZEN_INITIAL_STATE_BUNDLE",
+    "PASS_NATIVE_ONLY_PREFLIGHT",
+    "PASS_ACTION_SEPARATION",
+    "PASS_EC_UNCHANGED_EB_REPLAY_SAFE"
+  ]
+}

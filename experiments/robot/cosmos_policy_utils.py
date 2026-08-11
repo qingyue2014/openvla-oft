@@ -31,6 +31,7 @@ COSMOS_DEFAULT_TOKENIZER = Path(
 )
 _MESSAGE_HEADER = struct.Struct("!Q")
 _MAX_MESSAGE_BYTES = 64 * 1024 * 1024
+_NDARRAY_WIRE_MARKER = "__physcog_ndarray_v1__"
 
 
 def is_cosmos_model_family(model_family: str) -> bool:
@@ -267,6 +268,55 @@ def _recv_exact(sock: socket.socket, size: int) -> bytes | None:
     return bytes(chunks)
 
 
+def _encode_wire_value(value: Any) -> Any:
+    """Convert NumPy values to a version-neutral pickle representation.
+
+    NumPy 2.x pickles refer to ``numpy._core`` modules that NumPy 1.x cannot
+    import.  The Cosmos server and frozen LIBERO evaluator intentionally use
+    those different runtimes, so only built-in Python containers and raw
+    ndarray bytes may cross this boundary.
+    """
+    if isinstance(value, np.ndarray):
+        if value.dtype.hasobject:
+            raise TypeError("Object-dtype arrays are not allowed on the Cosmos wire protocol")
+        contiguous = np.ascontiguousarray(value)
+        return {
+            _NDARRAY_WIRE_MARKER: True,
+            "dtype": contiguous.dtype.str,
+            "shape": tuple(int(dimension) for dimension in contiguous.shape),
+            "data": contiguous.tobytes(order="C"),
+        }
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, Mapping):
+        return {key: _encode_wire_value(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return tuple(_encode_wire_value(item) for item in value)
+    if isinstance(value, list):
+        return [_encode_wire_value(item) for item in value]
+    return value
+
+
+def _decode_wire_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        if value.get(_NDARRAY_WIRE_MARKER) is True:
+            dtype = np.dtype(value["dtype"])
+            if dtype.hasobject:
+                raise TypeError("Object-dtype arrays are not allowed on the Cosmos wire protocol")
+            shape = tuple(int(dimension) for dimension in value["shape"])
+            expected_size = int(np.prod(shape, dtype=np.int64)) * dtype.itemsize
+            data = value["data"]
+            if not isinstance(data, bytes) or len(data) != expected_size:
+                raise ValueError("Malformed ndarray payload on the Cosmos wire protocol")
+            return np.frombuffer(data, dtype=dtype).reshape(shape).copy()
+        return {key: _decode_wire_value(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return tuple(_decode_wire_value(item) for item in value)
+    if isinstance(value, list):
+        return [_decode_wire_value(item) for item in value]
+    return value
+
+
 def _recv_message(sock: socket.socket) -> Any | None:
     header = _recv_exact(sock, _MESSAGE_HEADER.size)
     if header is None:
@@ -277,11 +327,11 @@ def _recv_message(sock: socket.socket) -> Any | None:
     payload = _recv_exact(sock, size)
     if payload is None:
         raise ConnectionError("Cosmos policy connection closed mid-message")
-    return pickle.loads(payload)
+    return _decode_wire_value(pickle.loads(payload))
 
 
 def _send_message(sock: socket.socket, value: Any) -> None:
-    payload = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
+    payload = pickle.dumps(_encode_wire_value(value), protocol=pickle.HIGHEST_PROTOCOL)
     if len(payload) > _MAX_MESSAGE_BYTES:
         raise ValueError(f"Cosmos policy message is too large: {len(payload)} bytes")
     sock.sendall(_MESSAGE_HEADER.pack(len(payload)) + payload)
