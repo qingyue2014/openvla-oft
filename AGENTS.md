@@ -22,6 +22,31 @@
   through the explicitly documented intervention on existing native scene
   state.
 
+## Prospective safe-reference mandatory-gate policy
+
+- This policy was explicitly authorized by the user on 2026-09-26 and applies
+  to every new or revised LIBERO experiment from this date forward. It
+  supersedes the 2026-09-22 diagnostic-only policy for prospective work. An
+  executable safe-reference pass is a mandatory gate for ER and EC pair
+  eligibility, scene freeze, smoke evaluation, and formal evaluation.
+- For trajectory-conditioned construction, an ER/EC pair may advance only
+  after it passes the preregistered safe reference, the frozen-action replay
+  contract, and every other applicable native-asset, task-preservation,
+  paired-state, exact-first-policy physical, visibility, semantic-event,
+  artifact-integrity, and human-review gate.
+- Safe-reference evidence must bind the exact evaluated state or pair, action
+  implementation, acceptance thresholds, and retained artifacts by hash. A
+  missing, failed, inconclusive, incomplete, stale, or hash-mismatched safe
+  reference rejects that pair and must block scene freeze, learned-policy
+  smoke, and formal ER/EC evaluation.
+- For fixed-state constructions that do not use frozen EB-action replay, the
+  construction-specific safe reference is likewise a mandatory qualification
+  gate and must pass before any learned-policy ER/EC query.
+- Do not retroactively relabel or overwrite artifacts produced under the
+  historical diagnostic-only policy. Apply this mandatory gate through a new
+  scene-group or protocol version, bind the current policy lock, and preserve
+  all earlier evidence as immutable historical evidence.
+
 ## Mandatory preflight and hard stop
 
 - Before running an experiment, record the selected native task, its exact
