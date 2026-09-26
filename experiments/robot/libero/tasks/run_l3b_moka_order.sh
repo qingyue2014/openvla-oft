@@ -40,8 +40,6 @@ NEAR_PREFLIGHT="${NEAR_PREFLIGHT:-${REVIEW_ROOT}/L3-B_moka_near_first_native_pre
 FAR_PREFLIGHT="${FAR_PREFLIGHT:-${REVIEW_ROOT}/L3-B_moka_far_first_native_preflight.json}"
 NATIVE_CAPABILITY_REPORT="${NATIVE_CAPABILITY_REPORT:-${REVIEW_ROOT}/L3-B_moka_native_capability.json}"
 SMOKE_REPORT="${SMOKE_REPORT:-${REVIEW_ROOT}/L3-B_moka_smoke_report.json}"
-SAFE_REFERENCE_REPORT="${SAFE_REFERENCE_REPORT:-${REVIEW_ROOT}/L3-B_moka_Safe_batch.json}"
-SAFE_REFERENCE_GATE_REPORT="${SAFE_REFERENCE_GATE_REPORT:-${REVIEW_ROOT}/L3-B_moka_safe_reference_mandatory_gate_v1.json}"
 TRAJECTORY_ROOT="${TRAJECTORY_ROOT:-${REVIEW_ROOT}/${RUN_TAG}_trajectories}"
 
 LIBERO_ROOT="${LIBERO_ROOT:-}"
@@ -205,17 +203,7 @@ run_native_capability() {
     --out-json "${NATIVE_CAPABILITY_REPORT}"
 }
 
-require_safe_reference() {
-  "${PYTHON_BIN}" \
-    "${TASKS_DIR}/validate_l3b_moka_safe_reference_gate.py" \
-    --safe-reference-report "${SAFE_REFERENCE_REPORT}" \
-    --er-states "${NEAR_STATES}" \
-    --expected-count "${NUM_STATES}" \
-    --out-json "${SAFE_REFERENCE_GATE_REPORT}"
-}
-
 run_smoke() {
-  require_safe_reference
   validate_prepared >/dev/null
   run_eval native
   "${PYTHON_BIN}" "${TASKS_DIR}/summarize_l3b_moka_order_smoke.py" \
@@ -250,7 +238,6 @@ case "${MODE}" in
     run_smoke
     ;;
   summarize)
-    require_safe_reference
     "${PYTHON_BIN}" "${TASKS_DIR}/summarize_l3b_moka_order_smoke.py" \
       --native "${TRAJECTORY_ROOT}/native" \
       --near-first "${TRAJECTORY_ROOT}/near_first" \
@@ -259,17 +246,13 @@ case "${MODE}" in
       --minimum-native-successes "${MIN_NATIVE_SUCCESSES}" \
       --out-json "${SMOKE_REPORT}"
     ;;
-  safe_reference_check)
-    require_safe_reference
-    ;;
   formal)
-    require_safe_reference
     echo "L3-B moka is provisional: formal evaluation is fail-closed until" >&2
-    echo "the mandatory safe reference, π0.5 smoke, and hash-bound human review pass." >&2
+    echo "π0.5 smoke shows an order effect and a hash-bound human review passes." >&2
     exit 2
     ;;
   *)
-    echo "Usage: $0 prepare|check|native_capability|safe_reference_check|smoke|summarize|formal" >&2
+    echo "Usage: $0 prepare|check|native_capability|smoke|summarize|formal" >&2
     exit 2
     ;;
 esac

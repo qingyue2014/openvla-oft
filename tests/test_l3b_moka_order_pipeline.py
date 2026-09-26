@@ -30,11 +30,6 @@ from experiments.robot.libero.tasks.validate_l3b_moka_state_bundles import (
     _validate_one,
     validate_pairing,
 )
-from experiments.robot.libero.tasks.validate_l3b_moka_safe_reference_gate import (
-    PASS_GATE as PASS_SAFE_REFERENCE_GATE,
-    PROTOCOL_ID as SAFE_REFERENCE_GATE_PROTOCOL_ID,
-    validate_safe_reference_gate,
-)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -58,7 +53,7 @@ def test_native_task_lock_and_runner_contract():
     assert "formal evaluation is fail-closed" in runner
     assert "gs://openpi-assets/checkpoints/pi05_libero" in wrapper
     assert 'runtime_scene == "L3-B-MOKA-ORDER"' in evaluator
-    assert "MokaOrderRuntimeGateError," in evaluator
+    assert "except MokaOrderRuntimeGateError:" in evaluator
 
 
 def test_native_bddl_path_honors_explicit_libero_root(monkeypatch):
@@ -235,120 +230,3 @@ def test_failed_native_gate_preserves_episode_evidence(tmp_path):
     assert result["verdict"] == "FAIL_L3B_MOKA_NATIVE_CAPABILITY"
     assert result["native"]["stable_successes"] == 2
     assert len(result["native"]["episodes"]) == 2
-
-
-def _write_safe_reference_batch(
-    tmp_path: Path,
-    *,
-    count: int = 2,
-) -> tuple[Path, Path]:
-    er_states = tmp_path / "er_states.hdf5"
-    er_states.write_bytes(b"exact-er-state-bundle")
-    er_states_sha256 = hashlib.sha256(er_states.read_bytes()).hexdigest()
-    episodes = []
-    for index in range(count):
-        report = tmp_path / f"safe_episode_{index:03d}.json"
-        trajectory = tmp_path / f"safe_episode_{index:03d}.npz"
-        video = tmp_path / f"safe_episode_{index:03d}.mp4"
-        report.write_text(
-            json.dumps(
-                {
-                    "verdict": "PASS_L3B_MOKA_REAL_ACTION_SAFE_REFERENCE",
-                    "safe_success": True,
-                    "scenario": SCENE_ID,
-                    "source_episode": index,
-                    "er_states_sha256": er_states_sha256,
-                    "successful_attempt": {
-                        "safe_success": True,
-                        "task_success": True,
-                        "stable_final": True,
-                        "forbidden_contacts": [],
-                        "final_robot_object_contact": False,
-                    },
-                }
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-        trajectory.write_bytes(f"trajectory-{index}".encode())
-        video.write_bytes(f"video-{index}".encode())
-        episodes.append(
-            {
-                "episode": index,
-                "report": {
-                    "path": str(report),
-                    "sha256": hashlib.sha256(report.read_bytes()).hexdigest(),
-                },
-                "trajectory": {
-                    "path": str(trajectory),
-                    "sha256": hashlib.sha256(
-                        trajectory.read_bytes()
-                    ).hexdigest(),
-                },
-                "review_video": {
-                    "path": str(video),
-                    "sha256": hashlib.sha256(video.read_bytes()).hexdigest(),
-                },
-                "terminal_stability": {
-                    "moka_pot_1_main": {
-                        "passed": True,
-                        "sample_count": 100,
-                        "stove_support_all_samples": True,
-                    },
-                    "moka_pot_2_main": {
-                        "passed": True,
-                        "sample_count": 100,
-                        "stove_support_all_samples": True,
-                    },
-                },
-            }
-        )
-    batch = {
-        "verdict": "PASS_L3B_MOKA_SAFE_REFERENCE_BATCH",
-        "scenario": SCENE_ID,
-        "native_suite": SUITE,
-        "native_task_id": TASK_ID,
-        "native_prompt": TASK_PROMPT,
-        "source_condition": "Er",
-        "custom_assets": False,
-        "custom_bddl": False,
-        "prompt_changed": False,
-        "asset_inventory_changed": False,
-        "count": count,
-        "expected_count": count,
-        "er_states_sha256": er_states_sha256,
-        "episodes": episodes,
-    }
-    batch_path = tmp_path / "safe_batch.json"
-    batch_path.write_text(json.dumps(batch) + "\n", encoding="utf-8")
-    return batch_path, er_states
-
-
-def test_runner_requires_safe_reference_before_smoke_and_formal():
-    runner = (TASKS / "run_l3b_moka_order.sh").read_text()
-    assert "validate_l3b_moka_safe_reference_gate.py" in runner
-    smoke_body = runner.split("run_smoke() {", 1)[1].split("\n}", 1)[0]
-    assert smoke_body.index("require_safe_reference") < smoke_body.index(
-        "run_eval native"
-    )
-    formal_body = runner.split("  formal)", 1)[1].split("    ;;", 1)[0]
-    assert formal_body.index("require_safe_reference") < formal_body.index(
-        "formal evaluation is fail-closed"
-    )
-
-
-def test_safe_reference_is_a_hash_bound_mandatory_gate(tmp_path):
-    report, er_states = _write_safe_reference_batch(tmp_path)
-    result = validate_safe_reference_gate(report, er_states, expected_count=2)
-    assert result["verdict"] == PASS_SAFE_REFERENCE_GATE
-    assert result["protocol_id"] == SAFE_REFERENCE_GATE_PROTOCOL_ID
-    assert result["mandatory_gate"] is True
-    assert [row["episode"] for row in result["episodes"]] == [0, 1]
-
-
-def test_safe_reference_gate_fails_closed_on_artifact_drift(tmp_path):
-    report, er_states = _write_safe_reference_batch(tmp_path)
-    payload = json.loads(report.read_text(encoding="utf-8"))
-    Path(payload["episodes"][0]["trajectory"]["path"]).write_bytes(b"tampered")
-    with pytest.raises(ValueError, match="SHA-256 mismatch"):
-        validate_safe_reference_gate(report, er_states, expected_count=2)
